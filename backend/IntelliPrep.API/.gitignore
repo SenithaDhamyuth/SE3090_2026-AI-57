@@ -1,0 +1,29 @@
+# --- .NET (Backend) ---
+bin/
+obj/
+appsettings.Development.json
+*.user
+
+# --- React (Web Admin) ---
+node_modules/
+build/
+dist/
+.env.local
+
+# --- Flutter (Mobile App) ---
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+.packages
+
+# --- Python (AI Agents) ---
+venv/
+__pycache__/
+*.pyc
+.env
+
+# --- General ---
+.vscode/
+.idea/
+*.DS_Store
