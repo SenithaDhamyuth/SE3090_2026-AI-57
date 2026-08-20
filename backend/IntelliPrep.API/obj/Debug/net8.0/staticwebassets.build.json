@@ -1,0 +1,11 @@
+{
+  "Version": 1,
+  "Hash": "Y8VNZNxAYEri2hMHYeG3mtDAu/tcIhGuzNLDY2JPrFU=",
+  "Source": "IntelliPrep.API",
+  "BasePath": "_content/IntelliPrep.API",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": []
+}

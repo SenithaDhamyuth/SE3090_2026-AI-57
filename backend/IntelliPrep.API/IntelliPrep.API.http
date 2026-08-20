@@ -1,0 +1,6 @@
+@IntelliPrep.API_HostAddress = http://localhost:5087
+
+GET {{IntelliPrep.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
