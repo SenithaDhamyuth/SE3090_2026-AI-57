@@ -27,3 +27,19 @@ __pycache__/
 .vscode/
 .idea/
 *.DS_Store
+
+# Build results
+[Bb]in/
+[Oo]bj/
+
+# User-specific files
+*.user
+*.userosscache
+*.sln.docstates
+
+# IDE / OS files
+.vscode/
+.DS_Store
+
+# Dev settings (Keep production ones)
+appsettings.Development.json

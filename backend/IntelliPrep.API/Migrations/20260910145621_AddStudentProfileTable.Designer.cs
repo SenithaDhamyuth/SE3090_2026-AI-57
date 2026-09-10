@@ -3,6 +3,7 @@ using System;
 using IntelliPrep.API.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace IntelliPrep.API.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260910145621_AddStudentProfileTable")]
+    partial class AddStudentProfileTable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -54,70 +57,6 @@ namespace IntelliPrep.API.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("ExamSessions");
-                });
-
-            modelBuilder.Entity("IntelliPrep.API.Models.Question", b =>
-                {
-                    b.Property<string>("Question_ID")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Correct_Answer")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("Correct_Option_No")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Difficulty_Level")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Image_Description")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Image_Filename")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Lesson_Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Option_1")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Option_2")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Option_3")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Option_4")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Option_5")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Paper_Type")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Question_Text")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("Year")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Question_ID");
-
-                    b.ToTable("Questions");
                 });
 
             modelBuilder.Entity("IntelliPrep.API.Models.StudentProfile", b =>

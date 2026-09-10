@@ -30,7 +30,16 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowReact",
+        policy =>
+        {
+            policy.WithOrigins("http://localhost:5173") // React App URL
+                  .AllowAnyHeader()
+                  .AllowAnyMethod();
+        });
+});
 // 3. Configure Swagger with JWT Support
 builder.Services.AddSwaggerGen(c =>
 {
@@ -75,7 +84,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
+app.UseCors("AllowReact");
 // Use Authentication before Authorization
 app.UseAuthentication();
 app.UseAuthorization();

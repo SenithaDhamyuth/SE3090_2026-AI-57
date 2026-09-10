@@ -9,6 +9,9 @@ namespace IntelliPrep.API.Data
         {
         }
         public DbSet<User> Users { get; set; }
+        public DbSet<ExamSession> ExamSessions { get; set; }
+        public DbSet<StudentProfile> StudentProfiles { get; set; }
+        public DbSet<Question> Questions { get; set; }
         
     }
 }
