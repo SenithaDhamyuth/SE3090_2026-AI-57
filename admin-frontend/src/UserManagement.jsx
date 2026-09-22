@@ -7,27 +7,14 @@ import {
   Plus, ChevronDown, Zap,
 } from 'lucide-react';
 
+const API_BASE = 'http://localhost:5087';
+
 /* ─────────────────────────────────────────────
    DATA — UC1.4 User Management
-   In production: fetch from /api/Users/all
+   Real data is fetched from the backend StudentProfile API.
 ───────────────────────────────────────────── */
 const ROLES = ['All Roles', 'Student', 'Tutor', 'Admin'];
 const STATUSES = ['All Status', 'Active', 'Inactive', 'Suspended'];
-
-const MOCK_USERS = [
-  { id: 'USR-001', name: 'Senitha Gunawardena', email: 'senitha@intelliprep.lk', role: 'Admin',   status: 'Active',    subject: 'A/L ICT',         joined: '2026-01-15', sessions: 0,  score: 0,    lastActive: '2m ago'  },
-  { id: 'USR-002', name: 'Nimal Perera',        email: 'nimal@gmail.com',         role: 'Tutor',   status: 'Active',    subject: 'A/L ICT',         joined: '2026-02-01', sessions: 0,  score: 0,    lastActive: '1h ago'  },
-  { id: 'USR-003', name: 'Kavindu Rathnayake',  email: 'kavindu@gmail.com',       role: 'Student', status: 'Active',    subject: 'A/L ICT',         joined: '2026-03-10', sessions: 14, score: 2840, lastActive: '34m ago' },
-  { id: 'USR-004', name: 'Nethmi Jayasinghe',   email: 'nethmi@gmail.com',        role: 'Student', status: 'Active',    subject: 'A/L ICT',         joined: '2026-03-12', sessions: 11, score: 3120, lastActive: '1h ago'  },
-  { id: 'USR-005', name: 'Asel Fernando',       email: 'asel@gmail.com',          role: 'Student', status: 'Active',    subject: 'A/L ICT',         joined: '2026-03-15', sessions: 8,  score: 1950, lastActive: '3h ago'  },
-  { id: 'USR-006', name: 'Dilshan Madushanka',  email: 'dilshan@gmail.com',       role: 'Tutor',   status: 'Active',    subject: 'A/L ICT',         joined: '2026-02-20', sessions: 0,  score: 0,    lastActive: '2d ago'  },
-  { id: 'USR-007', name: 'Sanduni Wijeratne',   email: 'sanduni@gmail.com',       role: 'Student', status: 'Inactive',  subject: 'A/L ICT',         joined: '2026-03-18', sessions: 2,  score: 780,  lastActive: '14d ago' },
-  { id: 'USR-008', name: 'Thilina Bandara',     email: 'thilina@gmail.com',       role: 'Student', status: 'Active',    subject: 'A/L ICT',         joined: '2026-04-01', sessions: 9,  score: 2310, lastActive: '45m ago' },
-  { id: 'USR-009', name: 'Hasitha Silva',       email: 'hasitha@gmail.com',       role: 'Student', status: 'Suspended', subject: 'A/L ICT',         joined: '2026-02-28', sessions: 5,  score: 1200, lastActive: '30d ago' },
-  { id: 'USR-010', name: 'Sachini Kumara',      email: 'sachini@gmail.com',       role: 'Student', status: 'Active',    subject: 'A/L ICT',         joined: '2026-04-10', sessions: 6,  score: 1290, lastActive: '2h ago'  },
-  { id: 'USR-011', name: 'Kasun Premaratne',    email: 'kasun@gmail.com',         role: 'Tutor',   status: 'Active',    subject: 'A/L ICT',         joined: '2026-03-01', sessions: 0,  score: 0,    lastActive: '6h ago'  },
-  { id: 'USR-012', name: 'Malsha Dissanayake',  email: 'malsha@gmail.com',        role: 'Student', status: 'Active',    subject: 'A/L ICT',         joined: '2026-04-15', sessions: 18, score: 4200, lastActive: '12m ago' },
-];
 
 const ROLE_STYLE = {
   Admin:   { badge: 'bg-orange-50 text-orange-700 border-orange-200', icon: Shield },
@@ -51,32 +38,71 @@ const AVATAR_COLORS = [
    USER MANAGEMENT PAGE — UC1.4
 ───────────────────────────────────────────── */
 export default function UserManagement() {
-  const [search, setSearch]         = useState('');
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('All Roles');
   const [statusFilter, setStatusFilter] = useState('All Status');
   const [currentPage, setCurrentPage] = useState(1);
   const [searchFocused, setSearchFocused] = useState(false);
   const ROWS_PER_PAGE = 8;
 
-  const filtered = MOCK_USERS.filter(u => {
-    const matchRole    = roleFilter   === 'All Roles'   || u.role   === roleFilter;
-    const matchStatus  = statusFilter === 'All Status'  || u.status === statusFilter;
-    const matchSearch  = !search || u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()) || u.id.toLowerCase().includes(search.toLowerCase());
+  useEffect(() => {
+    const controller = new AbortController();
+    const fetchUsers = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const res = await fetch(`${API_BASE}/api/StudentProfile/all`, { signal: controller.signal, headers: { 'Content-Type': 'application/json' } });
+        if (!res.ok) throw new Error(`Server responded with ${res.status} ${res.statusText}`);
+        const data = await res.json();
+        setUsers(Array.isArray(data) ? data : []);
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          setError(err.message || 'Failed to load student profiles.');
+          setUsers([]);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUsers();
+    return () => controller.abort();
+  }, []);
+
+  const normalizedUsers = users.map((user, index) => ({
+    id: user.userId || `STU-${index + 1}`,
+    name: user.userId || `Student ${index + 1}`,
+    email: `${(user.userId || `student${index + 1}`).toLowerCase()}@intelliprep.lk`,
+    role: 'Student',
+    status: 'Active',
+    subject: user.preferredSubject || 'A/L ICT',
+    joined: user.createdAt ? new Date(user.createdAt).toISOString().slice(0, 10) : '—',
+    sessions: 0,
+    score: user.totalPoints || 0,
+    lastActive: user.createdAt ? 'just now' : '—',
+  }));
+
+  const filtered = normalizedUsers.filter(u => {
+    const matchRole = roleFilter === 'All Roles' || u.role === roleFilter;
+    const matchStatus = statusFilter === 'All Status' || u.status === statusFilter;
+    const matchSearch = !search || u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()) || u.id.toLowerCase().includes(search.toLowerCase());
     return matchRole && matchStatus && matchSearch;
   });
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / ROWS_PER_PAGE));
-  const safePage   = Math.min(currentPage, totalPages);
-  const paged      = filtered.slice((safePage - 1) * ROWS_PER_PAGE, safePage * ROWS_PER_PAGE);
+  const safePage = Math.min(currentPage, totalPages);
+  const paged = filtered.slice((safePage - 1) * ROWS_PER_PAGE, safePage * ROWS_PER_PAGE);
 
-  // Reset to page 1 when filters change
   useEffect(() => { setCurrentPage(1); }, [search, roleFilter, statusFilter]);
 
   const stats = {
-    total:    MOCK_USERS.length,
-    students: MOCK_USERS.filter(u => u.role === 'Student').length,
-    tutors:   MOCK_USERS.filter(u => u.role === 'Tutor').length,
-    active:   MOCK_USERS.filter(u => u.status === 'Active').length,
+    total: normalizedUsers.length,
+    students: normalizedUsers.filter(u => u.role === 'Student').length,
+    tutors: 0,
+    active: normalizedUsers.filter(u => u.status === 'Active').length,
   };
 
   return (
@@ -120,6 +146,11 @@ export default function UserManagement() {
       </div>
 
       {/* Table card */}
+      {loading ? (
+        <div className="bg-white border border-zinc-200/80 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-8 text-center text-zinc-500">Loading users…</div>
+      ) : error ? (
+        <div className="bg-white border border-zinc-200/80 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-8 text-center text-zinc-500">No Data Available</div>
+      ) : (
       <div className="bg-white border border-zinc-200/80 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
 
         {/* Table toolbar */}
@@ -306,6 +337,7 @@ export default function UserManagement() {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }
