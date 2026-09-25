@@ -21,6 +21,10 @@ export default function Login() {
       });
 
       if (response.ok) {
+        const data = await response.json();
+        if (data.token) {
+          localStorage.setItem('token', data.token);
+        }
         // Login සාර්ථක නම් තත්පරේකින් Dashboard එකට යවනවා
         setMessage("✅ සාර්ථකයි! (Loading Dashboard...)");
         setTimeout(() => {
