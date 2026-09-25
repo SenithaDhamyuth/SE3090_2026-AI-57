@@ -1,10 +1,83 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/cached_exam.dart';
 import '../services/database_helper.dart';
 
-// ── Static demo questions (A/L ICT domain) ────────────────────────────────
+String _normalizeBackendIp(String input) {
+  final trimmed = input.trim();
+  if (trimmed.isEmpty) return '192.168.1.146';
+  return trimmed.replaceFirst(RegExp(r'^https?://'), '').replaceAll(RegExp(r'/$'), '');
+}
+
+Future<String> _loadSavedBackendIp() async {
+  final prefs = await SharedPreferences.getInstance();
+  return _normalizeBackendIp(prefs.getString('backend_ip') ?? '192.168.1.146');
+}
+
+Future<List<Map<String, dynamic>>> fetchQuestions(String sessionId) async {
+  final savedIp = await _loadSavedBackendIp();
+  final uri = Uri.parse('http://$savedIp:5087/api/exams/session/$sessionId');
+
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('auth_token');
+
+    final response = await http
+        .get(
+          uri,
+          headers: {
+            'Accept': 'application/json',
+            if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+          },
+        )
+        .timeout(const Duration(seconds: 5));
+
+    if (response.statusCode == 401) {
+      throw Exception('Unauthorized');
+    }
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load questions (${response.statusCode})');
+    }
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw const FormatException('Backend response was not a JSON object.');
+    }
+
+    final rawQuestions = decoded['questionsJson'];
+    if (rawQuestions == null ||
+        rawQuestions.toString().trim().isEmpty ||
+        rawQuestions == 'null') {
+      return [];
+    }
+
+    final parsed = jsonDecode(rawQuestions);
+    if (parsed is! List) {
+      return [];
+    }
+
+    return parsed
+        .whereType<Map>()
+        .map((question) => Map<String, dynamic>.from(question))
+        .toList();
+  } on TimeoutException {
+    throw Exception('Connection failed. Check backend IP.');
+  } on FormatException {
+    throw Exception('Connection failed. Check backend IP.');
+  } catch (e) {
+    if (e is Exception && e.toString().contains('Connection failed')) {
+      rethrow;
+    }
+    if (e is Exception && e.toString().contains('Unauthorized')) {
+      throw Exception('Unauthorized');
+    }
+    throw Exception('Connection failed. Check backend IP.');
+  }
+}
 
 class _Question {
   final int id;
@@ -19,55 +92,6 @@ class _Question {
     required this.correctIndex,
   });
 }
-
-const List<_Question> _kQuestions = [
-  _Question(
-    id: 1,
-    text:
-        'Which data structure uses the LIFO (Last-In, First-Out) principle?',
-    options: ['Queue', 'Stack', 'Linked List', 'Tree'],
-    correctIndex: 1,
-  ),
-  _Question(
-    id: 2,
-    text:
-        'What is the time complexity of binary search on a sorted array of n elements?',
-    options: ['O(n)', 'O(n²)', 'O(log n)', 'O(1)'],
-    correctIndex: 2,
-  ),
-  _Question(
-    id: 3,
-    text:
-        'In the OSI model, which layer is responsible for end-to-end communication and error recovery?',
-    options: [
-      'Network Layer',
-      'Data Link Layer',
-      'Transport Layer',
-      'Session Layer',
-    ],
-    correctIndex: 2,
-  ),
-  _Question(
-    id: 4,
-    text: 'Which SQL clause is used to filter groups in a GROUP BY query?',
-    options: ['WHERE', 'ORDER BY', 'HAVING', 'DISTINCT'],
-    correctIndex: 2,
-  ),
-  _Question(
-    id: 5,
-    text:
-        'What does CPU stand for and which component performs arithmetic operations?',
-    options: [
-      'Central Processing Unit — RAM',
-      'Central Processing Unit — ALU',
-      'Control Processing Unit — ALU',
-      'Core Processing Unit — GPU',
-    ],
-    correctIndex: 1,
-  ),
-];
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 /// ExamTimerScreen — UC2.2 (timer lock) + UC2.5 (offline save).
 ///
@@ -91,6 +115,11 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
   Timer? _countdownTimer;
   bool _submitted = false;
 
+  // ── Loaded question state ─────────────────────────────────────────────
+  final List<_Question> _questions = [];
+  bool _isLoadingQuestions = true;
+  String _questionsError = '';
+
   // ── Answer state ─────────────────────────────────────────────────────
   /// Map of questionId → selected option index (or -1 for unanswered)
   final Map<int, int> _answers = {};
@@ -103,8 +132,7 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _initAnswers();
-    _cacheExamLocally();
+    _loadQuestions();
     _startTimer();
   }
 
@@ -126,8 +154,56 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
   // ── Init helpers ────────────────────────────────────────────────────
 
   void _initAnswers() {
-    for (final q in _kQuestions) {
+    _answers.clear();
+    for (final q in _questions) {
       _answers[q.id] = -1; // -1 = unanswered
+    }
+  }
+
+  Future<void> _loadQuestions() async {
+    try {
+      final rawQuestions = await fetchQuestions(widget.qrPayload);
+      final loadedQuestions = rawQuestions
+          .map((entry) => _Question(
+                id: int.tryParse('${entry['id'] ?? entry['questionId'] ?? 0}') ?? 0,
+                text: (entry['text'] ?? entry['question'] ?? 'Untitled question')
+                    .toString(),
+                options: (entry['options'] as List? ?? const [])
+                    .map((option) => option.toString())
+                    .toList(),
+                correctIndex: int.tryParse(
+                        '${entry['correctIndex'] ?? entry['correctAnswerIndex'] ?? entry['answerIndex'] ?? 0}') ??
+                    0,
+              ))
+          .where((question) => question.id != 0 && question.text.isNotEmpty)
+          .toList();
+
+      if (!mounted) return;
+
+      setState(() {
+        _questions
+          ..clear()
+          ..addAll(loadedQuestions);
+        _isLoadingQuestions = false;
+        _questionsError = '';
+      });
+
+      _initAnswers();
+      await _cacheExamLocally();
+    } catch (e) {
+      if (!mounted) return;
+
+      final message = e.toString().contains('Unauthorized')
+          ? 'Session unauthorized. Please log in again.'
+          : e.toString().contains('Connection failed')
+              ? 'Connection failed. Check backend IP.'
+              : 'Unable to load questions right now. Please try again.';
+
+      setState(() {
+        _questions.clear();
+        _isLoadingQuestions = false;
+        _questionsError = message;
+      });
     }
   }
 
@@ -137,7 +213,7 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
       subject: 'A/L ICT',
       durationMinutes: _totalSeconds ~/ 60,
       questionsJson: jsonEncode(
-        _kQuestions
+        _questions
             .map((q) => {
                   'id': q.id,
                   'text': q.text,
@@ -213,7 +289,7 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
 
   int _calculateScore() {
     int score = 0;
-    for (final q in _kQuestions) {
+    for (final q in _questions) {
       if (_answers[q.id] == q.correctIndex) score++;
     }
     return score;
@@ -246,7 +322,7 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
         content: Text(
           'You have answered '
           '${_answers.values.where((v) => v >= 0).length} of '
-          '${_kQuestions.length} questions. '
+          '${_questions.length} questions. '
           'This action cannot be undone.',
         ),
         actions: [
@@ -267,8 +343,8 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
 
   void _showResultsSheet() {
     final score = _calculateScore();
-    final total = _kQuestions.length;
-    final pct = (score / total * 100).round();
+    final total = _questions.length;
+    final pct = total == 0 ? 0 : (score / total * 100).round();
 
     showModalBottomSheet<void>(
       context: context,
@@ -310,26 +386,62 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
     return Scaffold(
       backgroundColor: const Color(0xFFFAFAFA),
       appBar: _buildAppBar(),
-      body: Column(
-        children: [
-          _buildTimerBanner(),
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
-              itemCount: _kQuestions.length,
-              itemBuilder: (_, i) => _QuestionCard(
-                question: _kQuestions[i],
-                selectedIndex: _answers[_kQuestions[i].id] ?? -1,
-                isSubmitted: _submitted,
-                onSelected: _submitted
-                    ? null
-                    : (idx) => _selectAnswer(_kQuestions[i].id, idx),
+      body: _isLoadingQuestions
+          ? const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(color: Colors.orange),
+                  SizedBox(height: 16),
+                  Text(
+                    'Loading questions...',
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: Colors.grey,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: _buildBottomBar(),
+            )
+          : _questions.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      _questionsError.isNotEmpty
+                          ? _questionsError
+                          : 'No questions are available for this session.',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ),
+                )
+              : Column(
+                  children: [
+                    _buildTimerBanner(),
+                    Expanded(
+                      child: ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+                        itemCount: _questions.length,
+                        itemBuilder: (_, i) => _QuestionCard(
+                          question: _questions[i],
+                          selectedIndex: _answers[_questions[i].id] ?? -1,
+                          isSubmitted: _submitted,
+                          onSelected: _submitted
+                              ? null
+                              : (idx) => _selectAnswer(_questions[i].id, idx),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+      bottomNavigationBar: _isLoadingQuestions || _questions.isEmpty
+          ? null
+          : _buildBottomBar(),
     );
   }
 
@@ -421,7 +533,7 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
               border: Border.all(color: Colors.orange.withAlpha(60)),
             ),
             child: Text(
-              '$_answeredCount / ${_kQuestions.length}',
+              '$_answeredCount / ${_questions.length}',
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
@@ -456,7 +568,7 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
-              value: _answeredCount / _kQuestions.length,
+              value: _questions.isEmpty ? 0 : _answeredCount / _questions.length,
               backgroundColor: Colors.grey.shade200,
               valueColor:
                   const AlwaysStoppedAnimation<Color>(Colors.orange),
@@ -485,7 +597,7 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
               label: Text(
                 _submitted
                     ? 'Exam Submitted'
-                    : 'Submit Answers ($_answeredCount/${_kQuestions.length})',
+                    : 'Submit Answers ($_answeredCount/${_questions.length})',
                 style: const TextStyle(
                     fontSize: 15, fontWeight: FontWeight.bold),
               ),
