@@ -36,6 +36,16 @@ namespace IntelliPrep.API.Controllers
             return Ok(profile);
         }
 
+        [HttpGet("all")]
+        public async Task<IActionResult> GetAllProfiles()
+        {
+            var profiles = await _context.StudentProfiles
+                .OrderByDescending(p => p.CreatedAt)
+                .ToListAsync();
+
+            return Ok(profiles);
+        }
+
         [HttpGet("{userId}")]
         public async Task<IActionResult> GetProfile(string userId)
         {
