@@ -12,5 +12,10 @@ namespace IntelliPrep.API.Data
         public DbSet<ExamSession> ExamSessions { get; set; }
         public DbSet<StudentProfile> StudentProfiles { get; set; }
         public DbSet<Question> Questions { get; set; }
+
+        // ── AI Agent tables ────────────────────────────────────────────────────
+        public DbSet<SyllabusLimit> SyllabusLimits { get; set; }
+        public DbSet<PastPaperAnalytic> PastPaperAnalytics { get; set; }
+        public DbSet<StudyPlan> StudyPlans { get; set; }
     }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'exam_timer_screen.dart';
 
 /// QRScannerScreen — UC2.2: Scan a QR code to unlock a timed exam session.
@@ -19,6 +20,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
     detectionSpeed: DetectionSpeed.noDuplicates,
     facing: CameraFacing.back,
   );
+  final TextEditingController _backendIpController = TextEditingController();
 
   bool _isProcessing = false;
   String? _lastError;
@@ -26,6 +28,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
   @override
   void dispose() {
     _controller.dispose();
+    _backendIpController.dispose();
     super.dispose();
   }
 
@@ -83,6 +86,62 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
   void _toggleTorch() => _controller.toggleTorch();
   void _switchCamera() => _controller.switchCamera();
 
+  void _showBackendIpDialog() {
+    SharedPreferences.getInstance().then((prefs) {
+      if (!mounted) return;
+
+      final savedIp = prefs.getString('backend_ip') ?? '192.168.1.146';
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      _backendIpController.text = savedIp;
+
+      showDialog<String>(
+        context: context,
+        builder: (builderContext) => AlertDialog(
+          title: const Text('Backend IP Settings'),
+          content: SizedBox(
+            width: 300,
+            child: TextField(
+              controller: _backendIpController,
+              autofocus: true,
+              keyboardType: TextInputType.url,
+              decoration: const InputDecoration(
+                labelText: 'Backend IP',
+                hintText: '192.168.1.146',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(builderContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(builderContext).pop(_backendIpController.text),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ).then((newIp) async {
+        if (!mounted) return;
+
+        final trimmedIp = (newIp ?? '').trim();
+        if (trimmedIp.isEmpty) {
+          messenger?.showSnackBar(
+            const SnackBar(content: Text('Backend IP cannot be empty.')),
+          );
+          return;
+        }
+
+        final normalizedIp = trimmedIp.replaceFirst(RegExp(r'^https?://'), '').trim();
+        await prefs.setString('backend_ip', normalizedIp);
+        messenger?.showSnackBar(
+          SnackBar(content: Text('Backend IP saved: $normalizedIp')),
+        );
+      });
+    });
+  }
+
   // ── Build ──────────────────────────────────────────────────────────
 
   @override
@@ -92,11 +151,19 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
+        iconTheme: const IconThemeData(color: Colors.white, size: 28),
+        actionsIconTheme: const IconThemeData(color: Colors.white, size: 28),
         title: const Text(
           'Scan Exam QR Code',
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            color: Colors.black,
+            tooltip: 'Backend IP settings',
+            onPressed: _showBackendIpDialog,
+          ),
           // Torch toggle
           IconButton(
             icon: const Icon(Icons.flashlight_on_outlined),

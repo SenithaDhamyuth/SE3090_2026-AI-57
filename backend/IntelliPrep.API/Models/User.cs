@@ -20,8 +20,9 @@ namespace IntelliPrep.API.Models
         public string PasswordHash { get; set; } = string.Empty;
 
         [Required]
+        [RegularExpression("^(Admin|Student)$", ErrorMessage = "Role must be either 'Admin' or 'Student'.")]
         [MaxLength(20)]
-        public string Role { get; set; } = "Student"; // "Student", "Tutor", or "Administrator"
+        public string Role { get; set; } = "Student";
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }

@@ -23,7 +23,7 @@ namespace IntelliPrep.API.Models
         public int DurationMinutes { get; set; }
 
         // ── Core assessment fields ──────────────────────────────────
-        /// <summary>"Pending" | "InProgress" | "Completed" | "Abandoned"</summary>
+        /// <summary>"Pending" | "Ready" | "InProgress" | "Completed" | "Abandoned"</summary>
         [Required]
         public string Status { get; set; } = "Pending";
 
@@ -34,10 +34,31 @@ namespace IntelliPrep.API.Models
         /// <summary>JSON array of student answers, e.g. [{"questionId":1,"answer":"A"}]</summary>
         public string AnswersJson { get; set; } = "[]";
 
+        /// <summary>
+        /// JSON array of LLM-generated MCQ questions produced by ContentSynthesizerService.
+        /// Schema: [{ "questionText": "...", "options": [...], "correctOptionIndex": 0, "explanation": "..." }]
+        /// Populated by POST /api/assessment/synthesize/{sessionId} (UC5.2).
+        /// </summary>
+        public string QuestionsJson { get; set; } = "[]";
+
         /// <summary>Computed score after submission.</summary>
         public int TotalScore { get; set; } = 0;
 
         /// <summary>Transaction lock — prevents double-starting the timer.</summary>
         public bool IsTimerLocked { get; set; } = false;
+
+        // ── Member 2 dynamic synthesis fields ─────────────────────────
+        /// <summary>
+        /// The verbatim learning objective typed by the user in the "Request Mock Exam" modal
+        /// (e.g. "I want 4 questions on Logic Gates focusing on NAND gate combinations").
+        /// Passed to the LLM prompt so generated questions directly address the user's intent.
+        /// </summary>
+        public string? OriginalObjective { get; set; }
+
+        /// <summary>
+        /// Number of MCQs the user explicitly requested (parsed from OriginalObjective via Regex \d+).
+        /// Defaults to 5 when no number is found in the objective string.
+        /// </summary>
+        public int RequestedQuestionCount { get; set; } = 5;
     }
 }

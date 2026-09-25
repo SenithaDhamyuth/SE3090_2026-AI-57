@@ -48,14 +48,20 @@ namespace IntelliPrep.API.Controllers
         [HttpPost("login")]
         public async Task<IActionResult> Login(UserLoginDto request)
         {
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
-            if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == request.Email.ToLower().Trim());
+            
+            if (user == null)
             {
-                return Unauthorized("Invalid credentials.");
+                return Unauthorized(new { message = $"Email '{request.Email}' not found in database." });
+            }
+
+            if (!BCrypt.Net.BCrypt.Verify(request.Password.Trim(), user.PasswordHash))
+            {
+                return Unauthorized(new { message = "Email found, but password does not match!" });
             }
 
             var token = GenerateJwtToken(user);
-            return Ok(new { token = token, role = user.Role });
+            return Ok(new { token, role = user.Role, userId = user.Id });
         }
 
         private string GenerateJwtToken(User user)
@@ -67,8 +73,9 @@ namespace IntelliPrep.API.Controllers
             var claims = new[]
             {
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
                 new Claim(JwtRegisteredClaimNames.Email, user.Email),
-                new Claim(ClaimTypes.Role, user.Role), // Crucial for Role-Based Access Control
+                new Claim(ClaimTypes.Role, user.Role),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
             };
 
