@@ -34,16 +34,17 @@ builder.Services.AddAuthorization();
 
 // ── Member 1: Assessment Engine Services ──────────────────────────────────
 // Register a named HttpClient for the Groq API with proper lifecycle management.
-var groqSection = builder.Configuration.GetSection("Groq");
-var groqApiKey  = groqSection["ApiKey"]  ?? string.Empty;
+var groqSection = builder.Configuration.GetSection("GroqSettings");
+builder.Services.Configure<IntelliPrep.API.Models.GroqSettings>(groqSection);
+
 var groqBaseUrl = groqSection["BaseUrl"] ?? "https://api.groq.com/openai/v1/chat/completions";
 var groqTimeout = int.TryParse(groqSection["TimeoutSeconds"], out var t) ? t : 30;
 
 builder.Services.AddHttpClient(PlanningCoordinatorService.HttpClientName, client =>
 {
     client.BaseAddress = new Uri(groqBaseUrl);
+    // Timeout is now handled inside CallGroqAsync per request, but we can leave a default here or remove it
     client.Timeout     = TimeSpan.FromSeconds(groqTimeout);
-    client.DefaultRequestHeaders.Add("Authorization", $"Bearer {groqApiKey}");
     client.DefaultRequestHeaders.Add("Accept", "application/json");
 });
 
@@ -143,5 +144,11 @@ else
     dbContext.Users.Update(adminUser);
 }
 dbContext.SaveChanges();
+
+// ── Seed historical questions from Excel dataset ───────────────────────────
+var seederEnv    = scope.ServiceProvider.GetRequiredService<IWebHostEnvironment>();
+var seederLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+                       .CreateLogger("DatabaseSeeder");
+await IntelliPrep.API.Data.DatabaseSeeder.SeedQuestionsAsync(dbContext, seederEnv, seederLogger);
 
 app.Run();

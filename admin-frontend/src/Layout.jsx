@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { Cpu, Home, ClipboardList, Users, Brain, Menu, X } from 'lucide-react';
+import { Cpu, Home, ClipboardList, Users, Brain, Menu, X, BarChart2, Database } from 'lucide-react';
 
 const NAV = [
   { to: '/', icon: Home, label: 'Dashboard' },
   { to: '/exams', icon: ClipboardList, label: 'Exam Sessions' },
   { to: '/students', icon: Users, label: 'Manage Students' },
   { to: '/ai-plans', icon: Brain, label: 'AI Study Plans' },
+  { to: '/analytics', icon: BarChart2, label: 'Past Paper Analytics' },
+  { to: '/question-bank', icon: Database, label: 'Question Bank' },
 ];
 
 export default function Layout() {

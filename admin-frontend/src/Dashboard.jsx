@@ -17,10 +17,15 @@ export default function Dashboard() {
         setLoading(true);
         setError(null);
 
+        const token = localStorage.getItem('admin_token');
+
         const [studentsRes, sessionsRes] = await Promise.all([
-          fetch(`${API_BASE}/api/StudentProfile/all`, {
+          fetch(`${API_BASE}/api/admin/students`, {
             signal: controller.signal,
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
           }),
           fetch(`${API_BASE}/api/assessment/sessions`, {
             signal: controller.signal,

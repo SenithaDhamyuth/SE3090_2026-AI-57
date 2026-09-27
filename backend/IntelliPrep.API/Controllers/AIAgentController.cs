@@ -95,8 +95,90 @@ public class AIAgentController : ControllerBase
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // Endpoint 2 — POST api/aiagent/generate-plan
-    // Agent 2: Study Planner (Lite-RAG)
+    // Endpoint 2 — GET api/aiagent/predict-distribution
+    // Agent 1b: Data Analyst — deterministic weighted probability engine
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Triggers Agent 1b (Data Analyst).
+    ///
+    /// Reads every question from the <c>Questions</c> table, groups by
+    /// <c>Lesson_Name</c> and <c>Year</c>, applies exponential-decay weighting
+    /// (recent years carry more weight), then distributes a 50-question paper
+    /// using the Hamilton largest-remainder method — guaranteeing the total
+    /// equals exactly 50.  Each topic also receives a trend label
+    /// ("Rising" / "Falling" / "Stable") from OLS linear regression.
+    ///
+    /// This endpoint is <b>fully deterministic</b> (no LLM call) and is safe
+    /// to call repeatedly without side effects.
+    /// </summary>
+    [HttpGet("predict-distribution")]
+    [ProducesResponseType(typeof(PredictTopicDistributionResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> PredictDistribution(CancellationToken cancellationToken)
+    {
+        var adminEmail = User.FindFirstValue(ClaimTypes.Email) ?? "unknown-admin";
+        _logger.LogInformation(
+            "[AIAgentController] Admin '{Admin}' triggered PredictDistribution.", adminEmail);
+
+        var result = await _agentService.PredictTopicDistributionAsync(cancellationToken);
+
+        if (!result.Success)
+        {
+            _logger.LogWarning(
+                "[AIAgentController] PredictDistribution failed: {Msg}", result.Message);
+            return BadRequest(new { message = result.Message });
+        }
+
+        return Ok(result);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Endpoint 3 — POST api/aiagent/generate-paper
+    // Agent 3: Predicted Paper Generator (Chain of Agent 1b -> Agent 2 -> Agent 3)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Triggers the full 3-agent predicted paper generation pipeline.
+    ///
+    /// 1. Runs the Data Analyst (Agent 1b) to get the weighted topic distribution.
+    /// 2. Runs the Web Researcher (Agent 2) to gather current real-world tech events.
+    /// 3. Calls the Paper Generator (Agent 3) to produce exactly 50 MCQs conforming
+    ///    to the statistical distribution and RAG context (SyllabusLimits + Research).
+    /// </summary>
+    [HttpPost("generate-paper")]
+    [ProducesResponseType(typeof(GeneratePaperResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> GeneratePaper(
+        [FromBody] GeneratePaperRequest request,
+        CancellationToken cancellationToken)
+    {
+        var adminEmail = User.FindFirstValue(ClaimTypes.Email) ?? "unknown-admin";
+        _logger.LogInformation(
+            "[AIAgentController] Admin '{Admin}' triggered GeneratePaper.", adminEmail);
+
+        var result = await _agentService.GeneratePredictedPaperAsync(request, cancellationToken);
+
+        if (!result.Success)
+        {
+            _logger.LogWarning(
+                "[AIAgentController] GeneratePaper failed: {Msg}", result.Message);
+
+            return BadRequest(new
+            {
+                message      = result.Message,
+                rawLlmOutput = result.RawLlmOutput
+            });
+        }
+
+        return Ok(result);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Endpoint 4 — POST api/aiagent/generate-plan
+    // Agent 4: Study Planner (Lite-RAG)
     // ═══════════════════════════════════════════════════════════════════════
 
     /// <summary>
@@ -113,9 +195,12 @@ public class AIAgentController : ControllerBase
     /// <code>
     /// {
     ///   "studentId": 7,
-    ///   "targetExamDate": "2026-12-15T00:00:00Z"
+    ///   "targetExamDate": "2026-12-15T00:00:00Z",
+    ///   "excludedTopics": ["Boolean Algebra", "File Handling"]
     /// }
     /// </code>
+    /// <c>excludedTopics</c> is optional — omit it or pass an empty array to
+    /// include all topics in scope.
     /// </remarks>
     [HttpPost("generate-plan")]
     [ProducesResponseType(typeof(GenerateStudyPlanResult), StatusCodes.Status200OK)]
@@ -128,24 +213,13 @@ public class AIAgentController : ControllerBase
         if (!ModelState.IsValid)
             return ValidationProblem(ModelState);
 
-        if (request.StudentId <= 0)
-            return BadRequest(new { message = "A valid StudentId (> 0) is required." });
-
         if (request.TargetExamDate <= DateTime.UtcNow.Date)
             return BadRequest(new { message = "TargetExamDate must be a future date." });
 
-        // Verify the student exists before spending an LLM call
-        var studentExists = await _db.Users.AnyAsync(
-            u => u.Id == request.StudentId && u.Role == "Student",
-            cancellationToken);
-
-        if (!studentExists)
-            return NotFound(new { message = $"No student account found with Id = {request.StudentId}." });
-
         var adminEmail = User.FindFirstValue(ClaimTypes.Email) ?? "unknown-admin";
         _logger.LogInformation(
-            "[AIAgentController] Admin '{Admin}' triggered GeneratePlan for studentId={Id}, target={Date}.",
-            adminEmail, request.StudentId, request.TargetExamDate.ToString("yyyy-MM-dd"));
+            "[AIAgentController] Admin '{Admin}' triggered GeneratePlan for target={Date}.",
+            adminEmail, request.TargetExamDate.ToString("yyyy-MM-dd"));
 
         var result = await _agentService.GenerateStudyPlanAsync(request, cancellationToken);
 

@@ -6,6 +6,8 @@ import Dashboard from './Dashboard';
 import ExamSessions from './ExamSessions';
 import StudentManagement from './StudentManagement';
 import StudyPlanManager from './StudyPlanManager';
+import PastPaperAnalytics from './PastPaperAnalytics';
+import QuestionBankForm from './QuestionBankForm';
 import AdminLogin from './AdminLogin';
 
 function App() {
@@ -26,6 +28,8 @@ function App() {
           <Route path="exams" element={<ExamSessions />} />
           <Route path="students" element={<StudentManagement />} />
           <Route path="ai-plans" element={<StudyPlanManager />} />
+          <Route path="analytics" element={<PastPaperAnalytics />} />
+          <Route path="question-bank" element={<QuestionBankForm />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

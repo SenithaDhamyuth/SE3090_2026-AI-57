@@ -50,6 +50,9 @@ namespace IntelliPrep.API.Services
         private readonly IHttpClientFactory                    _httpClientFactory;
         private readonly IConfiguration                        _configuration;
         private readonly ILogger<PlanningCoordinatorService>   _logger;
+        private readonly string[]                              _apiKeys;
+        private readonly string                                _modelName;
+        private readonly int                                   _timeoutSeconds;
 
         public PlanningCoordinatorService(
             IHttpClientFactory                   httpClientFactory,
@@ -59,6 +62,23 @@ namespace IntelliPrep.API.Services
             _httpClientFactory = httpClientFactory;
             _configuration     = configuration;
             _logger            = logger;
+
+            var groqSettings = _configuration.GetSection("GroqSettings").Get<Models.GroqSettings>() ?? new Models.GroqSettings();
+
+            _apiKeys = groqSettings.ApiKeys?.Where(k => !string.IsNullOrWhiteSpace(k)).Distinct(StringComparer.Ordinal).ToArray() ?? [];
+            if (_apiKeys.Length == 0)
+            {
+                throw new InvalidOperationException("No Groq API keys configured. Add GroqSettings:ApiKeys array.");
+            }
+
+            var configuredModel = _configuration["GroqSettings:Model"];
+            if (string.IsNullOrWhiteSpace(configuredModel))
+            {
+                throw new InvalidOperationException("Groq Model is not configured.");
+            }
+
+            _modelName = configuredModel;
+            _timeoutSeconds = groqSettings.TimeoutSeconds > 0 ? groqSettings.TimeoutSeconds : 30;
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -79,7 +99,7 @@ namespace IntelliPrep.API.Services
 
             try
             {
-                var rawLlmJson = await CallGroqApiAsync(objective);
+                var rawLlmJson = await CallGroqApiAsync(objective, CancellationToken.None);
                 var cleanJson  = ExtractAndValidateJson(rawLlmJson, objective);
 
                 _logger.LogInformation(
@@ -118,61 +138,93 @@ namespace IntelliPrep.API.Services
         // Private: Groq HTTP call
         // ─────────────────────────────────────────────────────────────────────
 
-        private async Task<string> CallGroqApiAsync(string objective)
+        private async Task<string> CallGroqApiAsync(string objective, CancellationToken cancellationToken)
         {
-            var model = _configuration["Groq:Model"] ?? "llama3-70b-8192";
-
-            // Build the OpenAI-compatible chat request body
-            var requestBody = new GroqChatRequest
+            for (int attempt = 0; attempt < _apiKeys.Length; attempt++)
             {
-                Model       = model,
-                Temperature = 0.2f,   // Low temp for deterministic JSON output
-                MaxTokens   = 1024,
-                Messages    =
-                [
-                    new GroqMessage { Role = "system", Content = SystemPrompt },
-                    new GroqMessage { Role = "user",   Content = objective     },
-                ]
-            };
+                var selectedKey = _apiKeys[attempt % _apiKeys.Length];
+                var requestBody = new GroqChatRequest
+                {
+                    Model       = _modelName,
+                    Temperature = 0.2f,   // Low temp for deterministic JSON output
+                    MaxTokens   = 1024,
+                    Messages    =
+                    [
+                        new GroqMessage { Role = "system", Content = SystemPrompt },
+                        new GroqMessage { Role = "user",   Content = objective     },
+                    ]
+                };
 
-            var json    = JsonSerializer.Serialize(requestBody, _jsonOpts);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
+                var json    = JsonSerializer.Serialize(requestBody, _jsonOpts);
+                using var httpContent = new StringContent(json, Encoding.UTF8, "application/json");
+                using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "https://api.groq.com/openai/v1/chat/completions")
+                {
+                    Content = httpContent
+                };
+                httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", selectedKey);
+                httpRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
-            var httpClient = _httpClientFactory.CreateClient(HttpClientName);
+                var httpClient = _httpClientFactory.CreateClient(HttpClientName);
 
-            _logger.LogDebug(
-                "[PlanningCoordinator] POST to Groq | model={Model} | objective length={Len}",
-                model, objective.Length);
+                _logger.LogDebug(
+                    "[PlanningCoordinator] POST to Groq | model={Model} | objective length={Len}",
+                    _modelName, objective.Length);
 
-            var response = await httpClient.PostAsync(string.Empty, content);
+                try
+                {
+                    using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    cts.CancelAfter(TimeSpan.FromSeconds(_timeoutSeconds));
+                    
+                    var httpResponse = await httpClient.SendAsync(httpRequest, cts.Token);
+                    var responseBody = await httpResponse.Content.ReadAsStringAsync(cancellationToken);
 
-            var responseBody = await response.Content.ReadAsStringAsync();
+                    if (httpResponse.StatusCode == System.Net.HttpStatusCode.Unauthorized ||
+                        httpResponse.StatusCode == System.Net.HttpStatusCode.TooManyRequests ||
+                        httpResponse.StatusCode == System.Net.HttpStatusCode.RequestEntityTooLarge)
+                    {
+                        _logger.LogWarning(
+                            "[PlanningCoordinator] Hit {Status} for key {KeySuffix}, rotating to next key...",
+                            httpResponse.StatusCode,
+                            selectedKey.Substring(Math.Max(0, selectedKey.Length - 6)));
+                        continue;
+                    }
 
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogError(
-                    "[PlanningCoordinator] Groq API returned {Status}: {Body}",
-                    (int)response.StatusCode, responseBody);
+                    if (httpResponse.IsSuccessStatusCode)
+                    {
+                        var groqResponse = JsonSerializer.Deserialize<GroqChatResponse>(
+                            responseBody,
+                            new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                            ?? throw new JsonException("Groq response deserialized to null.");
 
-                throw new HttpRequestException(
-                    $"Groq API error {(int)response.StatusCode}: {responseBody}",
-                    null,
-                    response.StatusCode);
+                        var llmContent = groqResponse.Choices?.FirstOrDefault()?.Message?.Content
+                            ?? throw new JsonException("Groq response contained no choices.");
+
+                        _logger.LogDebug(
+                            "[PlanningCoordinator] Raw LLM content received ({Len} chars).", llmContent.Length);
+
+                        return llmContent;
+                    }
+
+                    _logger.LogError(
+                        "[PlanningCoordinator] Groq API returned HTTP {Status} for key {KeySuffix}: {Body}",
+                        (int)httpResponse.StatusCode,
+                        selectedKey.Substring(Math.Max(0, selectedKey.Length - 6)),
+                        responseBody);
+
+                    throw new HttpRequestException(
+                        $"Groq API error {(int)httpResponse.StatusCode}: {responseBody}",
+                        null,
+                        httpResponse.StatusCode);
+                }
+                catch (Exception ex) when (ex is TaskCanceledException || ex is TimeoutException)
+                {
+                    _logger.LogWarning("[PlanningCoordinator] Request timed out, rotating to next key...");
+                    continue; // rotate to next key
+                }
             }
 
-            // Parse the OpenAI-compatible response envelope
-            var groqResponse = JsonSerializer.Deserialize<GroqChatResponse>(
-                responseBody,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
-                ?? throw new JsonException("Groq response deserialized to null.");
-
-            var llmContent = groqResponse.Choices?.FirstOrDefault()?.Message?.Content
-                ?? throw new JsonException("Groq response contained no choices.");
-
-            _logger.LogDebug(
-                "[PlanningCoordinator] Raw LLM content received ({Len} chars).", llmContent.Length);
-
-            return llmContent;
+            throw new HttpRequestException(
+                $"Groq API rate limit, auth, or timeout exceeded across {_apiKeys.Length} configured keys.");
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -321,6 +373,9 @@ namespace IntelliPrep.API.Services
 
         [JsonPropertyName("max_tokens")]
         public int MaxTokens { get; set; } = 1024;
+
+        [JsonPropertyName("response_format")]
+        public object? ResponseFormat { get; set; }
 
         [JsonPropertyName("stream")]
         public bool Stream { get; set; } = false;

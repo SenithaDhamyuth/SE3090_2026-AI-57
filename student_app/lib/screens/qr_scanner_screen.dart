@@ -1,6 +1,10 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
 import 'exam_timer_screen.dart';
 
 /// QRScannerScreen — UC2.2: Scan a QR code to unlock a timed exam session.
@@ -34,7 +38,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
 
   // ── Barcode handler ────────────────────────────────────────────────
 
-  void _onDetect(BarcodeCapture capture) {
+  Future<void> _onDetect(BarcodeCapture capture) async {
     if (_isProcessing) return;
 
     final barcodes = capture.barcodes;
@@ -45,13 +49,13 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
 
     setState(() => _isProcessing = true);
 
-    // Stop the scanner to prevent repeat triggers
-    _controller.stop();
+    // Stop the scanner to prevent repeat triggers and release hardware.
+    await _controller.stop();
 
-    _navigateToExam(rawValue);
+    await _navigateToExam(rawValue);
   }
 
-  void _navigateToExam(String qrPayload) {
+  Future<void> _navigateToExam(String qrPayload) async {
     if (!mounted) return;
 
     // A valid IntelliPrep QR should start with "INTELLIPREP:"
@@ -59,28 +63,84 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
     final isValid = qrPayload.isNotEmpty;
 
     if (!isValid) {
-      setState(() {
-        _lastError = 'Invalid QR code. Please scan an IntelliPrep exam code.';
-        _isProcessing = false;
-      });
-      _controller.start();
+      if (mounted) {
+        setState(() {
+          _lastError = 'Invalid QR code. Please scan an IntelliPrep exam code.';
+          _isProcessing = false;
+        });
+        await _controller.start();
+      }
       return;
     }
 
-    // Navigate and pass the QR payload as the session identifier
-    Navigator.of(context)
-        .push(
+    try {
+      String accessCode = qrPayload;
+      if (qrPayload.startsWith('INTELLIPREP:')) {
+        accessCode = qrPayload.substring('INTELLIPREP:'.length);
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      // Do not use localhost here. Use the physical machine's IPv4 address instead.
+      final backendIp = prefs.getString('backend_ip') ?? '192.168.1.146';
+
+      final url = Uri.parse('http://$backendIp:5087/api/student/papers/join/$accessCode');
+      final response = await http.get(url).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        if (!mounted) return;
+        await Navigator.of(context).push(
           MaterialPageRoute<void>(
-            builder: (_) => ExamTimerScreen(qrPayload: qrPayload),
+            builder: (_) => ExamTimerScreen(qrPayload: accessCode),
           ),
-        )
-        .then((_) {
-          // Resume scanner if user comes back from the exam screen
-          if (mounted) {
-            setState(() => _isProcessing = false);
-            _controller.start();
-          }
+        );
+      } else {
+        if (!mounted) return;
+        setState(() {
+          _lastError = 'Failed to join exam. Access Code: $accessCode, Status: ${response.statusCode}';
         });
+      }
+    } on TimeoutException {
+      if (!mounted) return;
+      setState(() {
+        _lastError = 'Could not connect to the server. Check your WiFi/IP settings.';
+        _isProcessing = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not connect to the server. Check your WiFi/IP settings.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } on SocketException {
+      if (!mounted) return;
+      setState(() {
+        _lastError = 'Could not connect to the server. Check your WiFi/IP settings.';
+        _isProcessing = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not connect to the server. Check your WiFi/IP settings.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _lastError = 'Could not connect to the server. Check your WiFi/IP settings.';
+        _isProcessing = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not connect to the server. Check your WiFi/IP settings.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+
+    if (mounted) {
+      setState(() => _isProcessing = false);
+      await _controller.start();
+    }
   }
 
   void _toggleTorch() => _controller.toggleTorch();
@@ -185,6 +245,33 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
             controller: _controller,
             onDetect: _onDetect,
           ),
+
+          if (_isProcessing)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black.withAlpha(180),
+                child: const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(
+                        color: Colors.green,
+                        strokeWidth: 4,
+                      ),
+                      SizedBox(height: 18),
+                      Text(
+                        'Unlocking Exam...',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
 
           // ── Scanning overlay ────────────────────────────────────────
           _ScanOverlay(isProcessing: _isProcessing),

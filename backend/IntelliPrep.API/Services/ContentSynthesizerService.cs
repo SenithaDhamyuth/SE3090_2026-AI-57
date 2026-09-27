@@ -1,3 +1,4 @@
+using System.Net.Http.Headers;
 using ClosedXML.Excel;
 using IntelliPrep.API.Data;
 using IntelliPrep.API.Models;
@@ -15,7 +16,7 @@ namespace IntelliPrep.API.Services
     ///   1. Read 3–5 historical A/L ICT questions for the requested subject
     ///      → Source priority: Excel dataset → PostgreSQL Questions table → built-in seed data
     ///   2. Build a few-shot prompt from those examples
-    ///   3. Send to Groq LLM (llama3-70b-8192) to generate 5 NEW MCQs
+    ///   3. Send to Groq LLM (openai/gpt-oss-120b) to generate 5 NEW MCQs
     ///   4. Parse and validate the LLM JSON output
     ///   5. Persist to ExamSession.QuestionsJson and flip Status → "Ready"
     /// </summary>
@@ -54,6 +55,9 @@ namespace IntelliPrep.API.Services
         private readonly ILogger<ContentSynthesizerService>   _logger;
         private readonly ApplicationDbContext                 _context;
         private readonly IWebHostEnvironment                  _env;
+        private readonly string[]                             _apiKeys;
+        private readonly string                               _modelName;
+        private readonly int                                  _timeoutSeconds;
 
         public ContentSynthesizerService(
             IHttpClientFactory                  httpClientFactory,
@@ -67,6 +71,23 @@ namespace IntelliPrep.API.Services
             _logger            = logger;
             _context           = context;
             _env               = env;
+
+            var groqSettings = _configuration.GetSection("GroqSettings").Get<Models.GroqSettings>() ?? new Models.GroqSettings();
+
+            _apiKeys = groqSettings.ApiKeys?.Where(k => !string.IsNullOrWhiteSpace(k)).Distinct(StringComparer.Ordinal).ToArray() ?? [];
+            if (_apiKeys.Length == 0)
+            {
+                throw new InvalidOperationException("No Groq API keys configured. Add GroqSettings:ApiKeys array.");
+            }
+
+            var configuredModel = _configuration["GroqSettings:Model"];
+            if (string.IsNullOrWhiteSpace(configuredModel))
+            {
+                throw new InvalidOperationException("Groq Model is not configured.");
+            }
+
+            _modelName = configuredModel;
+            _timeoutSeconds = groqSettings.TimeoutSeconds > 0 ? groqSettings.TimeoutSeconds : 30;
         }
 
         // ─────────────────────────────────────────────────────────────────────
@@ -331,13 +352,14 @@ namespace IntelliPrep.API.Services
                 sb.AppendLine();
             }
 
-            sb.AppendLine($"Using these examples as a baseline in terms of format, style, and difficulty distribution,");
+            sb.AppendLine($"Using these examples ONLY as a baseline in terms of format and difficulty distribution,");
             sb.AppendLine($"generate exactly {requestedCount} ENTIRELY NEW multiple-choice questions for the topic \"{subject}\".");
 
             // Inject the user's original objective so the LLM focuses on their specific intent
             if (!string.IsNullOrWhiteSpace(originalObjective))
             {
-                sb.AppendLine($"The questions MUST focus SPECIFICALLY on this user request: '{originalObjective}'.");
+                sb.AppendLine($"CRITICAL: The questions MUST strictly focus on this specific user objective: '{originalObjective}'.");
+                sb.AppendLine($"You MUST prioritize '{originalObjective}' over the topics found in the historical seed questions.");
                 sb.AppendLine($"Do not write generic {subject} questions — directly address the user's stated focus area.");
             }
 
@@ -363,6 +385,7 @@ namespace IntelliPrep.API.Services
             var systemPrompt =
                 "You are the A/L ICT Content Synthesizer agent for IntelliPrep, a Sri Lanka A/L exam preparation platform. " +
                 "Your only job is to generate new, original MCQ questions based on historical past paper examples. " +
+                "You MUST prioritize the user's specific objective over the seed questions. " +
                 "You MUST output ONLY a valid JSON array. No markdown code fences, no text before or after the JSON. " +
                 "Every question must be educationally accurate for the A/L ICT Sri Lanka curriculum. " +
                 $"CRITICAL INSTRUCTION: You MUST generate EXACTLY {requestedCount} entirely new questions. " +
@@ -370,58 +393,89 @@ namespace IntelliPrep.API.Services
                 $"If you output less than {requestedCount} questions, the system will crash. " +
                 $"I repeat, output EXACTLY {requestedCount} questions in the JSON array.";
 
-            var model     = _configuration["Groq:Model"] ?? "llama3-70b-8192";
-            var requestDto = new SynthesizerGroqRequest
+            for (int attempt = 0; attempt < _apiKeys.Length; attempt++)
             {
-                Model       = model,
-                Temperature = 0.7f,   // slightly higher temp for creative question variety
-                MaxTokens   = 3000,
-                Messages    =
-                [
-                    new SynthesizerGroqMessage { Role = "system", Content = systemPrompt },
-                    new SynthesizerGroqMessage { Role = "user",   Content = userPrompt   },
-                ]
-            };
-
-            var body    = JsonSerializer.Serialize(requestDto, _jsonOpts);
-            var content = new StringContent(body, Encoding.UTF8, "application/json");
-
-            var httpClient = _httpClientFactory.CreateClient(PlanningCoordinatorService.HttpClientName);
-
-            try
-            {
-                var response     = await httpClient.PostAsync(string.Empty, content);
-                var responseBody = await response.Content.ReadAsStringAsync();
-
-                if (!response.IsSuccessStatusCode)
+                var selectedKey = _apiKeys[attempt % _apiKeys.Length];
+                var requestDto = new SynthesizerGroqRequest
                 {
-                    _logger.LogError(
-                        "[ContentSynthesizer] Groq returned {Status}: {Body}",
-                        (int)response.StatusCode, responseBody);
+                    Model       = _modelName,
+                    Temperature = 0.7f,   // slightly higher temp for creative question variety
+                    MaxTokens   = 3000,
+                    Messages    =
+                    [
+                        new SynthesizerGroqMessage { Role = "system", Content = systemPrompt },
+                        new SynthesizerGroqMessage { Role = "user",   Content = userPrompt   },
+                    ]
+                };
+
+                var body    = JsonSerializer.Serialize(requestDto, _jsonOpts);
+                using var content = new StringContent(body, Encoding.UTF8, "application/json");
+
+                using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "https://api.groq.com/openai/v1/chat/completions")
+                {
+                    Content = content
+                };
+                httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", selectedKey);
+                httpRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+                var httpClient = _httpClientFactory.CreateClient(PlanningCoordinatorService.HttpClientName);
+
+                try
+                {
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(_timeoutSeconds));
+                    var response = await httpClient.SendAsync(httpRequest, cts.Token);
+                    var responseBody = await response.Content.ReadAsStringAsync(cts.Token);
+
+                    if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized ||
+                        response.StatusCode == System.Net.HttpStatusCode.TooManyRequests ||
+                        response.StatusCode == System.Net.HttpStatusCode.RequestEntityTooLarge)
+                    {
+                        _logger.LogWarning(
+                            "[ContentSynthesizer] Hit {Status} for key {KeySuffix}, rotating to next key...",
+                            response.StatusCode,
+                            selectedKey.Substring(Math.Max(0, selectedKey.Length - 6)));
+                        continue;
+                    }
+
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        _logger.LogError(
+                            "[ContentSynthesizer] Groq API returned HTTP {Status} for key {KeySuffix}: {Body}",
+                            (int)response.StatusCode,
+                            selectedKey.Substring(Math.Max(0, selectedKey.Length - 6)),
+                            responseBody);
+                        
+                        // We do not immediately fallback here on 5xx, we could rotate, but based on requirement we only rotate on 401, 429, 413.
+                        // Though typical 5xx might be worth a rotation, let's keep it strictly to the spec for now.
+                        // Actually, I'll return fallback if it fails for other reasons.
+                        return GetFallbackMcqs(subject);
+                    }
+
+                    var groqResp = JsonSerializer.Deserialize<SynthesizerGroqResponse>(
+                        responseBody,
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                    var rawText = groqResp?.Choices?.FirstOrDefault()?.Message?.Content ?? string.Empty;
+
+                    _logger.LogDebug(
+                        "[ContentSynthesizer] Raw LLM output ({Len} chars).", rawText.Length);
+
+                    return ParseMcqJson(rawText, subject);
+                }
+                catch (Exception ex) when (ex is TaskCanceledException || ex is TimeoutException)
+                {
+                    _logger.LogWarning("[ContentSynthesizer] Groq call timed out. Rotating to next key...");
+                    continue; // rotate to next key
+                }
+                catch (HttpRequestException ex)
+                {
+                    _logger.LogWarning(ex, "[ContentSynthesizer] Groq HTTP error. Using fallback MCQs.");
                     return GetFallbackMcqs(subject);
                 }
-
-                var groqResp = JsonSerializer.Deserialize<SynthesizerGroqResponse>(
-                    responseBody,
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-                var rawText = groqResp?.Choices?.FirstOrDefault()?.Message?.Content ?? string.Empty;
-
-                _logger.LogDebug(
-                    "[ContentSynthesizer] Raw LLM output ({Len} chars).", rawText.Length);
-
-                return ParseMcqJson(rawText, subject);
             }
-            catch (TaskCanceledException)
-            {
-                _logger.LogWarning("[ContentSynthesizer] Groq call timed out. Using fallback MCQs.");
-                return GetFallbackMcqs(subject);
-            }
-            catch (HttpRequestException ex)
-            {
-                _logger.LogWarning(ex, "[ContentSynthesizer] Groq HTTP error. Using fallback MCQs.");
-                return GetFallbackMcqs(subject);
-            }
+
+            _logger.LogWarning("[ContentSynthesizer] All keys exhausted or rate limited. Using fallback MCQs.");
+            return GetFallbackMcqs(subject);
         }
 
         // ─────────────────────────────────────────────────────────────────────
