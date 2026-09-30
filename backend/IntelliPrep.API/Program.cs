@@ -32,7 +32,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
-// ── Member 1: Assessment Engine Services ──────────────────────────────────
+// ── Member 1: Assessment Engine Services ──────────────────────────────────────
 // Register a named HttpClient for the Groq API with proper lifecycle management.
 var groqSection = builder.Configuration.GetSection("GroqSettings");
 builder.Services.Configure<IntelliPrep.API.Models.GroqSettings>(groqSection);
@@ -82,6 +82,7 @@ builder.Services.AddCors(options =>
             .AllowAnyHeader()
             .AllowCredentials());
 });
+
 // 3. Configure Swagger with JWT Support
 builder.Services.AddSwaggerGen(c =>
 {
