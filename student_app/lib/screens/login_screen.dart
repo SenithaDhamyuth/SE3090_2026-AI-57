@@ -2,14 +2,13 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import '../api_constants.dart';
 import 'home_screen.dart';
 
 /// LoginScreen — entry point for authenticated students.
 ///
-/// Provides email / password sign-in, persists a mock JWT token via
-/// SharedPreferences on success, and routes to [HomeScreen].
-/// A settings (gear) icon in the AppBar lets the user configure the
-/// dynamic backend IP so that [ExamTimerScreen] can reach the API.
+/// Provides email / password sign-in, persists the JWT via SharedPreferences,
+/// and routes to [HomeScreen].
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -21,7 +20,6 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _backendIpController = TextEditingController();
 
   bool _obscurePassword = true;
   bool _isLoading = false;
@@ -30,87 +28,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
-    _backendIpController.dispose();
     super.dispose();
-  }
-
-  // ── Backend IP dialog ────────────────────────────────────────────────
-
-  Future<void> _showBackendIpDialog() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
-
-    _backendIpController.text =
-        prefs.getString('backend_ip') ?? '192.168.1.146';
-
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.dns_rounded, size: 20),
-            SizedBox(width: 8),
-            Text('Backend Settings',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Enter the IP address or hostname of the IntelliPrep backend server.',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _backendIpController,
-              autofocus: true,
-              keyboardType: TextInputType.url,
-              decoration: InputDecoration(
-                labelText: 'Backend IP / Host',
-                hintText: '192.168.1.146',
-                prefixText: 'http://',
-                prefixStyle: TextStyle(color: Colors.grey.shade500),
-                border: const OutlineInputBorder(),
-                contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 10),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-                backgroundColor: Colors.orange),
-            onPressed: () async {
-              final raw = _backendIpController.text.trim();
-              final ip = raw
-                  .replaceFirst(RegExp(r'^https?://'), '')
-                  .replaceAll(RegExp(r'/$'), '');
-              if (ip.isNotEmpty) {
-                await prefs.setString('backend_ip', ip);
-              }
-              if (ctx.mounted) Navigator.of(ctx).pop();
-              if (mounted && ip.isNotEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Backend IP saved: $ip'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
   }
 
   // ── Login logic ──────────────────────────────────────────────────────
@@ -122,12 +40,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      final savedIp = prefs.getString('backend_ip') ?? '192.168.1.146';
-      final backendUrl = 'http://$savedIp:5087/api/auth/login';
+      final backendUrl = ApiConstants.endpoint('api/auth/login');
 
       final response = await http
           .post(
-            Uri.parse(backendUrl),
+        backendUrl,
             headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
             body: jsonEncode({
               'email': _emailController.text.trim(),
@@ -179,7 +96,7 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() => _isLoading = false);
 
       final message = e.toString().contains('socket') || e.toString().contains('Timeout')
-          ? 'Unable to reach backend. Check backend IP.'
+          ? 'Unable to reach the server. Check your internet connection.'
           : 'Login failed. Please try again.';
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -202,13 +119,6 @@ class _LoginScreenState extends State<LoginScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings_rounded),
-            tooltip: 'Backend settings',
-            onPressed: _showBackendIpDialog,
-          ),
-        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -377,7 +287,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 // ── Hint ───────────────────────────────────────────────
                 Center(
                   child: Text(
-                    'Use any email & password (4+ chars) to sign in.',
+                    'Use the email and password issued for your student account.',
                     style: TextStyle(
                         fontSize: 11, color: Colors.grey.shade400),
                     textAlign: TextAlign.center,
@@ -392,7 +302,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           size: 12,
                           color: colorScheme.secondary.withAlpha(140)),
                       Text(
-                        'Tap the ⚙ icon above to set the backend IP.',
+                        'Sign in using your student account.',
                         style: TextStyle(
                           fontSize: 11,
                           color: Colors.grey.shade400,

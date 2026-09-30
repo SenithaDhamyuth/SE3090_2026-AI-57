@@ -4,8 +4,8 @@ import {
   Clock, AlertTriangle, ChevronDown, Search, Sparkles, RefreshCw, Loader2, X, MessageSquare
 } from 'lucide-react';
 
-const EXAM_API = 'http://localhost:5087/api/assessment';
-const AIAGENT_API = 'http://localhost:5087/api/aiagent';
+const EXAM_API = (import.meta.env.VITE_API_URL || 'https://intelliprep-rhx3.onrender.com') + '/api/assessment';
+const AIAGENT_API = (import.meta.env.VITE_API_URL || 'https://intelliprep-rhx3.onrender.com') + '/api/aiagent';
 const OPTION_LETTERS = ['A', 'B', 'C', 'D', 'E'];
 
 function Toast({ toasts, onDismiss }) {

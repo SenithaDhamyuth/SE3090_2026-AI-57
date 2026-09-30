@@ -10,7 +10,7 @@ import {
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
-const API_BASE = 'http://localhost:5087';
+const API_BASE = (import.meta.env.VITE_API_URL || 'https://intelliprep-rhx3.onrender.com') + '';
 
 // ── Authenticated fetch ────────────────────────────────────────────────────────
 const authFetch = (url, options = {}) => {

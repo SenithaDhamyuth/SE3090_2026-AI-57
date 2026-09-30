@@ -80,6 +80,11 @@ builder.Services.AddCors(options =>
                 .AllowAnyHeader()
                 .AllowAnyMethod();
         });
+    options.AddPolicy("AllowProduction", policy => 
+        policy.WithOrigins("https://se-3090-2026-ai-57.vercel.app")
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials());
 });
 // 3. Configure Swagger with JWT Support
 builder.Services.AddSwaggerGen(c =>
@@ -124,7 +129,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseCors("AllowReact");
+app.UseCors("AllowProduction");
 app.UseHttpsRedirection();
 // Use Authentication before Authorization
 app.UseAuthentication();

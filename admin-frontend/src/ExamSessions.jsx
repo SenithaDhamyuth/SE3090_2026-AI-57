@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const API_BASE = 'http://localhost:5087/api/assessment';
+const API_BASE = (import.meta.env.VITE_API_URL || 'https://intelliprep-rhx3.onrender.com') + '/api/assessment';
 
 const STATUS_META = {
   Pending:    { color: 'text-amber-600',   bg: 'bg-amber-50',    border: 'border-amber-200',   icon: Clock,         label: 'Pending'     },
@@ -566,7 +566,7 @@ export default function ExamSessions() {
     addToast('info', 'Synthesizer Running…', `Calling Groq LLM for "${subject}" questions. This may take 10–20 s.`);
 
     try {
-      const url = `http://localhost:5087/api/aiagent/synthesize-exam/${sessionId}?subject=${encodeURIComponent(subject)}`;
+      const url = `${import.meta.env.VITE_API_URL || 'https://intelliprep-rhx3.onrender.com'}/api/aiagent/synthesize-exam/${sessionId}?subject=${encodeURIComponent(subject)}`;
       const res = await fetch(url, { method: 'POST' });
       const data = await res.json();
 

@@ -14,7 +14,7 @@ export default function Login() {
     setMessage('');
     
     try {
-      const response = await fetch('http://localhost:5087/api/Auth/login', {
+      const response = await fetch((import.meta.env.VITE_API_URL || 'https://intelliprep-rhx3.onrender.com') + '/api/Auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })

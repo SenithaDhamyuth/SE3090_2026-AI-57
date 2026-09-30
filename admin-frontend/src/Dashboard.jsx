@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Activity, BookOpen, GraduationCap } from 'lucide-react';
 
-const API_BASE = 'http://localhost:5087';
+const API_BASE = (import.meta.env.VITE_API_URL || 'https://intelliprep-rhx3.onrender.com') + '';
 
 export default function Dashboard() {
   const [students, setStudents] = useState([]);
