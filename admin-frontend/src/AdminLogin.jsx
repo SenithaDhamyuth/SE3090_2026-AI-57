@@ -13,7 +13,7 @@ export default function AdminLogin({ onLogin }) {
     setError(null);
 
     try {
-      const res = await fetch('http://localhost:5087/api/auth/login', {
+      const res = await fetch((import.meta.env.VITE_API_URL || 'https://intelliprep-rhx3.onrender.com') + '/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),

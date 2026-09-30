@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../api_constants.dart';
 import '../models/cached_exam.dart';
 import '../services/database_helper.dart';
 import 'qr_scanner_screen.dart';
-import 'exam_timer_screen.dart';
 import 'login_screen.dart';
 
 /// HomeScreen — main shell of the IntelliPrep Student App.
@@ -570,9 +570,7 @@ class _StudyPlanTabState extends State<_StudyPlanTab> {
   Future<Map<String, dynamic>> _fetchStudyPlan() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('auth_token') ?? '';
-    final ip = prefs.getString('backend_ip') ?? '192.168.1.146';
-    
-    final url = Uri.parse('http://$ip:5087/api/student/my-plan');
+    final url = ApiConstants.endpoint('api/student/my-plan');
     final response = await http.get(url, headers: {
       'Authorization': 'Bearer $token',
     });
@@ -621,7 +619,7 @@ class _StudyPlanTabState extends State<_StudyPlanTab> {
                   Text(
                     isApproval 
                       ? 'Your AI-generated plan is waiting for a tutor to review and approve it.'
-                      : 'Please check your connection or backend IP settings.',
+                      : 'Please check your internet connection and try again.',
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: Colors.grey),
                   ),

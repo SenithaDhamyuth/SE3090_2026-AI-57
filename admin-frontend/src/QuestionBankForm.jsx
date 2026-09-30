@@ -4,7 +4,7 @@ import {
   Loader2, X, Save, RotateCcw, ChevronDown,
 } from 'lucide-react';
 
-const API_BASE = 'http://localhost:5087';
+const API_BASE = (import.meta.env.VITE_API_URL || 'https://intelliprep-rhx3.onrender.com') + '';
 
 const authFetch = (url, opts = {}) => {
   const token = localStorage.getItem('admin_token') || '';

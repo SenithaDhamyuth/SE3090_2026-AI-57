@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
+import '../api_constants.dart';
 import 'exam_timer_screen.dart';
 
 /// QRScannerScreen — UC2.2: Scan a QR code to unlock a timed exam session.
@@ -23,15 +23,12 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
     detectionSpeed: DetectionSpeed.noDuplicates,
     facing: CameraFacing.back,
   );
-  final TextEditingController _backendIpController = TextEditingController();
-
   bool _isProcessing = false;
   String? _lastError;
 
   @override
   void dispose() {
     _controller.dispose();
-    _backendIpController.dispose();
     super.dispose();
   }
 
@@ -78,11 +75,9 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
         accessCode = qrPayload.substring('INTELLIPREP:'.length);
       }
 
-      final prefs = await SharedPreferences.getInstance();
-      // Do not use localhost here. Use the physical machine's IPv4 address instead.
-      final backendIp = prefs.getString('backend_ip') ?? '192.168.1.146';
-
-      final url = Uri.parse('http://$backendIp:5087/api/student/papers/join/$accessCode');
+      final url = ApiConstants.endpoint(
+        'api/student/papers/join/${Uri.encodeComponent(accessCode)}',
+      );
       final response = await http.get(url).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
@@ -101,36 +96,36 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
     } on TimeoutException {
       if (!mounted) return;
       setState(() {
-        _lastError = 'Could not connect to the server. Check your WiFi/IP settings.';
+        _lastError = 'Could not connect to the server. Check your internet connection.';
         _isProcessing = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Could not connect to the server. Check your WiFi/IP settings.'),
+          content: Text('Could not connect to the server. Check your internet connection.'),
           behavior: SnackBarBehavior.floating,
         ),
       );
     } on SocketException {
       if (!mounted) return;
       setState(() {
-        _lastError = 'Could not connect to the server. Check your WiFi/IP settings.';
+        _lastError = 'Could not connect to the server. Check your internet connection.';
         _isProcessing = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Could not connect to the server. Check your WiFi/IP settings.'),
+          content: Text('Could not connect to the server. Check your internet connection.'),
           behavior: SnackBarBehavior.floating,
         ),
       );
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _lastError = 'Could not connect to the server. Check your WiFi/IP settings.';
+        _lastError = 'Could not connect to the server. Check your internet connection.';
         _isProcessing = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Could not connect to the server. Check your WiFi/IP settings.'),
+          content: Text('Could not connect to the server. Check your internet connection.'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -144,62 +139,6 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
 
   void _toggleTorch() => _controller.toggleTorch();
   void _switchCamera() => _controller.switchCamera();
-
-  void _showBackendIpDialog() {
-    SharedPreferences.getInstance().then((prefs) {
-      if (!mounted) return;
-
-      final savedIp = prefs.getString('backend_ip') ?? '192.168.1.146';
-      final messenger = ScaffoldMessenger.maybeOf(context);
-      _backendIpController.text = savedIp;
-
-      showDialog<String>(
-        context: context,
-        builder: (builderContext) => AlertDialog(
-          title: const Text('Backend IP Settings'),
-          content: SizedBox(
-            width: 300,
-            child: TextField(
-              controller: _backendIpController,
-              autofocus: true,
-              keyboardType: TextInputType.url,
-              decoration: const InputDecoration(
-                labelText: 'Backend IP',
-                hintText: '192.168.1.146',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(builderContext).pop(),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(builderContext).pop(_backendIpController.text),
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ).then((newIp) async {
-        if (!mounted) return;
-
-        final trimmedIp = (newIp ?? '').trim();
-        if (trimmedIp.isEmpty) {
-          messenger?.showSnackBar(
-            const SnackBar(content: Text('Backend IP cannot be empty.')),
-          );
-          return;
-        }
-
-        final normalizedIp = trimmedIp.replaceFirst(RegExp(r'^https?://'), '').trim();
-        await prefs.setString('backend_ip', normalizedIp);
-        messenger?.showSnackBar(
-          SnackBar(content: Text('Backend IP saved: $normalizedIp')),
-        );
-      });
-    });
-  }
 
   // ── Build ──────────────────────────────────────────────────────────
 
@@ -217,12 +156,6 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            color: Colors.black,
-            tooltip: 'Backend IP settings',
-            onPressed: _showBackendIpDialog,
-          ),
           // Torch toggle
           IconButton(
             icon: const Icon(Icons.flashlight_on_outlined),

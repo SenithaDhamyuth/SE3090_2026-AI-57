@@ -43,8 +43,9 @@ namespace IntelliPrep.API.Data
             if (excelPath is null)
             {
                 logger.LogWarning(
-                    "[Seeder] Excel file '{File}' not found in any of: {Dirs}. Skipping seed.",
+                    "[Seeder] Excel file '{File}' not found in any of: {Dirs}. Inserting the built-in fallback questions.",
                     ExcelFileName, string.Join(", ", searchDirs));
+                await SeedFallbackQuestionsAsync(db, logger);
                 return;
             }
 
@@ -163,6 +164,72 @@ namespace IntelliPrep.API.Data
             await db.SaveChangesAsync();
 
             logger.LogInformation("[Seeder] ✅ Seeding complete — {Count} questions inserted.", questions.Count);
+        }
+
+        private static async Task SeedFallbackQuestionsAsync(
+            ApplicationDbContext db,
+            ILogger logger)
+        {
+            var questions = new[]
+            {
+                new Question
+                {
+                    Question_ID = "FALLBACK_ICT_001",
+                    Year = DateTime.UtcNow.Year,
+                    Paper_Type = "MCQ",
+                    Lesson_Name = "Data Representation",
+                    Difficulty_Level = "Easy",
+                    Question_Text = "How many bits are in one byte?",
+                    Option_1 = "4",
+                    Option_2 = "8",
+                    Option_3 = "16",
+                    Option_4 = "32",
+                    Correct_Answer = "8",
+                    Correct_Option_No = 2,
+                    Image_Filename = "NONE",
+                    Image_Description = "NONE"
+                },
+                new Question
+                {
+                    Question_ID = "FALLBACK_ICT_002",
+                    Year = DateTime.UtcNow.Year,
+                    Paper_Type = "MCQ",
+                    Lesson_Name = "Database Management",
+                    Difficulty_Level = "Easy",
+                    Question_Text = "Which SQL command retrieves rows from a table?",
+                    Option_1 = "SELECT",
+                    Option_2 = "INSERT",
+                    Option_3 = "UPDATE",
+                    Option_4 = "DELETE",
+                    Correct_Answer = "SELECT",
+                    Correct_Option_No = 1,
+                    Image_Filename = "NONE",
+                    Image_Description = "NONE"
+                },
+                new Question
+                {
+                    Question_ID = "FALLBACK_ICT_003",
+                    Year = DateTime.UtcNow.Year,
+                    Paper_Type = "MCQ",
+                    Lesson_Name = "Programming (Python)",
+                    Difficulty_Level = "Easy",
+                    Question_Text = "Which Python keyword starts a conditional branch?",
+                    Option_1 = "repeat",
+                    Option_2 = "when",
+                    Option_3 = "if",
+                    Option_4 = "case",
+                    Correct_Answer = "if",
+                    Correct_Option_No = 3,
+                    Image_Filename = "NONE",
+                    Image_Description = "NONE"
+                }
+            };
+
+            await db.Questions.AddRangeAsync(questions);
+            await db.SaveChangesAsync();
+            logger.LogWarning(
+                "[Seeder] Inserted {Count} built-in fallback questions because the Excel dataset is unavailable.",
+                questions.Length);
         }
     }
 }

@@ -5,17 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/cached_exam.dart';
 import '../services/database_helper.dart';
-
-String _normalizeBackendIp(String input) {
-  final trimmed = input.trim();
-  if (trimmed.isEmpty) return '192.168.1.146';
-  return trimmed.replaceFirst(RegExp(r'^https?://'), '').replaceAll(RegExp(r'/$'), '');
-}
-
-Future<String> _loadSavedBackendIp() async {
-  final prefs = await SharedPreferences.getInstance();
-  return _normalizeBackendIp(prefs.getString('backend_ip') ?? '192.168.1.146');
-}
+import '../api_constants.dart';
 
 /// Fetches the MCQ questions for a session by calling the join endpoint.
 ///
@@ -23,10 +13,10 @@ Future<String> _loadSavedBackendIp() async {
 /// this call repeats it to obtain the questionsJson array for rendering.
 /// The endpoint is idempotent and safe to call multiple times.
 Future<List<Map<String, dynamic>>> fetchQuestions(String sessionId) async {
-  final savedIp = await _loadSavedBackendIp();
-
   // Primary: use the join endpoint (returns questionsJson in the response body)
-  final uri = Uri.parse('http://$savedIp:5087/api/student/papers/join/$sessionId');
+  final uri = ApiConstants.endpoint(
+    'api/student/papers/join/${Uri.encodeComponent(sessionId)}',
+  );
 
   try {
     final prefs = await SharedPreferences.getInstance();
@@ -77,9 +67,9 @@ Future<List<Map<String, dynamic>>> fetchQuestions(String sessionId) async {
         .map((question) => Map<String, dynamic>.from(question))
         .toList();
   } on TimeoutException {
-    throw Exception('Connection failed. Check backend IP.');
+    throw Exception('Connection failed. Check your internet connection.');
   } on FormatException {
-    throw Exception('Connection failed. Check backend IP.');
+    throw Exception('Connection failed. Check your internet connection.');
   } catch (e) {
     if (e is Exception && e.toString().contains('Connection failed')) {
       rethrow;
@@ -87,7 +77,7 @@ Future<List<Map<String, dynamic>>> fetchQuestions(String sessionId) async {
     if (e is Exception && e.toString().contains('Unauthorized')) {
       throw Exception('Unauthorized');
     }
-    throw Exception('Connection failed. Check backend IP.');
+    throw Exception('Connection failed. Check your internet connection.');
   }
 }
 
@@ -209,7 +199,7 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
       final message = e.toString().contains('Unauthorized')
           ? 'Session unauthorized. Please log in again.'
           : e.toString().contains('Connection failed')
-              ? 'Connection failed. Check backend IP.'
+              ? 'Connection failed. Check your internet connection.'
               : 'Unable to load questions right now. Please try again.';
 
       setState(() {
@@ -312,11 +302,10 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
   /// This is best-effort: a network failure never blocks the results screen.
   Future<void> _submitToBackend() async {
     try {
-      final savedIp = await _loadSavedBackendIp();
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('auth_token');
 
-      final uri = Uri.parse('http://$savedIp:5087/api/student/submit');
+      final uri = ApiConstants.endpoint('api/student/submit');
 
       final body = jsonEncode({
         'sessionGuid': widget.qrPayload,
