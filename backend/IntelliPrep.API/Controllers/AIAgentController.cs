@@ -24,15 +24,18 @@ public class AIAgentController : ControllerBase
     private readonly IAIAgentService      _agentService;
     private readonly ApplicationDbContext _db;
     private readonly ILogger<AIAgentController> _logger;
+    private readonly IntelliPrep.API.Services.INotificationService _notifier;
 
     public AIAgentController(
         IAIAgentService           agentService,
         ApplicationDbContext      db,
-        ILogger<AIAgentController> logger)
+        ILogger<AIAgentController> logger,
+        IntelliPrep.API.Services.INotificationService notifier)
     {
         _agentService = agentService;
         _db           = db;
         _logger       = logger;
+        _notifier     = notifier;
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -288,6 +291,30 @@ public class AIAgentController : ControllerBase
         _logger.LogInformation(
             "[AIAgentController] ✅ Study plan Id={PlanId} approved by '{Admin}' at {Time}.",
             planId, adminEmail, plan.ApprovedAt);
+
+        // ── Third-party notification: email the student ─────────────────
+        // Fetch the student's registered email from the Users table.
+        var student = await _db.Users
+            .AsNoTracking()
+            .Where(u => u.Id == plan.StudentId)
+            .Select(u => new { u.Email, u.FullName })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (student is not null)
+        {
+            // Fire-and-forget: notification failure must not affect the approval response.
+            _ = _notifier.SendApprovalEmailAsync(
+                    student.Email,
+                    student.FullName,
+                    "ICT Study Plan",
+                    cancellationToken);
+        }
+        else
+        {
+            _logger.LogWarning(
+                "[AIAgentController] Student {Id} not found in Users table — skipping email.",
+                plan.StudentId);
+        }
 
         return Ok(new
         {

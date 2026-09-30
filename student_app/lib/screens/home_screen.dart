@@ -172,7 +172,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   PreferredSizeWidget _buildAppBar() {
-    const _tabTitles = ['Dashboard', 'Study Plan', 'Progress'];
+    const tabTitles = ['Dashboard', 'Study Plan', 'Progress'];
     return AppBar(
       backgroundColor: Colors.orange,
       foregroundColor: Colors.white,
@@ -194,7 +194,7 @@ class _HomeScreenState extends State<HomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'IntelliPrep · ${_tabTitles[_currentIndex]}',
+                'IntelliPrep · ${tabTitles[_currentIndex]}',
                 style: const TextStyle(
                     fontSize: 15, fontWeight: FontWeight.bold),
               ),

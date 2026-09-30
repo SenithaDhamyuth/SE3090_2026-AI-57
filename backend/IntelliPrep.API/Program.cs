@@ -55,6 +55,11 @@ builder.Services.AddScoped<ContentSynthesizerService>();
 // Reuses the same named "GroqClient" HttpClient already configured above.
 builder.Services.AddScoped<IAIAgentService, AIAgentService>();
 
+// ── Third-Party Integration: Email Notification Service ───────────────────
+// Uses System.Net.Mail (SMTP). Configure EmailSettings in appsettings.json.
+builder.Services.AddScoped<IntelliPrep.API.Services.INotificationService,
+                            IntelliPrep.API.Services.NotificationService>();
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddCors(options =>

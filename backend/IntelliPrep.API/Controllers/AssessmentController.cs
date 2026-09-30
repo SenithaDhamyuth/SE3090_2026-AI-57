@@ -26,17 +26,20 @@ namespace IntelliPrep.API.Controllers
         private readonly PlanningCoordinatorService    _planner;
         private readonly ContentSynthesizerService     _synthesizer;
         private readonly ILogger<AssessmentController> _logger;
+        private readonly INotificationService          _notifier;
 
         public AssessmentController(
             ApplicationDbContext          context,
             PlanningCoordinatorService    planner,
             ContentSynthesizerService     synthesizer,
-            ILogger<AssessmentController> logger)
+            ILogger<AssessmentController> logger,
+            INotificationService          notifier)
         {
             _context     = context;
             _planner     = planner;
             _synthesizer = synthesizer;
             _logger      = logger;
+            _notifier    = notifier;
         }
 
         // ─────────────────────────────────────────────────────────────
@@ -253,6 +256,34 @@ namespace IntelliPrep.API.Controllers
                     : (!string.IsNullOrWhiteSpace(session.Subject) ? session.Subject : "ICT");
 
                 var generatedMcqs = await _synthesizer.SynthesizeAndPersistAsync(sessionId, effectiveSubject);
+
+                // ── Notify student: exam is ready ─────────────────────────────
+                // Attempt to resolve student's email via StudentProfile → User.
+                if (session.StudentProfileId > 0)
+                {
+                    var profile = await _context.StudentProfiles
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(p => p.Id == session.StudentProfileId);
+
+                    if (profile != null)
+                    {
+                        // UserId is stored as string in StudentProfile
+                        if (int.TryParse(profile.UserId, out int uid))
+                        {
+                            var user = await _context.Users
+                                .AsNoTracking()
+                                .FirstOrDefaultAsync(u => u.Id == uid);
+
+                            if (user != null)
+                            {
+                                _ = _notifier.SendApprovalEmailAsync(
+                                        user.Email,
+                                        user.FullName,
+                                        "Mock Exam");
+                            }
+                        }
+                    }
+                }
 
                 return Ok(new
                 {
