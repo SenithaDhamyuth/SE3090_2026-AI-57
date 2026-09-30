@@ -69,17 +69,15 @@ builder.Services.AddScoped<IntelliPrep.API.Services.INotificationService,
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
-        options.JsonSerializerOptions.ReferenceHandler =
-            System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+        options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
     });
+
 builder.Services.AddEndpointsApiExplorer();
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowProduction", policy =>
-        policy.WithOrigins(
-                "https://se-3090-2026-ai-57.vercel.app",
-                "http://localhost:5173",
-                "http://localhost:3000")
+        policy.WithOrigins("https://se-3090-2026-ai-57.vercel.app")
             .AllowAnyMethod()
             .AllowAnyHeader()
             .AllowCredentials());
