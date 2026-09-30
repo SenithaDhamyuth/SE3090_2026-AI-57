@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { Cpu, Home, ClipboardList, Users, Brain, Menu, X, BarChart2, Database } from 'lucide-react';
+import { Cpu, Home, ClipboardList, Users, Brain, Menu, X, BarChart2, Database, ShieldCheck } from 'lucide-react';
 
 const NAV = [
   { to: '/', icon: Home, label: 'Dashboard' },
@@ -9,6 +9,7 @@ const NAV = [
   { to: '/ai-plans', icon: Brain, label: 'AI Study Plans' },
   { to: '/analytics', icon: BarChart2, label: 'Past Paper Analytics' },
   { to: '/question-bank', icon: Database, label: 'Question Bank' },
+  { to: '/approvals', icon: ShieldCheck, label: 'Pending Approvals', badge: true },
 ];
 
 export default function Layout() {
@@ -42,7 +43,13 @@ export default function Layout() {
             }
           >
             <item.icon size={15} strokeWidth={2} />
-            <span className="text-[13px]">{item.label}</span>
+            <span className="text-[13px] flex-1">{item.label}</span>
+            {item.badge && (
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500" />
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>

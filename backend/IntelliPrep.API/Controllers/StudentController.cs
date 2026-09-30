@@ -117,10 +117,25 @@ public class StudentController : ControllerBase
                 status  = session.Status
             });
 
+        // Guard: block access to sessions awaiting admin approval
+        if (session.Status == "PendingAdminApproval")
+            return StatusCode(403, new
+            {
+                message = "This exam is pending admin approval. Your tutor must approve it before you can begin.",
+                status  = session.Status
+            });
+
         if (session.Status == "Completed")
             return BadRequest(new
             {
                 message = "This exam session has already been completed.",
+                status  = session.Status
+            });
+
+        if (session.Status == "Abandoned")
+            return StatusCode(410, new
+            {
+                message = "This exam session was rejected by an admin and is no longer available.",
                 status  = session.Status
             });
 

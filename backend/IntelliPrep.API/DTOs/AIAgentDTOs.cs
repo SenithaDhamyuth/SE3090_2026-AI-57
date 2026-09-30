@@ -425,4 +425,199 @@ namespace IntelliPrep.API.DTOs
         [JsonPropertyName("questionCount")]
         public int QuestionCount => Questions.Count;
     }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Agent 3 — ExamSynthesizerAgent Input / Output Contracts
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Strict INPUT contract for Agent 3 (<c>ExamSynthesizerAgent</c>).
+    ///
+    /// Carries the user's objective, the subject, the requested question count,
+    /// and an optional per-topic distribution that Agent 3 must honour exactly.
+    /// </summary>
+    public sealed record SynthesizerInput
+    {
+        /// <summary>A/L ICT subject (e.g. "Networking", "Logic Gates").</summary>
+        [JsonPropertyName("subject")]
+        public string Subject { get; init; } = string.Empty;
+
+        /// <summary>
+        /// The user's verbatim learning objective — drives focus for the LLM.
+        /// Example: "I want questions on NAND gate combinations."
+        /// </summary>
+        [JsonPropertyName("objective")]
+        public string Objective { get; init; } = string.Empty;
+
+        /// <summary>Exact number of MCQs that must be generated.</summary>
+        [JsonPropertyName("requestedQuestionCount")]
+        public int RequestedQuestionCount { get; init; } = 5;
+
+        /// <summary>
+        /// Optional per-topic breakdown: topic → exact question count.
+        /// The values must sum to <see cref="RequestedQuestionCount"/>.
+        /// Example: { "IP Addresses": 3, "Subnetting": 2 }
+        /// </summary>
+        [JsonPropertyName("topicDistribution")]
+        public Dictionary<string, int> TopicDistribution { get; init; } = [];
+    }
+
+    /// <summary>
+    /// Strict OUTPUT contract produced by Agent 3 (<c>ExamSynthesizerAgent</c>).
+    /// Passed directly to Agent 4 (<c>ValidationAgentService</c>) for validation
+    /// before any DB persistence occurs.
+    /// </summary>
+    public sealed record SynthesizerOutput
+    {
+        [JsonPropertyName("subject")]
+        public string Subject { get; init; } = string.Empty;
+
+        [JsonPropertyName("objective")]
+        public string Objective { get; init; } = string.Empty;
+
+        [JsonPropertyName("requestedQuestionCount")]
+        public int RequestedQuestionCount { get; init; }
+
+        [JsonPropertyName("topicDistribution")]
+        public Dictionary<string, int> TopicDistribution { get; init; } = [];
+
+        /// <summary>Raw JSON string returned by the LLM — preserved for audit/debug.</summary>
+        [JsonPropertyName("rawLlmJson")]
+        public string RawLlmJson { get; init; } = string.Empty;
+
+        /// <summary>Parsed MCQ list ready for Agent 4 deterministic validation.</summary>
+        [JsonPropertyName("questions")]
+        public List<SynthesizedMcqItem> Questions { get; init; } = [];
+    }
+
+    /// <summary>
+    /// A single MCQ produced by Agent 3.
+    /// Validated by Agent 4 before persistence.
+    /// </summary>
+    public sealed class SynthesizedMcqItem
+    {
+        [JsonPropertyName("questionText")]
+        public string QuestionText { get; set; } = string.Empty;
+
+        /// <summary>MUST contain exactly 5 non-empty strings.</summary>
+        [JsonPropertyName("options")]
+        public List<string> Options { get; set; } = [];
+
+        /// <summary>Zero-based index into <see cref="Options"/>. MUST be in [0, 4].</summary>
+        [JsonPropertyName("correctOptionIndex")]
+        public int CorrectOptionIndex { get; set; }
+
+        [JsonPropertyName("explanation")]
+        public string Explanation { get; set; } = string.Empty;
+
+        /// <summary>Provenance tag — set automatically by Agent 3.</summary>
+        [JsonPropertyName("generatedBy")]
+        public string GeneratedBy { get; set; } = "Agent3:ExamSynthesizer";
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Agent 4 — ValidationAgentService Result DTO
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Result returned by Agent 4 (<c>ValidationAgentService</c>) after running
+    /// the deterministic check loop over Agent 3's output.
+    /// </summary>
+    public sealed record AgentValidationResult
+    {
+        /// <summary><c>true</c> if all checks passed and the session was persisted.</summary>
+        public bool Success { get; init; }
+
+        /// <summary>Human-readable summary of the outcome.</summary>
+        public string Message { get; init; } = string.Empty;
+
+        /// <summary>How many synthesis+validation attempts were made (1 = passed first time).</summary>
+        [JsonPropertyName("attemptsTaken")]
+        public int AttemptsTaken { get; init; }
+
+        /// <summary>The ExamSession.Id that was updated on success.</summary>
+        [JsonPropertyName("sessionId")]
+        public int SessionId { get; init; }
+
+        /// <summary>
+        /// The validated MCQ list (populated even on failure so callers can inspect
+        /// the last attempt's questions for debugging).
+        /// </summary>
+        [JsonPropertyName("questions")]
+        public List<SynthesizedMcqItem> Questions { get; init; } = [];
+
+        /// <summary>Raw LLM JSON from the last attempt — useful for audit logs.</summary>
+        [JsonPropertyName("rawLlmJson")]
+        public string? RawLlmJson { get; init; }
+
+        /// <summary>
+        /// List of deterministic check errors from ALL attempts.
+        /// Empty on success.
+        /// </summary>
+        [JsonPropertyName("errors")]
+        public List<string> Errors { get; init; } = [];
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Agent 3 — Internal Groq request / response DTOs
+    // (scoped to ExamSynthesizerAgent — not exposed via API endpoints)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    internal sealed class SynthesizerGroqRequest
+    {
+        [JsonPropertyName("model")]
+        public string Model { get; set; } = string.Empty;
+
+        [JsonPropertyName("messages")]
+        public List<SynthesizerGroqMessage> Messages { get; set; } = [];
+
+        [JsonPropertyName("temperature")]
+        public float Temperature { get; set; } = 0.7f;
+
+        [JsonPropertyName("max_tokens")]
+        public int MaxTokens { get; set; } = 4000;
+
+        [JsonPropertyName("stream")]
+        public bool Stream { get; set; } = false;
+    }
+
+    internal sealed class SynthesizerGroqMessage
+    {
+        [JsonPropertyName("role")]
+        public string Role { get; set; } = string.Empty;
+
+        [JsonPropertyName("content")]
+        public string Content { get; set; } = string.Empty;
+    }
+
+    internal sealed class SynthesizerGroqResponse
+    {
+        [JsonPropertyName("choices")]
+        public List<SynthesizerGroqChoice>? Choices { get; set; }
+    }
+
+    internal sealed class SynthesizerGroqChoice
+    {
+        [JsonPropertyName("message")]
+        public SynthesizerGroqMessage? Message { get; set; }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Agent 3 — Internal seed model
+    // (used only during few-shot seed loading inside ExamSynthesizerAgent)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    internal sealed class SynthesizerSeedQuestion
+    {
+        public string Source          { get; set; } = string.Empty;
+        public string LessonName      { get; set; } = string.Empty;
+        public string DifficultyLevel { get; set; } = string.Empty;
+        public string QuestionText    { get; set; } = string.Empty;
+        public string Option1         { get; set; } = string.Empty;
+        public string Option2         { get; set; } = string.Empty;
+        public string Option3         { get; set; } = string.Empty;
+        public string Option4         { get; set; } = string.Empty;
+        public string Option5         { get; set; } = string.Empty;
+        public string CorrectAnswer   { get; set; } = string.Empty;
+    }
 }
