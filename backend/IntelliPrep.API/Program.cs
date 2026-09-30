@@ -129,12 +129,12 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseCors("AllowProduction");
 app.UseHttpsRedirection();
-// Use Authentication before Authorization
+
+app.UseRouting();
+app.UseCors("AllowProduction");
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
 
 // Seed Default Admin
