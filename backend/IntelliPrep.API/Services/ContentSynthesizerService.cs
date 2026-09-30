@@ -396,15 +396,15 @@ namespace IntelliPrep.API.Services
             for (int attempt = 0; attempt < _apiKeys.Length; attempt++)
             {
                 var selectedKey = _apiKeys[attempt % _apiKeys.Length];
-                var requestDto = new SynthesizerGroqRequest
+                var requestDto = new LegacySynthesizerGroqRequest
                 {
                     Model       = _modelName,
                     Temperature = 0.7f,   // slightly higher temp for creative question variety
                     MaxTokens   = 3000,
                     Messages    =
                     [
-                        new SynthesizerGroqMessage { Role = "system", Content = systemPrompt },
-                        new SynthesizerGroqMessage { Role = "user",   Content = userPrompt   },
+                        new LegacySynthesizerGroqMessage { Role = "system", Content = systemPrompt },
+                        new LegacySynthesizerGroqMessage { Role = "user",   Content = userPrompt   },
                     ]
                 };
 
@@ -444,14 +444,14 @@ namespace IntelliPrep.API.Services
                             (int)response.StatusCode,
                             selectedKey.Substring(Math.Max(0, selectedKey.Length - 6)),
                             responseBody);
-                        
+
                         // We do not immediately fallback here on 5xx, we could rotate, but based on requirement we only rotate on 401, 429, 413.
                         // Though typical 5xx might be worth a rotation, let's keep it strictly to the spec for now.
                         // Actually, I'll return fallback if it fails for other reasons.
                         return GetFallbackMcqs(subject);
                     }
 
-                    var groqResp = JsonSerializer.Deserialize<SynthesizerGroqResponse>(
+                    var groqResp = JsonSerializer.Deserialize<LegacySynthesizerGroqResponse>(
                         responseBody,
                         new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
@@ -639,15 +639,15 @@ namespace IntelliPrep.API.Services
         public string CorrectAnswer   { get; set; } = string.Empty;
     }
 
-    // ── Groq request/response DTOs (scoped to synthesizer) ───────────────────
+    // ── Groq request/response DTOs (scoped to legacy synthesizer) ────────────
 
-    internal sealed class SynthesizerGroqRequest
+    internal sealed class LegacySynthesizerGroqRequest
     {
         [JsonPropertyName("model")]
         public string Model { get; set; } = string.Empty;
 
         [JsonPropertyName("messages")]
-        public List<SynthesizerGroqMessage> Messages { get; set; } = [];
+        public List<LegacySynthesizerGroqMessage> Messages { get; set; } = [];
 
         [JsonPropertyName("temperature")]
         public float Temperature { get; set; } = 0.7f;
@@ -659,7 +659,7 @@ namespace IntelliPrep.API.Services
         public bool Stream { get; set; } = false;
     }
 
-    internal sealed class SynthesizerGroqMessage
+    internal sealed class LegacySynthesizerGroqMessage
     {
         [JsonPropertyName("role")]
         public string Role { get; set; } = string.Empty;
@@ -668,15 +668,15 @@ namespace IntelliPrep.API.Services
         public string Content { get; set; } = string.Empty;
     }
 
-    internal sealed class SynthesizerGroqResponse
+    internal sealed class LegacySynthesizerGroqResponse
     {
         [JsonPropertyName("choices")]
-        public List<SynthesizerGroqChoice>? Choices { get; set; }
+        public List<LegacySynthesizerGroqChoice>? Choices { get; set; }
     }
 
-    internal sealed class SynthesizerGroqChoice
+    internal sealed class LegacySynthesizerGroqChoice
     {
         [JsonPropertyName("message")]
-        public SynthesizerGroqMessage? Message { get; set; }
+        public LegacySynthesizerGroqMessage? Message { get; set; }
     }
 }

@@ -51,6 +51,12 @@ builder.Services.AddHttpClient(PlanningCoordinatorService.HttpClientName, client
 builder.Services.AddScoped<PlanningCoordinatorService>();
 builder.Services.AddScoped<ContentSynthesizerService>();
 
+// ── Agent 3 (ExamSynthesizerAgent) + Agent 4 (ValidationAgentService) ─────
+// Agent 3 synthesizes MCQs grounded by syllabus limits fetched from the DB.
+// Agent 4 validates Agent 3's output deterministically and persists on pass.
+builder.Services.AddScoped<ExamSynthesizerAgent>();
+builder.Services.AddScoped<ValidationAgentService>();
+
 // ── Member 2: AI Agent Service (Past Paper Analyst + Study Planner) ────────
 // Reuses the same named "GroqClient" HttpClient already configured above.
 builder.Services.AddScoped<IAIAgentService, AIAgentService>();

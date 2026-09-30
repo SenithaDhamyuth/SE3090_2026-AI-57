@@ -9,6 +9,7 @@ import StudyPlanManager from './StudyPlanManager';
 import PastPaperAnalytics from './PastPaperAnalytics';
 import QuestionBankForm from './QuestionBankForm';
 import AdminLogin from './AdminLogin';
+import PendingApprovals from './PendingApprovals';
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem('admin_token'));
@@ -30,6 +31,7 @@ function App() {
           <Route path="ai-plans" element={<StudyPlanManager />} />
           <Route path="analytics" element={<PastPaperAnalytics />} />
           <Route path="question-bank" element={<QuestionBankForm />} />
+          <Route path="approvals" element={<PendingApprovals />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

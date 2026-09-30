@@ -25,17 +25,20 @@ public class AIAgentController : ControllerBase
     private readonly ApplicationDbContext _db;
     private readonly ILogger<AIAgentController> _logger;
     private readonly IntelliPrep.API.Services.INotificationService _notifier;
+    private readonly ValidationAgentService _validationAgent;
 
     public AIAgentController(
         IAIAgentService           agentService,
         ApplicationDbContext      db,
         ILogger<AIAgentController> logger,
-        IntelliPrep.API.Services.INotificationService notifier)
+        IntelliPrep.API.Services.INotificationService notifier,
+        ValidationAgentService    validationAgent)
     {
-        _agentService = agentService;
-        _db           = db;
-        _logger       = logger;
-        _notifier     = notifier;
+        _agentService    = agentService;
+        _db              = db;
+        _logger          = logger;
+        _notifier        = notifier;
+        _validationAgent = validationAgent;
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -401,5 +404,93 @@ public class AIAgentController : ControllerBase
             createdAt       = plan.CreatedAt.ToString("yyyy-MM-dd HH:mm") + " UTC",
             planDetailsJson = plan.PlanDetailsJson   // full schedule for rendering
         });
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Endpoint — POST api/aiagent/synthesize-exam/{sessionId}
+    // Agent 3 (ExamSynthesizerAgent) → Agent 4 (ValidationAgentService)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Runs the Agent 3 → Agent 4 agentic pipeline for exam MCQ synthesis:
+    ///
+    /// 1. Agent 3 (<c>ExamSynthesizerAgent</c>): Fetches syllabus constraints via its
+    ///    built-in "FetchSyllabusLimits" Tool, loads few-shot seed questions, builds a
+    ///    grounded prompt, and calls the Groq LLM to generate exactly the requested MCQs.
+    ///
+    /// 2. Agent 4 (<c>ValidationAgentService</c>): Runs three deterministic checks:
+    ///    (a) Exact question count, (b) exactly 5 options per question, (c) correct
+    ///    option index is within range.  On failure it injects the error list back into
+    ///    Agent 3 and retries (max <c>ValidationAgentService.MaxRetries</c> = 2 extra attempts).
+    ///
+    /// 3. On validation pass: saves the questions JSON to <c>ExamSession.QuestionsJson</c>
+    ///    and sets <c>Status = "PendingAdminApproval"</c>.
+    /// </summary>
+    /// <param name="sessionId">The ID of the target ExamSession to persist questions into.</param>
+    /// <param name="request">
+    /// The Agent 3 input contract carrying objective, subject, question count, and optional
+    /// topic distribution.
+    /// </param>
+    /// <remarks>
+    /// Sample request body:
+    /// <code>
+    /// {
+    ///   "subject": "Networking",
+    ///   "objective": "Focus on OSI model layers and TCP/IP protocols",
+    ///   "requestedQuestionCount": 10,
+    ///   "topicDistribution": { "OSI Model": 5, "TCP/IP": 5 }
+    /// }
+    /// </code>
+    /// </remarks>
+    [HttpPost("synthesize-exam/{sessionId:int}")]
+    [ProducesResponseType(typeof(AgentValidationResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(AgentValidationResult), StatusCodes.Status422UnprocessableEntity)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> SynthesizeExam(
+        [FromRoute] int            sessionId,
+        [FromBody]  SynthesizerInput request)
+    {
+        if (!ModelState.IsValid)
+            return ValidationProblem(ModelState);
+
+        if (sessionId <= 0)
+            return BadRequest(new { message = "sessionId must be a positive integer." });
+
+        if (request.RequestedQuestionCount <= 0)
+            return BadRequest(new { message = "requestedQuestionCount must be greater than 0." });
+
+        if (!string.IsNullOrWhiteSpace(request.Subject) == false)
+            return BadRequest(new { message = "subject is required." });
+
+        // Verify session exists before starting the expensive LLM pipeline
+        var sessionExists = await _db.ExamSessions.AnyAsync(s => s.Id == sessionId);
+        if (!sessionExists)
+            return NotFound(new { message = $"ExamSession with Id={sessionId} was not found." });
+
+        var adminEmail = User.FindFirstValue(System.Security.Claims.ClaimTypes.Email) ?? "unknown-admin";
+        _logger.LogInformation(
+            "[AIAgentController] Admin '{Admin}' triggered SynthesizeExam | SessionId={SessionId} | Subject='{Subject}' | Count={Count}",
+            adminEmail, sessionId, request.Subject, request.RequestedQuestionCount);
+
+        // ── Run Agent 3 → Agent 4 pipeline ────────────────────────────────
+        var result = await _validationAgent.ValidateAndPersistAsync(request, sessionId);
+
+        if (!result.Success)
+        {
+            _logger.LogWarning(
+                "[AIAgentController] SynthesizeExam failed after {Attempts} attempt(s): {Msg}",
+                result.AttemptsTaken, result.Message);
+
+            // 422 Unprocessable: the pipeline ran but could not produce valid output
+            return UnprocessableEntity(result);
+        }
+
+        _logger.LogInformation(
+            "[AIAgentController] ✅ SynthesizeExam succeeded in {Attempts} attempt(s). " +
+            "Session {SessionId} is now PendingAdminApproval.",
+            result.AttemptsTaken, sessionId);
+
+        return Ok(result);
     }
 }

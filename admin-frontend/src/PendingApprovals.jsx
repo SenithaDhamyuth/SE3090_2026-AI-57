@@ -1,201 +1,199 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  ShieldCheck, CheckCircle2, XCircle, RotateCcw, Eye,
-  Brain, Newspaper, Clock, AlertTriangle, ChevronDown,
-  Search, Zap, Layers, Tag, User, Calendar,
-  MessageSquare, ExternalLink, Sparkles,
+  ShieldCheck, CheckCircle2, XCircle, Eye, Brain,
+  Clock, AlertTriangle, ChevronDown, Search, Sparkles, RefreshCw, Loader2, X, MessageSquare
 } from 'lucide-react';
 
-/* ─────────────────────────────────────────────
-   APPROVAL QUEUE DATA
-   Content Synthesizer Agent output —
-   Real-World-Context Questions matched to news APIs
-───────────────────────────────────────────── */
-const QUEUE_DATA = [
-  {
-    id: 'CA-0041',
-    title: 'Binary Arithmetic in Modern CPU Cache Architecture',
-    topic: 'Data Representation',
-    type: 'Real-World Context MCQ',
-    agent: 'Content Synthesizer',
-    agentVersion: 'v2.3.1',
-    newsSource: 'IEEE Spectrum — "Chiplet Revolution in 2025 CPUs"',
-    newsUrl: '#',
-    createdAt: '2026-09-10 · 21:44 IST',
-    uc: 'UC6.3',
-    difficulty: 'Hard',
-    questionPreview: 'A modern CPU uses a 3-level cache hierarchy. Given that cache L1 stores data in 8-bit 2\'s complement format, which of the following correctly represents -127 in this encoding?',
-    options: ['A. 1000 0000', 'B. 1000 0001', 'C. 0111 1111', 'D. 1111 1111'],
-    correctAnswer: 'B',
-    syllabusTags: ['UC3.6', 'Binary Arithmetic', 'Grade 13 ICT'],
-    aiConfidence: 94,
-    status: 'pending',
-    revisionNotes: '',
-  },
-  {
-    id: 'CA-0040',
-    title: 'Newton\'s 3rd Law Applied to Electric Vehicle Regenerative Braking',
-    topic: 'Information Security',
-    type: 'Real-World Context MCQ',
-    agent: 'Content Synthesizer',
-    agentVersion: 'v2.3.1',
-    newsSource: 'The Hacker News — "Zero-day Ransomware Attack Disrupts Enterprise Networks"',
-    newsUrl: '#',
-    createdAt: '2026-09-10 · 20:11 IST',
-    uc: 'UC5.1',
-    difficulty: 'Medium',
-    questionPreview: 'A zero-day ransomware attack exploits an unpatched service on a school network. Which control most directly limits the attacker\'s ability to move from the compromised server to other devices?',
-    options: ['A. Network segmentation with access controls', 'B. Increasing monitor brightness', 'C. Renaming the server', 'D. Disabling the keyboard'],
-    correctAnswer: 'A',
-    syllabusTags: ['UC5.1', 'Information Security', 'Grade 13 ICT'],
-    aiConfidence: 98,
-    status: 'pending',
-    revisionNotes: '',
-  },
-  {
-    id: 'CA-0039',
-    title: 'Nucleophilic Substitution in Pharmaceutical Synthesis (Ibuprofen)',
-    topic: 'Systems Analysis',
-    type: 'Real-World Context MCQ',
-    agent: 'Content Synthesizer',
-    agentVersion: 'v2.2.9',
-    newsSource: 'MIT Technology Review — "Digital Transformation Projects in 2025"',
-    newsUrl: '#',
-    createdAt: '2026-09-10 · 18:55 IST',
-    uc: 'UC6.3',
-    difficulty: 'Hard',
-    questionPreview: 'During requirements analysis for a school information system, which technique best captures the interactions between a student and the system?',
-    options: ['A. Use case diagram', 'B. Entity relationship table only', 'C. Binary search tree', 'D. IP address table'],
-    correctAnswer: 'A',
-    syllabusTags: ['UC5.4', 'Systems Analysis', 'Grade 13 ICT'],
-    aiConfidence: 91,
-    status: 'pending',
-    revisionNotes: '',
-  },
-  {
-    id: 'CA-0038',
-    title: 'SQL Query Optimization in Large-Scale E-Commerce Databases',
-    topic: 'Relational Database Concepts',
-    type: 'Real-World Context MCQ',
-    agent: 'Content Synthesizer',
-    agentVersion: 'v2.3.1',
-    newsSource: 'ACM Queue — "Database Scaling Patterns at Shopee 2025"',
-    newsUrl: '#',
-    createdAt: '2026-09-10 · 17:30 IST',
-    uc: 'UC5.1',
-    difficulty: 'Medium',
-    questionPreview: 'A Shopee database contains 10 million product records. A LEFT OUTER JOIN between `Products` and `Reviews` returns rows for products even when no reviews exist. What value does the `review_rating` column hold for such products?',
-    options: ['A. 0', 'B. Empty string ""', 'C. NULL', 'D. Raises an error'],
-    correctAnswer: 'C',
-    syllabusTags: ['UC3.6', 'SQL & Databases', 'Grade 13 ICT'],
-    aiConfidence: 99,
-    status: 'pending',
-    revisionNotes: '',
-  },
-  {
-    id: 'CA-0037',
-    title: 'Differentiation Applied to Drone Trajectory Optimization',
-    topic: 'Networking & OSI',
-    type: 'Real-World Context MCQ',
-    agent: 'Content Synthesizer',
-    agentVersion: 'v2.2.9',
-    newsSource: 'Cloudflare Radar — "Global IPv4 Routing Incident Report 2025"',
-    newsUrl: '#',
-    createdAt: '2026-09-10 · 15:00 IST',
-    uc: 'UC6.3',
-    difficulty: 'Hard',
-    questionPreview: 'A router receives the IPv4 address 192.168.10.65/26. Which network address does the router use for this subnet?',
-    options: ['A. 192.168.10.0', 'B. 192.168.10.64', 'C. 192.168.10.65', 'D. 192.168.10.128'],
-    correctAnswer: 'B',
-    syllabusTags: ['UC3.6', 'IPv4 Subnetting', 'Grade 13 ICT'],
-    aiConfidence: 96,
-    status: 'pending',
-    revisionNotes: '',
-  },
-  {
-    id: 'CA-0036',
-    title: 'Momentum & Impulse in Sports Science — Sprint Biomechanics',
-    topic: 'Python Programming',
-    type: 'Real-World Context MCQ',
-    agent: 'Content Synthesizer',
-    agentVersion: 'v2.3.0',
-    newsSource: 'Python Software Foundation — "Python Adoption in Data Automation 2025"',
-    newsUrl: '#',
-    createdAt: '2026-09-10 · 12:15 IST',
-    uc: 'UC5.1',
-    difficulty: 'Easy',
-    questionPreview: 'A Python program stores student marks in a list. Which expression returns the highest mark without changing the order of the list?',
-    options: ['A. max(marks)', 'B. marks.highest()', 'C. marks.sort(-1)', 'D. highest(marks, 0)'],
-    correctAnswer: 'A',
-    syllabusTags: ['Python Programming', 'Lists and Functions', 'Grade 13 ICT'],
-    aiConfidence: 99,
-    status: 'pending',
-    revisionNotes: '',
-  },
-  {
-    id: 'CA-0035',
-    title: 'Probability in Machine Learning — Naive Bayes Spam Filter',
-    topic: 'Logic Gates',
-    type: 'Real-World Context MCQ',
-    agent: 'Content Synthesizer',
-    agentVersion: 'v2.2.9',
-    newsSource: 'IBM Research — "Energy-Efficient Logic Circuits for Edge Devices"',
-    newsUrl: '#',
-    createdAt: '2026-09-10 · 10:00 IST',
-    uc: 'UC6.3',
-    difficulty: 'Hard',
-    questionPreview: 'A security circuit should output 1 only when both of its input sensors output 1. Which logic gate implements this requirement?',
-    options: ['A. OR', 'B. NOT', 'C. AND', 'D. XOR'],
-    correctAnswer: 'C',
-    syllabusTags: ['Data Representation', 'Logic Gates', 'Grade 13 ICT'],
-    aiConfidence: 88,
-    status: 'pending',
-    revisionNotes: '',
-  },
-];
+const EXAM_API = 'http://localhost:5087/api/assessment';
+const AIAGENT_API = 'http://localhost:5087/api/aiagent';
+const OPTION_LETTERS = ['A', 'B', 'C', 'D', 'E'];
 
-const DIFFICULTY_BADGE = {
-  'Easy':   'bg-emerald-50 text-emerald-700 border-emerald-100',
-  'Medium': 'bg-amber-50 text-amber-700 border-amber-100',
-  'Hard':   'bg-red-50 text-red-700 border-red-100',
-};
-
-/* ─────────────────────────────────────────────
-   REVISION DIALOG
-───────────────────────────────────────────── */
-function RevisionDialog({ item, onClose, onSubmit }) {
-  const [notes, setNotes] = useState('');
+function Toast({ toasts, onDismiss }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white border border-zinc-200 rounded-xl shadow-2xl w-full max-w-md mx-4">
-        <div className="px-5 py-4 border-b border-zinc-100">
-          <h3 className="text-[14px] font-semibold text-zinc-900">Request Revision</h3>
-          <p className="text-[11px] text-zinc-400 mt-0.5">සංශෝධනයක් ඉල්ලන්න · <span className="font-mono">{item.id}</span></p>
-        </div>
-        <div className="p-5">
-          <label className="block text-[11px] font-semibold uppercase tracking-wider text-zinc-400 mb-1.5">
-            Revision Instructions for Content Synthesizer Agent
-          </label>
-          <textarea
-            rows={4}
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            placeholder="e.g. Adjust difficulty level down. The news context is too advanced for A/L syllabus. Simplify the real-world scenario..."
-            className="w-full text-[13px] text-zinc-800 border border-zinc-200 rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 transition-all placeholder-zinc-300"
-          />
-          <p className="text-[10px] text-zinc-400 mt-1.5">These notes will be sent as a prompt back to the Content Synthesizer agent (UC6.3).</p>
-        </div>
-        <div className="px-5 pb-5 flex gap-2">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg border border-zinc-200 text-[13px] font-semibold text-zinc-600 hover:bg-zinc-50 transition-colors">
-            Cancel
-          </button>
+    <div className="fixed bottom-6 right-6 z-[60] flex flex-col gap-2 pointer-events-none">
+      {toasts.map(t => (
+        <div
+          key={t.id}
+          className={`flex items-start gap-3 min-w-[280px] max-w-[360px] px-4 py-3 rounded-xl shadow-lg border pointer-events-auto
+            animate-[slideUp_0.25s_ease-out]
+            ${t.type === 'success'
+              ? 'bg-white border-emerald-200 text-emerald-800'
+              : t.type === 'error'
+                ? 'bg-white border-red-200 text-red-800'
+                : 'bg-white border-zinc-200 text-zinc-800'
+            }`}
+        >
+          <div className={`mt-0.5 shrink-0 w-5 h-5 rounded-full flex items-center justify-center
+            ${t.type === 'success' ? 'bg-emerald-100' : t.type === 'error' ? 'bg-red-100' : 'bg-zinc-100'}`}>
+            {t.type === 'success'
+              ? <CheckCircle2 size={12} className="text-emerald-600" strokeWidth={2.5} />
+              : t.type === 'error'
+                ? <AlertTriangle size={12} className="text-red-500" strokeWidth={2.5} />
+                : <Brain size={12} className="text-zinc-500" strokeWidth={2.5} />
+            }
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-semibold leading-snug">{t.title}</p>
+            {t.body && <p className="text-[11px] opacity-70 mt-0.5 leading-snug">{t.body}</p>}
+          </div>
           <button
-            onClick={() => onSubmit(notes)}
-            disabled={!notes.trim()}
-            className="flex-1 py-2.5 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[13px] font-semibold transition-colors"
+            onClick={() => onDismiss(t.id)}
+            className="shrink-0 mt-0.5 p-0.5 rounded hover:bg-zinc-100 opacity-50 hover:opacity-100 transition-opacity"
           >
-            Send to Agent
+            <X size={12} />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ApprovalCard({ item, onApprove, onReject, processingIds }) {
+  const [expanded, setExpanded] = useState(false);
+  const isExam = item.type === 'Exam Session';
+  const isProcessing = processingIds.has(item.uniqueId);
+
+  // Parse details
+  let details = [];
+  try {
+    details = JSON.parse(isExam ? (item.questionsJson || '[]') : (item.planDetailsJson || '[]'));
+  } catch (e) {
+    details = [];
+  }
+
+  return (
+    <div className={`bg-white border rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden transition-all border-zinc-200/80 hover:border-zinc-300 ${isProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
+      <div className="px-5 py-4 flex items-start gap-4">
+        {/* Type Icon */}
+        <div className={`shrink-0 flex items-center justify-center w-10 h-10 rounded-xl border ${
+          isExam ? 'bg-violet-50 border-violet-100 text-violet-600' : 'bg-blue-50 border-blue-100 text-blue-600'
+        }`}>
+          {isExam ? <Sparkles size={20} /> : <Brain size={20} />}
+        </div>
+
+        {/* Main Content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-1.5 mb-2">
+            <span className="font-mono text-[10px] font-semibold text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded">ID: {item.id}</span>
+            <span className={`text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded border ${
+              isExam ? 'text-violet-600 bg-violet-50 border-violet-100' : 'text-blue-600 bg-blue-50 border-blue-100'
+            }`}>
+              {item.type}
+            </span>
+            <span className="ml-auto text-[10px] text-zinc-400 font-medium">
+              {new Date(isExam ? item.startTime : item.createdAt).toLocaleString()}
+            </span>
+          </div>
+
+          <h3 className="text-[14px] font-semibold text-zinc-900 leading-snug mb-1.5">
+            {isExam ? `Subject: ${item.subject}` : `Student ID: ${item.studentId}`}
+          </h3>
+
+          <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-orange-50 border border-orange-100">
+              <Clock size={11} className="text-orange-500 shrink-0" />
+              <span className="text-[10px] text-orange-700 font-medium">Pending Admin Approval</span>
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="shrink-0 p-1.5 rounded-lg hover:bg-zinc-100 text-zinc-400 hover:text-zinc-600 transition-colors"
+        >
+          <ChevronDown size={15} className={`transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
+        </button>
+      </div>
+
+      {/* Expanded Content */}
+      {expanded && (
+        <div className="border-t border-zinc-100 bg-zinc-50/40 px-5 py-4">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-3">
+            {isExam ? 'Generated Questions' : 'Generated Study Plan'}
+          </p>
+          
+          {isExam ? (
+            <div className="space-y-4">
+              {Array.isArray(details) && details.length > 0 ? details.map((q, i) => (
+                <div key={i} className="bg-white border border-zinc-200 rounded-lg p-4">
+                  <p className="text-[13px] text-zinc-800 leading-relaxed font-medium mb-3">
+                    <span className="text-violet-600 mr-2">{i + 1}.</span>{q.questionText}
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {(q.options || []).map((opt, oi) => {
+                      const isCorrect = oi === q.correctOptionIndex;
+                      return (
+                        <div key={oi} className={`px-3 py-2 rounded-lg border text-[12px] font-medium transition-all ${
+                          isCorrect ? 'border-emerald-300 bg-emerald-50 text-emerald-800 font-semibold' : 'border-zinc-100 bg-zinc-50 text-zinc-600'
+                        }`}>
+                          <span className="font-bold mr-2">{OPTION_LETTERS[oi]}.</span>{opt}
+                          {isCorrect && <span className="ml-1.5 text-[9px] text-emerald-600 font-bold">✓</span>}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )) : <p className="text-[12px] text-zinc-500">No questions found in JSON.</p>}
+            </div>
+          ) : (
+            <div className="bg-white border border-zinc-200 rounded-lg overflow-hidden">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-zinc-50 border-b border-zinc-200">
+                    <th className="px-4 py-2 text-[11px] font-bold text-zinc-500">Day</th>
+                    <th className="px-4 py-2 text-[11px] font-bold text-zinc-500">Topic</th>
+                    <th className="px-4 py-2 text-[11px] font-bold text-zinc-500">Priority</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100">
+                  {Array.isArray(details) && details.length > 0 ? details.map((day, i) => (
+                    <tr key={i}>
+                      <td className="px-4 py-2 text-[12px] text-zinc-700">{day.day}</td>
+                      <td className="px-4 py-2 text-[12px] text-zinc-700 font-medium">{day.topic}</td>
+                      <td className="px-4 py-2 text-[12px]">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          day.priority === 'High' ? 'bg-red-50 text-red-600' :
+                          day.priority === 'Medium' ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'
+                        }`}>{day.priority}</span>
+                      </td>
+                    </tr>
+                  )) : <tr><td colSpan="3" className="px-4 py-2 text-[12px] text-zinc-500">No plan details found.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Action Bar */}
+      <div className="px-5 py-3.5 border-t border-zinc-100 bg-zinc-50/30 flex items-center justify-between gap-3">
+        <button onClick={() => setExpanded(!expanded)} className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-zinc-500 hover:text-zinc-700 transition-colors">
+          <Eye size={13} /> {expanded ? 'Collapse' : 'Preview Content'}
+        </button>
+        <div className="flex items-center gap-2">
+          {isExam ? (
+            <button
+              onClick={() => onReject(item)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 text-[12px] font-semibold transition-all"
+            >
+              <XCircle size={13} /> Reject
+            </button>
+          ) : (
+            <div className="group relative">
+              <button disabled className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-zinc-200 bg-zinc-50 text-zinc-400 text-[12px] font-semibold opacity-50 cursor-not-allowed">
+                <XCircle size={13} /> Reject
+              </button>
+              <div className="absolute bottom-full mb-2 hidden group-hover:block w-max max-w-xs bg-gray-800 text-white text-[10px] p-2 rounded shadow-lg">
+                Use Study Plan Manager to delete study plans.
+              </div>
+            </div>
+          )}
+          
+          <button
+            onClick={() => onApprove(item)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[12px] font-semibold shadow-sm transition-all active:scale-95"
+          >
+            <CheckCircle2 size={13} /> Approve
           </button>
         </div>
       </div>
@@ -203,220 +201,141 @@ function RevisionDialog({ item, onClose, onSubmit }) {
   );
 }
 
-/* ─────────────────────────────────────────────
-   APPROVAL CARD
-───────────────────────────────────────────── */
-function ApprovalCard({ item, onAction }) {
-  const [expanded, setExpanded] = useState(false);
-  const [revisionOpen, setRevisionOpen] = useState(false);
-
-  return (
-    <>
-      <div className={`bg-white border rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden transition-all ${
-        item.status === 'approved' ? 'border-emerald-200 opacity-70' :
-        item.status === 'rejected' ? 'border-red-200 opacity-50' :
-        item.status === 'revision' ? 'border-amber-200' :
-        'border-zinc-200/80 hover:border-zinc-300'
-      }`}>
-        {/* Card header */}
-        <div className="px-5 py-4 flex items-start gap-4">
-          {/* AI Confidence ring */}
-          <div className="shrink-0 flex flex-col items-center gap-1 pt-0.5">
-            <div className={`w-10 h-10 rounded-full border-2 flex items-center justify-center text-[11px] font-bold ${
-              item.aiConfidence >= 95 ? 'border-emerald-400 text-emerald-700 bg-emerald-50' :
-              item.aiConfidence >= 88 ? 'border-orange-400 text-orange-700 bg-orange-50' :
-              'border-red-400 text-red-700 bg-red-50'
-            }`}>
-              {item.aiConfidence}
-            </div>
-            <span className="text-[9px] font-semibold text-zinc-400 text-center leading-none">AI<br/>Score</span>
-          </div>
-
-          {/* Main content */}
-          <div className="flex-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-1.5 mb-2">
-              {/* ID */}
-              <span className="font-mono text-[10px] font-semibold text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded">{item.id}</span>
-              {/* Difficulty */}
-              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${DIFFICULTY_BADGE[item.difficulty]}`}>{item.difficulty}</span>
-              {/* UC */}
-              <span className="text-[9px] font-mono font-semibold text-violet-600 bg-violet-50 border border-violet-100 px-1.5 py-0.5 rounded">{item.uc}</span>
-              {/* Status */}
-              {item.status !== 'pending' && (
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                  item.status === 'approved' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                  item.status === 'rejected' ? 'bg-red-50 text-red-700 border-red-200' :
-                  'bg-amber-50 text-amber-700 border-amber-200'
-                }`}>
-                  {item.status === 'approved' ? '✓ Approved' : item.status === 'rejected' ? '✗ Rejected' : '↻ Revision Sent'}
-                </span>
-              )}
-              <span className="ml-auto text-[10px] text-zinc-400 font-medium">{item.createdAt}</span>
-            </div>
-
-            <h3 className="text-[14px] font-semibold text-zinc-900 leading-snug mb-1.5">{item.title}</h3>
-
-            {/* News context strip */}
-            <div className="flex items-center gap-2 mb-2">
-              <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-zinc-50 border border-zinc-100">
-                <Newspaper size={11} className="text-zinc-400 shrink-0" />
-                <span className="text-[10px] text-zinc-500 font-medium truncate max-w-xs">{item.newsSource}</span>
-                <ExternalLink size={9} className="text-zinc-300 shrink-0" />
-              </div>
-              <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-violet-50 border border-violet-100">
-                <Sparkles size={11} className="text-violet-500 shrink-0" />
-                <span className="text-[10px] text-violet-600 font-semibold">{item.agent} {item.agentVersion}</span>
-              </div>
-            </div>
-
-            {/* Topic tags */}
-            <div className="flex flex-wrap gap-1">
-              {item.syllabusTags.map(tag => (
-                <span key={tag} className="text-[10px] font-medium text-zinc-500 bg-zinc-50 border border-zinc-100 px-1.5 py-0.5 rounded">
-                  {tag}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {/* Expand toggle */}
-          <button
-            onClick={() => setExpanded(p => !p)}
-            className="shrink-0 p-1.5 rounded-lg hover:bg-zinc-100 text-zinc-400 hover:text-zinc-600 transition-colors"
-          >
-            <ChevronDown size={15} className={`transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
-          </button>
-        </div>
-
-        {/* Expanded: question preview */}
-        {expanded && (
-          <div className="border-t border-zinc-100 bg-zinc-50/40 px-5 py-4">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-3">Question Preview</p>
-            <div className="bg-white border border-zinc-200 rounded-lg p-4 mb-4">
-              <p className="text-[13px] text-zinc-800 leading-relaxed font-medium mb-4">{item.questionPreview}</p>
-              <div className="grid grid-cols-2 gap-2">
-                {item.options.map((opt, i) => (
-                  <div
-                    key={i}
-                    className={`px-3 py-2 rounded-lg border text-[12px] font-medium transition-all ${
-                      opt.startsWith(item.correctAnswer)
-                        ? 'border-emerald-300 bg-emerald-50 text-emerald-800 font-semibold'
-                        : 'border-zinc-100 bg-zinc-50 text-zinc-600'
-                    }`}
-                  >
-                    {opt}
-                    {opt.startsWith(item.correctAnswer) && <span className="ml-1.5 text-[9px] text-emerald-600 font-bold">✓ CORRECT</span>}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Revision notes */}
-            {item.revisionNotes && (
-              <div className="mb-4 flex items-start gap-2 px-3 py-2.5 rounded-lg bg-amber-50 border border-amber-100">
-                <MessageSquare size={12} className="text-amber-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-[10px] font-semibold text-amber-700 mb-0.5">Revision Notes Sent to Agent</p>
-                  <p className="text-[12px] text-amber-800">{item.revisionNotes}</p>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Action bar */}
-        {item.status === 'pending' && (
-          <div className="px-5 py-3.5 border-t border-zinc-100 bg-zinc-50/30 flex items-center justify-between gap-3">
-            <button
-              onClick={() => setExpanded(p => !p)}
-              className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-zinc-500 hover:text-zinc-700 transition-colors"
-            >
-              <Eye size={13} />
-              {expanded ? 'Collapse' : 'Preview Question'}
-            </button>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => { setRevisionOpen(true); }}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-700 text-[12px] font-semibold transition-all"
-              >
-                <RotateCcw size={12} />
-                Request Revision
-              </button>
-              <button
-                onClick={() => onAction(item.id, 'rejected')}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 text-[12px] font-semibold transition-all"
-              >
-                <XCircle size={13} />
-                Reject
-              </button>
-              <button
-                onClick={() => onAction(item.id, 'approved')}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[12px] font-semibold shadow-sm transition-all active:scale-95"
-              >
-                <CheckCircle2 size={13} />
-                Approve
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Revision dialog */}
-      {revisionOpen && (
-        <RevisionDialog
-          item={item}
-          onClose={() => setRevisionOpen(false)}
-          onSubmit={notes => {
-            onAction(item.id, 'revision', notes);
-            setRevisionOpen(false);
-          }}
-        />
-      )}
-    </>
-  );
-}
-
-/* ─────────────────────────────────────────────
-   PENDING APPROVALS PAGE ROOT
-───────────────────────────────────────────── */
 export default function PendingApprovals() {
-  const [items, setItems] = useState(QUEUE_DATA);
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('All');
   const [search, setSearch] = useState('');
+  const [toasts, setToasts] = useState([]);
+  const [processingIds, setProcessingIds] = useState(new Set());
 
-  const handleAction = (id, status, revisionNotes = '') => {
-    setItems(prev => prev.map(item =>
-      item.id === id ? { ...item, status, revisionNotes } : item
-    ));
+  const addToast = useCallback((type, title, body) => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, type, title, body }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+  }, []);
+
+  const dismissToast = useCallback((id) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [examsRes, plansRes] = await Promise.all([
+        fetch(`${EXAM_API}/sessions`),
+        fetch(`${AIAGENT_API}/plans`)
+      ]);
+
+      const examsData = examsRes.ok ? await examsRes.json() : [];
+      const plansData = plansRes.ok ? await plansRes.json() : [];
+
+      const pendingExams = (Array.isArray(examsData) ? examsData : []).filter(e => e.status === 'PendingAdminApproval').map(e => ({
+        ...e,
+        type: 'Exam Session',
+        uniqueId: `exam-${e.id}`
+      }));
+
+      const pendingPlans = (Array.isArray(plansData) ? plansData : []).filter(p => p.isApproved === false).map(p => ({
+        ...p,
+        type: 'Study Plan',
+        uniqueId: `plan-${p.id}`
+      }));
+
+      setItems([...pendingExams, ...pendingPlans].sort((a, b) => {
+        const dateA = new Date(a.type === 'Exam Session' ? a.startTime : a.createdAt);
+        const dateB = new Date(b.type === 'Exam Session' ? b.startTime : b.createdAt);
+        return dateB - dateA;
+      }));
+    } catch (err) {
+      addToast('error', 'Failed to load pending items', err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [addToast]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const handleApprove = async (item) => {
+    setProcessingIds(prev => new Set(prev).add(item.uniqueId));
+    try {
+      const url = item.type === 'Exam Session' 
+        ? `${EXAM_API}/approve/${item.id}`
+        : `${AIAGENT_API}/approve-plan/${item.id}`;
+      
+      const res = await fetch(url, { method: 'PUT' });
+      const data = await res.json();
+      
+      if (!res.ok) throw new Error(data.error || data.message || 'Approval failed');
+
+      setItems(prev => prev.filter(i => i.uniqueId !== item.uniqueId));
+      addToast('success', 'Approved Successfully', `${item.type} #${item.id} is now approved.`);
+    } catch (err) {
+      addToast('error', 'Approval Failed', err.message);
+    } finally {
+      setProcessingIds(prev => {
+        const next = new Set(prev);
+        next.delete(item.uniqueId);
+        return next;
+      });
+    }
   };
 
-  const statusFilters = ['All', 'Pending', 'Approved', 'Rejected', 'Revision'];
+  const handleReject = async (item) => {
+    if (item.type !== 'Exam Session') return; // Should be disabled in UI anyway
 
-  const visible = items.filter(item => {
-    const matchStatus = filter === 'All' || item.status === filter.toLowerCase();
-    const matchSearch = !search || item.title.toLowerCase().includes(search.toLowerCase()) || item.topic.toLowerCase().includes(search.toLowerCase());
+    setProcessingIds(prev => new Set(prev).add(item.uniqueId));
+    try {
+      const res = await fetch(`${EXAM_API}/reject/${item.id}`, { method: 'PUT' });
+      const data = await res.json();
+      
+      if (!res.ok) throw new Error(data.error || data.message || 'Rejection failed');
+
+      setItems(prev => prev.filter(i => i.uniqueId !== item.uniqueId));
+      addToast('success', 'Rejected', `Exam Session #${item.id} has been marked as abandoned.`);
+    } catch (err) {
+      addToast('error', 'Rejection Failed', err.message);
+    } finally {
+      setProcessingIds(prev => {
+        const next = new Set(prev);
+        next.delete(item.uniqueId);
+        return next;
+      });
+    }
+  };
+
+  const visibleItems = items.filter(item => {
+    const matchStatus = filter === 'All' || item.type === filter;
+    const searchTarget = (item.type === 'Exam Session' ? item.subject : `student ${item.studentId}`) || '';
+    const matchSearch = !search || searchTarget.toLowerCase().includes(search.toLowerCase()) || item.id.toString().includes(search);
     return matchStatus && matchSearch;
   });
 
-  const pendingCount = items.filter(i => i.status === 'pending').length;
-  const approvedCount = items.filter(i => i.status === 'approved').length;
-  const rejectedCount = items.filter(i => i.status === 'rejected').length;
-  const revisionCount = items.filter(i => i.status === 'revision').length;
+  const pendingCount = items.length;
+  const examCount = items.filter(i => i.type === 'Exam Session').length;
+  const planCount = items.filter(i => i.type === 'Study Plan').length;
 
   return (
     <div className="max-w-[1200px] mx-auto px-6 py-6 space-y-5">
+      <Toast toasts={toasts} onDismiss={dismissToast} />
+
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-[22px] font-bold text-zinc-900 tracking-tight leading-none">
-            Pending AI Approvals
-            <span className="text-xs text-zinc-400 block font-normal mt-1">AI අනුමත කිරීම් රැකෑරූ</span>
+          <h1 className="text-[22px] font-bold text-zinc-900 tracking-tight leading-none flex items-center gap-2">
+            <ShieldCheck className="text-orange-600" size={24} />
+            Pending Approvals
           </h1>
           <p className="text-[13px] text-zinc-400 mt-2">
-            Content Synthesizer Agent output queue · Tutor/Admin review required before publishing
+            Review and approve AI-generated exams and study plans.
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={fetchData} className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-zinc-200 bg-white text-zinc-600 text-[12px] font-medium hover:border-zinc-300 hover:bg-zinc-50 transition-all">
+            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> Refresh
+          </button>
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-50 border border-orange-200/60">
             <span className="relative flex h-1.5 w-1.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75" />
@@ -427,41 +346,37 @@ export default function PendingApprovals() {
         </div>
       </div>
 
-      {/* Stat strip */}
-      <div className="grid grid-cols-4 gap-3">
-        {[
-          { label: 'Pending Review', value: pendingCount, color: 'border-orange-200 bg-orange-50', textColor: 'text-orange-700', dot: 'bg-orange-500' },
-          { label: 'Approved',       value: approvedCount, color: 'border-emerald-200 bg-emerald-50', textColor: 'text-emerald-700', dot: 'bg-emerald-500' },
-          { label: 'Rejected',       value: rejectedCount, color: 'border-red-200 bg-red-50', textColor: 'text-red-700', dot: 'bg-red-500' },
-          { label: 'Revision Sent',  value: revisionCount, color: 'border-amber-200 bg-amber-50', textColor: 'text-amber-700', dot: 'bg-amber-500' },
-        ].map((s, i) => (
-          <div key={i} className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${s.color}`}>
-            <div className={`w-2 h-2 rounded-full shrink-0 ${s.dot}`} />
-            <div>
-              <p className="text-[10px] text-zinc-500 font-medium">{s.label}</p>
-              <p className={`text-2xl font-bold leading-none ${s.textColor}`}>{s.value}</p>
-            </div>
-          </div>
-        ))}
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-orange-200 bg-orange-50">
+          <div className="w-2 h-2 rounded-full bg-orange-500" />
+          <div><p className="text-[10px] text-zinc-500 font-medium">Total Pending</p><p className="text-2xl font-bold text-orange-700">{pendingCount}</p></div>
+        </div>
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-violet-200 bg-violet-50">
+          <div className="w-2 h-2 rounded-full bg-violet-500" />
+          <div><p className="text-[10px] text-zinc-500 font-medium">Exam Sessions</p><p className="text-2xl font-bold text-violet-700">{examCount}</p></div>
+        </div>
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-blue-200 bg-blue-50">
+          <div className="w-2 h-2 rounded-full bg-blue-500" />
+          <div><p className="text-[10px] text-zinc-500 font-medium">Study Plans</p><p className="text-2xl font-bold text-blue-700">{planCount}</p></div>
+        </div>
       </div>
 
-      {/* Filter bar */}
+      {/* Filter Bar */}
       <div className="flex flex-wrap items-center gap-3 bg-white border border-zinc-200/80 rounded-xl px-4 py-3 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-        {/* Search */}
-        <div className="flex items-center gap-2 h-8 px-3 rounded-lg border border-zinc-200 bg-zinc-50 hover:border-zinc-300 w-64 transition-all focus-within:border-orange-400 focus-within:ring-2 focus-within:ring-orange-500/15 focus-within:bg-white">
-          <Search size={13} className="text-zinc-400 shrink-0" />
+        <div className="flex items-center gap-2 h-8 px-3 rounded-lg border border-zinc-200 bg-zinc-50 focus-within:border-orange-400 focus-within:ring-2 focus-within:ring-orange-500/15 w-64">
+          <Search size={13} className="text-zinc-400" />
           <input
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search by topic or title…"
+            placeholder="Search ID, subject, or student..."
             className="bg-transparent outline-none text-[12px] text-zinc-700 w-full placeholder-zinc-300"
           />
         </div>
 
-        {/* Status filter */}
         <div className="flex items-center gap-1 border-l border-zinc-100 pl-3">
-          {statusFilters.map(s => (
+          {['All', 'Exam Session', 'Study Plan'].map(s => (
             <button
               key={s}
               onClick={() => setFilter(s)}
@@ -469,29 +384,34 @@ export default function PendingApprovals() {
                 filter === s ? 'bg-orange-600 text-white shadow-sm' : 'text-zinc-500 hover:bg-zinc-100'
               }`}
             >
-              {s}
+              {s}s
             </button>
           ))}
         </div>
-
+        
         <p className="ml-auto text-[11px] text-zinc-400">
-          Showing <span className="font-semibold text-zinc-600">{visible.length}</span> items
+          Showing <span className="font-semibold text-zinc-600">{visibleItems.length}</span> items
         </p>
       </div>
 
-      {/* Approval cards */}
+      {/* Cards */}
       <div className="space-y-4">
-        {visible.length === 0 ? (
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-16 text-zinc-400 gap-3">
+            <Loader2 size={24} className="animate-spin text-orange-500" />
+            <span className="text-[13px]">Loading pending approvals...</span>
+          </div>
+        ) : visibleItems.length === 0 ? (
           <div className="flex flex-col items-center gap-3 py-16 bg-white border border-zinc-200/80 rounded-xl">
-            <div className="w-12 h-12 rounded-xl bg-zinc-100 flex items-center justify-center text-zinc-300">
-              <ShieldCheck size={22} strokeWidth={1.5} />
+            <div className="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-500">
+              <ShieldCheck size={22} strokeWidth={2} />
             </div>
-            <p className="text-[13px] font-semibold text-zinc-500">No items match your filters</p>
-            <p className="text-[11px] text-zinc-300">සොයාගත නොහැකි · Adjust filters to see results</p>
+            <p className="text-[13px] font-semibold text-zinc-700">All items reviewed — queue is clear!</p>
+            <p className="text-[11px] text-zinc-400">There are no pending items matching your filters.</p>
           </div>
         ) : (
-          visible.map(item => (
-            <ApprovalCard key={item.id} item={item} onAction={handleAction} />
+          visibleItems.map(item => (
+            <ApprovalCard key={item.uniqueId} item={item} onApprove={handleApprove} onReject={handleReject} processingIds={processingIds} />
           ))
         )}
       </div>

@@ -12,6 +12,7 @@ const API_BASE = 'http://localhost:5087/api/assessment';
 
 const STATUS_META = {
   Pending:    { color: 'text-amber-600',   bg: 'bg-amber-50',    border: 'border-amber-200',   icon: Clock,         label: 'Pending'     },
+  PendingAdminApproval: { color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200', icon: Clock, label: 'Pending Approval' },
   Ready:      { color: 'text-violet-600',  bg: 'bg-violet-50',   border: 'border-violet-200',  icon: CheckCheck,    label: 'Ready'       },
   InProgress: { color: 'text-blue-600',    bg: 'bg-blue-50',     border: 'border-blue-200',    icon: Play,          label: 'In Progress' },
   Completed:  { color: 'text-emerald-600', bg: 'bg-emerald-50',  border: 'border-emerald-200', icon: CheckCircle2,  label: 'Completed'   },
@@ -565,7 +566,7 @@ export default function ExamSessions() {
     addToast('info', 'Synthesizer Running…', `Calling Groq LLM for "${subject}" questions. This may take 10–20 s.`);
 
     try {
-      const url = `${API_BASE}/synthesize/${sessionId}?subject=${encodeURIComponent(subject)}`;
+      const url = `http://localhost:5087/api/aiagent/synthesize-exam/${sessionId}?subject=${encodeURIComponent(subject)}`;
       const res = await fetch(url, { method: 'POST' });
       const data = await res.json();
 
@@ -575,13 +576,13 @@ export default function ExamSessions() {
 
       addToast(
         'success',
-        'Questions Synthesized Successfully!',
-        `${data.questionsCount ?? data.questions?.length ?? '5'} MCQs generated for "${subject}" · Session #${sessionId} is now Ready.`,
+        'Synthesis Complete — Awaiting Review',
+        `Agent 4 validated ${data.questionsCount ?? '5'} MCQs. Session #${sessionId} is now Pending Admin Approval.`,
       );
 
       // Optimistically update this row's status in local state
       setSessions(prev =>
-        prev.map(s => s.id === sessionId ? { ...s, status: 'Ready', questionsReady: true } : s),
+        prev.map(s => s.id === sessionId ? { ...s, status: 'PendingAdminApproval', questionsReady: true } : s),
       );
 
       // Full refresh after a beat to sync any server-side changes
@@ -696,7 +697,7 @@ export default function ExamSessions() {
 
       {/* ── Filter Tabs ── */}
       <div className="flex items-center gap-1 bg-zinc-100/80 p-1 rounded-lg w-fit border border-zinc-200/60 flex-wrap">
-        {['All', 'Pending', 'Ready', 'InProgress', 'Completed', 'Abandoned'].map(tab => (
+        {['All', 'Pending', 'PendingAdminApproval', 'Ready', 'InProgress', 'Completed', 'Abandoned'].map(tab => (
           <button
             key={tab}
             onClick={() => setFilter(tab)}
@@ -706,7 +707,7 @@ export default function ExamSessions() {
                 : 'text-zinc-500 hover:text-zinc-700'
             }`}
           >
-            {tab === 'InProgress' ? 'In Progress' : tab}
+            {tab === 'InProgress' ? 'In Progress' : tab === 'PendingAdminApproval' ? 'Pending Approval' : tab}
             {tab !== 'All' && (
               <span className="ml-1.5 text-[10px] font-semibold opacity-70">
                 {sessions.filter(s => s.status === tab).length}

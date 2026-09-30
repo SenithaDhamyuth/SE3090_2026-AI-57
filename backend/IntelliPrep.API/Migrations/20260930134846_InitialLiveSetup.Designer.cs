@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace IntelliPrep.API.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260925141059_StrictSyllabusLimits")]
-    partial class StrictSyllabusLimits
+    [Migration("20260930134846_InitialLiveSetup")]
+    partial class InitialLiveSetup
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

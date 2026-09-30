@@ -350,5 +350,104 @@ namespace IntelliPrep.API.Controllers
 
             return Ok(new { message = $"ExamSession {id} deleted successfully.", deletedId = id });
         }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // PUT /api/assessment/approve/{sessionId}
+        // Human-in-the-Loop: Admin approves a PendingAdminApproval session.
+        // Changes Status → "Ready" and notifies the student via email.
+        // ─────────────────────────────────────────────────────────────────────
+        [HttpPut("approve/{sessionId:int}")]
+        public async Task<IActionResult> ApproveSession(int sessionId)
+        {
+            _logger.LogInformation(
+                "[AssessmentController] approve called | SessionId: {Id}", sessionId);
+
+            var session = await _context.ExamSessions.FindAsync(sessionId);
+            if (session == null)
+                return NotFound(new { error = $"ExamSession {sessionId} not found." });
+
+            if (session.Status != "PendingAdminApproval")
+                return BadRequest(new
+                {
+                    error   = $"Session {sessionId} cannot be approved — current status is '{session.Status}', expected 'PendingAdminApproval'.",
+                    current = session.Status
+                });
+
+            session.Status = "Ready";
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation(
+                "[AssessmentController] ✅ Session {Id} approved → Status = Ready.", sessionId);
+
+            // ── Fire-and-forget: notify student ──────────────────────────────
+            if (session.StudentProfileId > 0)
+            {
+                var profile = await _context.StudentProfiles
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(p => p.Id == session.StudentProfileId);
+
+                if (profile != null && int.TryParse(profile.UserId, out int uid))
+                {
+                    var user = await _context.Users
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(u => u.Id == uid);
+
+                    if (user != null)
+                    {
+                        _ = _notifier.SendApprovalEmailAsync(
+                                user.Email,
+                                user.FullName,
+                                "Mock Exam");
+                    }
+                }
+            }
+
+            return Ok(new
+            {
+                message    = $"Session {sessionId} has been approved. Status is now 'Ready'.",
+                sessionId,
+                newStatus  = "Ready",
+                approvedAt = DateTime.UtcNow
+            });
+        }
+
+        // ─────────────────────────────────────────────────────────────────────
+        // PUT /api/assessment/reject/{sessionId}
+        // Human-in-the-Loop: Admin rejects a PendingAdminApproval session.
+        // Changes Status → "Abandoned" and clears the questions JSON.
+        // ─────────────────────────────────────────────────────────────────────
+        [HttpPut("reject/{sessionId:int}")]
+        public async Task<IActionResult> RejectSession(int sessionId)
+        {
+            _logger.LogInformation(
+                "[AssessmentController] reject called | SessionId: {Id}", sessionId);
+
+            var session = await _context.ExamSessions.FindAsync(sessionId);
+            if (session == null)
+                return NotFound(new { error = $"ExamSession {sessionId} not found." });
+
+            if (session.Status != "PendingAdminApproval")
+                return BadRequest(new
+                {
+                    error   = $"Session {sessionId} cannot be rejected — current status is '{session.Status}', expected 'PendingAdminApproval'.",
+                    current = session.Status
+                });
+
+            // Abandon and wipe the LLM-generated questions so they cannot be used
+            session.Status       = "Abandoned";
+            session.QuestionsJson = "[]";
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation(
+                "[AssessmentController] ❌ Session {Id} rejected → Status = Abandoned. QuestionsJson cleared.",
+                sessionId);
+
+            return Ok(new
+            {
+                message   = $"Session {sessionId} has been rejected. Status is now 'Abandoned' and questions have been cleared.",
+                sessionId,
+                newStatus = "Abandoned"
+            });
+        }
     }
 }
