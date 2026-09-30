@@ -17,9 +17,16 @@ Future<String> _loadSavedBackendIp() async {
   return _normalizeBackendIp(prefs.getString('backend_ip') ?? '192.168.1.146');
 }
 
+/// Fetches the MCQ questions for a session by calling the join endpoint.
+///
+/// The QR scanner already hit GET /api/student/papers/join/{accessCode};
+/// this call repeats it to obtain the questionsJson array for rendering.
+/// The endpoint is idempotent and safe to call multiple times.
 Future<List<Map<String, dynamic>>> fetchQuestions(String sessionId) async {
   final savedIp = await _loadSavedBackendIp();
-  final uri = Uri.parse('http://$savedIp:5087/api/exams/session/$sessionId');
+
+  // Primary: use the join endpoint (returns questionsJson in the response body)
+  final uri = Uri.parse('http://$savedIp:5087/api/student/papers/join/$sessionId');
 
   try {
     final prefs = await SharedPreferences.getInstance();
@@ -33,7 +40,7 @@ Future<List<Map<String, dynamic>>> fetchQuestions(String sessionId) async {
             if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
           },
         )
-        .timeout(const Duration(seconds: 5));
+        .timeout(const Duration(seconds: 8));
 
     if (response.statusCode == 401) {
       throw Exception('Unauthorized');
@@ -51,11 +58,16 @@ Future<List<Map<String, dynamic>>> fetchQuestions(String sessionId) async {
     final rawQuestions = decoded['questionsJson'];
     if (rawQuestions == null ||
         rawQuestions.toString().trim().isEmpty ||
-        rawQuestions == 'null') {
+        rawQuestions == 'null' ||
+        rawQuestions == '[]') {
       return [];
     }
 
-    final parsed = jsonDecode(rawQuestions);
+    // questionsJson may already be a List (if serialized inline) or a JSON string
+    final dynamic parsed = rawQuestions is String
+        ? jsonDecode(rawQuestions)
+        : rawQuestions;
+
     if (parsed is! List) {
       return [];
     }
@@ -78,6 +90,7 @@ Future<List<Map<String, dynamic>>> fetchQuestions(String sessionId) async {
     throw Exception('Connection failed. Check backend IP.');
   }
 }
+
 
 class _Question {
   final int id;
@@ -295,6 +308,42 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
     return score;
   }
 
+  /// Submits the final score to the backend (POST /api/student/submit).
+  /// This is best-effort: a network failure never blocks the results screen.
+  Future<void> _submitToBackend() async {
+    try {
+      final savedIp = await _loadSavedBackendIp();
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token');
+
+      final uri = Uri.parse('http://$savedIp:5087/api/student/submit');
+
+      final body = jsonEncode({
+        'sessionGuid': widget.qrPayload,
+        'answersJson': jsonEncode(_answers),
+        'totalScore': _calculateScore(),
+      });
+
+      await http
+          .post(
+            uri,
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              if (token != null && token.isNotEmpty)
+                'Authorization': 'Bearer $token',
+            },
+            body: body,
+          )
+          .timeout(const Duration(seconds: 10));
+
+      // Ignore the response body — any 2xx is treated as success.
+    } catch (e) {
+      // Best-effort: log but never surface this error to the student.
+      debugPrint('[ExamTimerScreen] Backend submit failed (non-fatal): $e');
+    }
+  }
+
   // ── Submit flow ─────────────────────────────────────────────────────
 
   Future<void> _handleSubmit({bool autoSubmit = false}) async {
@@ -308,7 +357,12 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
     _countdownTimer?.cancel();
     setState(() => _submitted = true);
 
+    // 1. Persist locally (offline-first, UC2.5)
     await _submitToDb();
+
+    // 2. Sync to backend (best-effort — does not block the UI)
+    _submitToBackend();
+
     _showResultsSheet();
   }
 
