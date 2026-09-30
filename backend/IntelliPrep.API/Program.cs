@@ -77,7 +77,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowProduction", policy =>
-        policy.WithOrigins("https://se-3090-2026-ai-57.vercel.app")
+        policy.SetIsOriginAllowed(origin => true)
             .AllowAnyMethod()
             .AllowAnyHeader()
             .AllowCredentials());
