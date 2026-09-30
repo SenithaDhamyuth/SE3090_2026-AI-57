@@ -66,7 +66,12 @@ builder.Services.AddScoped<IAIAgentService, AIAgentService>();
 builder.Services.AddScoped<IntelliPrep.API.Services.INotificationService,
                             IntelliPrep.API.Services.NotificationService>();
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.ReferenceHandler =
+            System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+    });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddCors(options =>
 {
