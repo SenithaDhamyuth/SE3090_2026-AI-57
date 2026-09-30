@@ -70,21 +70,14 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowReact",
-        policy =>
-        {
-            policy.WithOrigins(
-                    "http://localhost:5173",  // Vite primary port
-                    "http://localhost:5174"   // Vite fallback port
-                )
-                .AllowAnyHeader()
-                .AllowAnyMethod();
-        });
-    options.AddPolicy("AllowProduction", policy => 
-        policy.WithOrigins("https://se-3090-2026-ai-57.vercel.app")
-              .AllowAnyMethod()
-              .AllowAnyHeader()
-              .AllowCredentials());
+    options.AddPolicy("AllowProduction", policy =>
+        policy.WithOrigins(
+                "https://se-3090-2026-ai-57.vercel.app",
+                "http://localhost:5173",
+                "http://localhost:3000")
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials());
 });
 // 3. Configure Swagger with JWT Support
 builder.Services.AddSwaggerGen(c =>
