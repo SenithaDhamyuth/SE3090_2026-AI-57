@@ -122,6 +122,7 @@ public class StudentController : ControllerBase
             return new
             {
                 s.sessionGuid,
+                status = "Completed",
                 s.subject,
                 s.title,
                 s.totalScore,

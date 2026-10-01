@@ -53,7 +53,28 @@ export default function StudentMarks() {
         throw new Error(d?.message || `Server error ${res.status}`);
       }
       const data = await res.json();
-      setSessions(Array.isArray(data.sessions) ? data.sessions : []);
+      const rows = Array.isArray(data)
+        ? data
+        : Array.isArray(data.sessions)
+          ? data.sessions
+          : Array.isArray(data.data)
+            ? data.data
+            : [];
+      setSessions(rows.map((item, index) => ({
+        ...item,
+        sessionId: item.sessionId ?? item.SessionId ?? item.id ?? item.Id ?? index,
+        sessionGuid: item.sessionGuid ?? item.SessionGuid ?? '',
+        studentId: item.studentId ?? item.StudentId ?? '',
+        studentName: item.studentName ?? item.StudentName ?? 'Unknown Student',
+        studentEmail: item.studentEmail ?? item.StudentEmail ?? item.email ?? item.Email ?? '',
+        title: item.title ?? item.Title ?? '',
+        subject: item.subject ?? item.Subject ?? '',
+        totalScore: Number(item.totalScore ?? item.TotalScore ?? 0),
+        totalQuestions: Number(item.totalQuestions ?? item.TotalQuestions ?? 0),
+        durationMinutes: Number(item.durationMinutes ?? item.DurationMinutes ?? 0),
+        endTime: item.endTime ?? item.EndTime ?? '',
+        originalObjective: item.originalObjective ?? item.OriginalObjective ?? '',
+      })));
     } catch (err) {
       setError(err.message);
     } finally {
@@ -81,10 +102,13 @@ export default function StudentMarks() {
     .filter(s => {
       const q = search.toLowerCase();
       return (
-        s.subject?.toLowerCase().includes(q) ||
-        s.studentId?.toLowerCase().includes(q) ||
-        s.sessionGuid?.toLowerCase().includes(q) ||
-        s.originalObjective?.toLowerCase().includes(q)
+        String(s.studentName ?? '').toLowerCase().includes(q) ||
+        String(s.studentEmail ?? '').toLowerCase().includes(q) ||
+        String(s.subject ?? '').toLowerCase().includes(q) ||
+        String(s.title ?? '').toLowerCase().includes(q) ||
+        String(s.studentId ?? '').toLowerCase().includes(q) ||
+        String(s.sessionGuid ?? '').toLowerCase().includes(q) ||
+        String(s.originalObjective ?? '').toLowerCase().includes(q)
       );
     })
     .sort((a, b) => {
@@ -225,8 +249,8 @@ export default function StudentMarks() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-50">
-                {filtered.map((s) => (
-                  <tr key={s.sessionId} className="hover:bg-zinc-50/60 transition-colors">
+                {filtered.map((s, index) => (
+                  <tr key={s.sessionId ?? index} className="hover:bg-zinc-50/60 transition-colors">
                     <td className="px-4 py-3">
                       <span className="font-mono text-[11px] text-zinc-500 bg-zinc-100 rounded px-1.5 py-0.5">
                         #{s.sessionId}
@@ -235,10 +259,10 @@ export default function StudentMarks() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <div className="w-7 h-7 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white text-[9px] font-bold shrink-0">
-                          {(s.studentName || s.studentId || '?').toString().slice(0, 2).toUpperCase()}
+                          {(s.studentName || 'Unknown Student').slice(0, 2).toUpperCase()}
                         </div>
                         <div>
-                          <p className="text-[12px] text-zinc-700 font-semibold leading-none">{s.studentName || 'Anonymous'}</p>
+                          <p className="text-[12px] text-zinc-700 font-semibold leading-none">{s.studentName || 'Unknown Student'}</p>
                           {s.studentEmail && <p className="text-[10px] text-zinc-400 mt-0.5">{s.studentEmail}</p>}
                         </div>
                       </div>
@@ -252,10 +276,10 @@ export default function StudentMarks() {
                       <span className="text-[11px] text-zinc-500">{s.subject || '—'}</span>
                     </td>
                     <td className="px-4 py-3">
-                      <ScoreBadge score={s.totalScore} total={s.totalQuestions} />
+                      <ScoreBadge score={s.totalScore ?? 0} total={s.totalQuestions ?? 0} />
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-[12px] text-zinc-500">{s.durationMinutes} min</span>
+                      <span className="text-[12px] text-zinc-500">{s.durationMinutes ? `${s.durationMinutes} min` : '—'}</span>
                     </td>
                     <td className="px-4 py-3">
                       <span className="text-[11px] text-zinc-400 whitespace-nowrap">{s.endTime || '—'}</span>

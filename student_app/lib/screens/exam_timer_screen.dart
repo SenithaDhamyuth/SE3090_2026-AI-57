@@ -313,6 +313,10 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
     _saveProgressLocally(status: 'in_progress');
   }
 
+  String _encodeAnswers() => jsonEncode(
+        _answers.map((key, value) => MapEntry(key.toString(), value)),
+      );
+
   // ── SQLite persistence ───────────────────────────────────────────────
 
   Future<void> _saveProgressLocally({required String status}) async {
@@ -321,12 +325,13 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
     try {
       await DatabaseHelper.instance.saveProgress(
         sessionId: widget.qrPayload,
-        answersJson: jsonEncode(_answers),
+        answersJson: _encodeAnswers(),
         status: status,
         totalScore: _calculateScore(),
       );
       if (mounted) setState(() => _saveStatus = 'Saved locally ✓');
     } catch (e) {
+      debugPrint('[ExamTimerScreen] Local progress save failed: $e');
       if (mounted) setState(() => _saveStatus = 'Save failed — will retry');
     } finally {
       if (mounted) setState(() => _dbSaving = false);
@@ -334,11 +339,22 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
   }
 
   Future<void> _submitToDb() async {
-    await DatabaseHelper.instance.markSubmitted(
+    final updatedRows = await DatabaseHelper.instance.markSubmitted(
       sessionId: widget.qrPayload,
-      answersJson: jsonEncode(_answers),
+      answersJson: _encodeAnswers(),
       totalScore: _calculateScore(),
     );
+    if (updatedRows == 0) {
+      await _cacheExamLocally();
+      final retriedRows = await DatabaseHelper.instance.markSubmitted(
+        sessionId: widget.qrPayload,
+        answersJson: _encodeAnswers(),
+        totalScore: _calculateScore(),
+      );
+      if (retriedRows == 0) {
+        throw StateError('Submitted exam was not found in the local cache.');
+      }
+    }
   }
 
   int _calculateScore() {
@@ -357,10 +373,11 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
       final token = prefs.getString('auth_token');
 
       final uri = ApiConstants.endpoint('api/student/submit');
+      final answersJson = _encodeAnswers();
 
       final payload = {
         'sessionGuid': widget.qrPayload,
-        'answersJson': jsonEncode(_answers),
+        'answersJson': answersJson,
         'totalScore': _calculateScore(),
       };
 
@@ -383,11 +400,20 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
 
       print('[ExamTimerScreen] ← Backend submit response: HTTP ${response.statusCode} | body: ${response.body}');
 
-      // Ignore the response body — any 2xx is treated as success.
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        if (mounted) {
+          setState(() => _saveStatus = 'Server save failed — retry when online');
+        }
+        return;
+      }
+
+      if (mounted) setState(() => _saveStatus = 'Exam synced to server ✓');
     } catch (e, stack) {
-      // Best-effort: log but never surface this error to the student.
       debugPrint('[ExamTimerScreen] Backend submit failed (non-fatal): $e');
       debugPrint('[ExamTimerScreen] Stack: $stack');
+      if (mounted) {
+        setState(() => _saveStatus = 'Server unavailable — retry when online');
+      }
     }
   }
 
@@ -404,11 +430,17 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
     _countdownTimer?.cancel();
     setState(() => _submitted = true);
 
-    // 1. Persist locally (offline-first, UC2.5)
-    await _submitToDb();
+    // 1. Persist locally (offline-first, UC2.5), but still sync if local storage fails.
+    try {
+      await _submitToDb();
+    } catch (e, stack) {
+      debugPrint('[ExamTimerScreen] Local submit save failed: $e');
+      debugPrint('[ExamTimerScreen] Stack: $stack');
+      if (mounted) setState(() => _saveStatus = 'Local save failed — syncing to server');
+    }
 
     // 2. Sync to backend (best-effort — does not block the UI)
-    _submitToBackend();
+    unawaited(_submitToBackend());
 
     _showResultsSheet();
   }
@@ -479,7 +511,7 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
                     'correctOptionIndex': q.correctIndex,
                   }).toList()
                 ),
-                answersJson: jsonEncode(_answers),
+                answersJson: _encodeAnswers(),
               ),
             ),
           );

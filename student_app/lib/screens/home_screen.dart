@@ -528,14 +528,12 @@ class _QuickActionCard extends StatelessWidget {
 /// Mock AI-generated study plan data for A/L ICT.
 class _StudyDay {
   final int day;
-  final String date;
   final String topic;
   final String subtopics;
   final String priority;
 
   const _StudyDay({
     required this.day,
-    required this.date,
     required this.topic,
     required this.subtopics,
     required this.priority,
@@ -544,7 +542,6 @@ class _StudyDay {
   factory _StudyDay.fromJson(Map<String, dynamic> json) {
     return _StudyDay(
       day: json['day'] ?? 0,
-      date: json['date'] ?? '',
       topic: json['topic'] ?? 'Unknown Topic',
       subtopics: json['subtopics'] ?? '',
       priority: json['priority'] ?? 'Medium',
@@ -679,7 +676,7 @@ class _StudyPlanTabState extends State<_StudyPlanTab> {
                 (context, index) {
                   final day = plan[index];
                   final isLast = index == plan.length - 1;
-                  return _StudyDayTile(day: day, isLast: isLast, isCurrent: index == 0); // Mock first day as current
+                  return _StudyDayTile(day: day, dayNumber: index + 1, isLast: isLast);
                 },
                 childCount: plan.length,
               ),
@@ -694,17 +691,12 @@ class _StudyPlanTabState extends State<_StudyPlanTab> {
 }
 
 class _StudyDayTile extends StatelessWidget {
-  const _StudyDayTile({required this.day, required this.isLast, required this.isCurrent});
+  const _StudyDayTile({required this.day, required this.dayNumber, required this.isLast});
 
   final _StudyDay day;
+  final int dayNumber;
   final bool isLast;
-  final bool isCurrent; // Just for visual mock
 
-  Color get _dotColor {
-    if (isCurrent) return Colors.orange;
-    return Colors.grey.shade300;
-  }
-  
   Color get _priorityColor {
     switch (day.priority) {
       case 'High': return Colors.red;
@@ -730,17 +722,14 @@ class _StudyDayTile extends StatelessWidget {
                   width: 32,
                   height: 32,
                   decoration: BoxDecoration(
-                    color: _dotColor,
+                    color: Colors.grey.shade700,
                     shape: BoxShape.circle,
-                    boxShadow: isCurrent
-                        ? [BoxShadow(color: Colors.orange.withAlpha(80), blurRadius: 8)]
-                        : [],
                   ),
                   child: Center(
                     child: Text(
-                      '${day.day}',
-                      style: TextStyle(
-                        color: isCurrent ? Colors.white : Colors.grey.shade500,
+                      '$dayNumber',
+                      style: const TextStyle(
+                        color: Colors.white,
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
                       ),
@@ -764,11 +753,10 @@ class _StudyDayTile extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: isCurrent ? Colors.orange.withAlpha(12) : Colors.white,
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: isCurrent ? Colors.orange.withAlpha(80) : Colors.grey.shade200,
-                    width: isCurrent ? 1.5 : 1,
+                    color: Colors.grey.shade200,
                   ),
                 ),
                 child: Row(
@@ -791,7 +779,7 @@ class _StudyDayTile extends StatelessWidget {
                             children: [
                               Expanded(
                                 child: Text(
-                                  'Day ${day.day}: ${day.topic}',
+                                  'Day $dayNumber: ${day.topic}',
                                   style: const TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.bold,
@@ -799,24 +787,7 @@ class _StudyDayTile extends StatelessWidget {
                                   ),
                                 ),
                               ),
-                              if (isCurrent)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.orange,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: const Text(
-                                    'Today',
-                                    style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
-                                  ),
-                                ),
                             ],
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            day.date,
-                            style: TextStyle(fontSize: 10, color: Colors.grey.shade400, fontWeight: FontWeight.w600),
                           ),
                           const SizedBox(height: 4),
                           Text(
@@ -843,6 +814,7 @@ class _StudyDayTile extends StatelessWidget {
 
 class _RemoteResult {
   final String sessionGuid;
+  final String status;
   final String subject;
   final String title;
   final int totalScore;
@@ -854,6 +826,7 @@ class _RemoteResult {
 
   const _RemoteResult({
     required this.sessionGuid,
+    required this.status,
     required this.subject,
     required this.title,
     required this.totalScore,
@@ -865,18 +838,23 @@ class _RemoteResult {
   });
 
   factory _RemoteResult.fromJson(Map<String, dynamic> json) {
+    final subject = (json['subject'] ?? json['Subject'] ?? 'A/L ICT').toString();
     return _RemoteResult(
-      sessionGuid:     json['sessionGuid'] as String? ?? '',
-      subject:         json['subject'] as String? ?? 'A/L ICT',
-      title:           json['title'] as String? ?? json['subject'] as String? ?? 'A/L ICT',
-      totalScore:      json['totalScore'] as int? ?? 0,
-      totalQuestions:  json['totalQuestions'] as int? ?? 0,
-      endTime:         json['endTime'] as String?,
-      durationMinutes: json['durationMinutes'] as int? ?? 30,
-      questionsJson:   json['questionsJson'] as String?,
-      answersJson:     json['answersJson'] as String?,
+      sessionGuid: (json['sessionGuid'] ?? json['SessionGuid'] ?? '').toString(),
+      status: (json['status'] ?? json['Status'] ?? 'Completed').toString(),
+      subject: subject,
+      title: (json['title'] ?? json['Title'] ?? subject).toString(),
+      totalScore: _readInt(json['totalScore'] ?? json['TotalScore']),
+      totalQuestions: _readInt(json['totalQuestions'] ?? json['TotalQuestions']),
+      endTime: (json['endTime'] ?? json['EndTime'])?.toString(),
+      durationMinutes: _readInt(json['durationMinutes'] ?? json['DurationMinutes'], 30),
+      questionsJson: (json['questionsJson'] ?? json['QuestionsJson'])?.toString(),
+      answersJson: (json['answersJson'] ?? json['AnswersJson'])?.toString(),
     );
   }
+
+  static int _readInt(dynamic value, [int fallback = 0]) =>
+      value is num ? value.toInt() : int.tryParse('$value') ?? fallback;
 }
 
 
@@ -923,12 +901,17 @@ class _ProgressTabState extends State<_ProgressTab> {
       print('[ProgressTab] GET /api/student/my-results → ${response.statusCode}');
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        final list = data['results'] as List<dynamic>? ?? [];
+        final decoded = jsonDecode(response.body);
+        final dynamic rawResults = decoded is List
+            ? decoded
+            : decoded is Map
+                ? decoded['results'] ?? decoded['Results'] ?? decoded['data'] ?? decoded['Data']
+                : null;
+        final list = rawResults is List ? rawResults : <dynamic>[];
         setState(() {
           _remoteResults = list
-              .whereType<Map<String, dynamic>>()
-              .map((e) => _RemoteResult.fromJson(e))
+              .whereType<Map>()
+              .map((e) => _RemoteResult.fromJson(Map<String, dynamic>.from(e)))
               .toList();
           _loadingRemote = false;
         });
@@ -1177,6 +1160,11 @@ class _RemoteResultTile extends StatelessWidget {
                   color: _scoreColor,
                 ),
               ),
+              const SizedBox(height: 4),
+              Text(
+                result.status,
+                style: const TextStyle(fontSize: 9, color: Colors.green, fontWeight: FontWeight.w700),
+              ),
             ],
           ),
         ],
@@ -1305,9 +1293,22 @@ class _SessionTile extends StatelessWidget {
 
   final CachedExam exam;
 
+  bool get _isCompleted =>
+      exam.status.toLowerCase() == 'submitted' || exam.status.toLowerCase() == 'completed';
+
+  int get _totalQuestions {
+    try {
+      final questions = jsonDecode(exam.questionsJson);
+      return questions is List ? questions.length : 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   Color get _statusColor {
     switch (exam.status) {
       case 'submitted':
+      case 'completed':
         return Colors.green;
       case 'in_progress':
         return Colors.orange;
@@ -1319,7 +1320,8 @@ class _SessionTile extends StatelessWidget {
   String get _statusLabel {
     switch (exam.status) {
       case 'submitted':
-        return 'Submitted';
+      case 'completed':
+        return 'Completed';
       case 'in_progress':
         return 'In Progress';
       default:
@@ -1330,6 +1332,7 @@ class _SessionTile extends StatelessWidget {
   IconData get _statusIcon {
     switch (exam.status) {
       case 'submitted':
+      case 'completed':
         return Icons.check_circle_rounded;
       case 'in_progress':
         return Icons.timelapse_rounded;
@@ -1340,22 +1343,43 @@ class _SessionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.shade200),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(6),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
+    return InkWell(
+      onTap: !_isCompleted
+          ? null
+          : () {
+              Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => ExamReviewScreen(
+                    sessionId: exam.sessionId,
+                    subject: exam.subject,
+                    title: exam.subject,
+                    score: exam.totalScore,
+                    totalQuestions: _totalQuestions,
+                    date: exam.createdAt,
+                    questionsJson: exam.questionsJson,
+                    answersJson: exam.answersJson,
+                  ),
+                ),
+              );
+            },
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.grey.shade200),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(6),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
         children: [
           // Subject icon
           Container(
@@ -1383,9 +1407,7 @@ class _SessionTile extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  exam.sessionId.length > 28
-                      ? '${exam.sessionId.substring(0, 28)}…'
-                      : exam.sessionId,
+                  exam.createdAt,
                   style: TextStyle(
                     fontSize: 10,
                     color: Colors.grey.shade400,
@@ -1422,7 +1444,7 @@ class _SessionTile extends StatelessWidget {
                   ],
                 ),
               ),
-              if (exam.status == 'submitted') ...[
+              if (_isCompleted) ...[
                 const SizedBox(height: 5),
                 Text(
                   '${exam.totalScore} pts',
@@ -1436,6 +1458,7 @@ class _SessionTile extends StatelessWidget {
             ],
           ),
         ],
+        ),
       ),
     );
   }

@@ -200,7 +200,7 @@ function PlanTimeline({ days }) {
               {/* Timeline dot */}
               <div className="flex-shrink-0 relative z-10 mt-1">
                 <div className={`w-[18px] h-[18px] rounded-full border-2 border-white shadow-md flex items-center justify-center ${cfg.dot}`}>
-                  <span className="text-[8px] text-white font-bold leading-none">{d.day}</span>
+                      <span className="text-[8px] text-white font-bold leading-none">{idx + 1}</span>
                 </div>
               </div>
 
@@ -211,14 +211,11 @@ function PlanTimeline({ days }) {
                 <div className="flex items-start justify-between gap-2 flex-wrap">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[11px] font-mono text-zinc-400 bg-zinc-100 rounded px-1.5 py-0.5">
-                        {d.date}
-                      </span>
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-bold ${cfg.badge}`}>
                         {cfg.label}
                       </span>
                     </div>
-                    <p className="mt-1.5 text-[13px] font-bold text-zinc-800 leading-snug">{d.topic}</p>
+                    <p className="mt-1.5 text-[13px] font-bold text-zinc-800 leading-snug">Day {idx + 1}: {d.topic}</p>
                     {d.subtopics && (
                       <p className="mt-0.5 text-[11px] text-zinc-500 leading-snug">{d.subtopics}</p>
                     )}
@@ -581,8 +578,7 @@ function PlanDetailModal({ planId, onClose, onApprove, onReject, approving, dele
             : data.planDetailsJson;
           if (!Array.isArray(parsedDays)) throw new Error('The saved plan is not a JSON array.');
           setDays(parsedDays.map((day, index) => ({
-            day: day?.day ?? index + 1,
-            date: typeof day?.date === 'string' ? day.date : '',
+            day: index + 1,
             topic: typeof day?.topic === 'string' ? day.topic : '',
             subtopics: typeof day?.subtopics === 'string' ? day.subtopics : '',
             priority: typeof day?.priority === 'string' ? day.priority : 'Medium',
@@ -696,10 +692,9 @@ function PlanDetailModal({ planId, onClose, onApprove, onReject, approving, dele
               {days.map((day, index) => (
                 <section key={index} className="rounded-lg border border-zinc-200 bg-white p-4">
                   <div className="mb-3 flex items-center justify-between">
-                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-orange-100 text-xs font-bold text-orange-700">
-                      {day.day}
+                    <span className="inline-flex h-7 items-center justify-center rounded-full bg-orange-100 px-2.5 text-xs font-bold text-orange-700">
+                      Day {index + 1}
                     </span>
-                    <span className="text-xs text-zinc-400">{day.date || `Day ${day.day}`}</span>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="text-xs font-semibold text-zinc-600">
@@ -744,7 +739,7 @@ function PlanDetailModal({ planId, onClose, onApprove, onReject, approving, dele
               <table className="w-full text-left">
                 <thead>
                   <tr className="bg-zinc-50 border-b border-zinc-200">
-                    {['Day', 'Date', 'Topic', 'Sub-topics', 'Priority'].map(h => (
+                    {['Day', 'Topic', 'Sub-topics', 'Priority'].map(h => (
                       <th key={h} className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
                         {h}
                       </th>
@@ -754,12 +749,7 @@ function PlanDetailModal({ planId, onClose, onApprove, onReject, approving, dele
                 <tbody className="divide-y divide-zinc-100">
                   {days.map((d, i) => (
                     <tr key={i} className="hover:bg-zinc-50/60 transition-colors">
-                      <td className="px-4 py-2.5">
-                        <span className="w-6 h-6 bg-orange-100 text-orange-700 text-[11px] font-bold rounded-full inline-flex items-center justify-center">
-                          {d.day}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 text-[12px] text-zinc-500 font-mono whitespace-nowrap">{d.date}</td>
+                      <td className="px-4 py-2.5 text-[12px] font-bold text-orange-700 whitespace-nowrap">Day {i + 1}</td>
                       <td className="px-4 py-2.5 text-[12px] font-semibold text-zinc-800 max-w-[160px]">{d.topic}</td>
                       <td className="px-4 py-2.5 text-[11px] text-zinc-500 max-w-[200px] leading-snug">{d.subtopics}</td>
                       <td className="px-4 py-2.5"><PriorityBadge priority={d.priority} /></td>
