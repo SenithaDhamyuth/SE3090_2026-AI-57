@@ -120,7 +120,7 @@ export default function StudentMarks() {
   );
 
   return (
-    <div className="max-w-[1300px] mx-auto px-6 py-6 space-y-5">
+    <div className="max-w-[1400px] mx-auto px-6 py-6 space-y-5">
 
       {/* ── Page header ── */}
       <div className="flex items-start justify-between">
@@ -179,7 +179,7 @@ export default function StudentMarks() {
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
             <input
               type="text"
-              placeholder="Search student, subject…"
+              placeholder="Search student name, subject…"
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-zinc-200 text-[12px] outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-colors"
@@ -215,10 +215,10 @@ export default function StudentMarks() {
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-zinc-100 bg-zinc-50/50">
-                  <ColHeader label="Session ID" field="sessionId" />
-                  <ColHeader label="Student ID" field="studentId" />
-                  <ColHeader label="Subject / Exam" field="subject" />
-                  <ColHeader label="Objective" field="originalObjective" />
+                  <ColHeader label="#" field="sessionId" />
+                  <ColHeader label="Student" field="studentName" />
+                  <ColHeader label="Exam Title" field="title" />
+                  <ColHeader label="Subject" field="subject" />
                   <ColHeader label="Score" field="totalScore" />
                   <ColHeader label="Duration" field="durationMinutes" />
                   <ColHeader label="Submitted" field="endTime" />
@@ -234,19 +234,22 @@ export default function StudentMarks() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white text-[9px] font-bold shrink-0">
-                          {(s.studentId || '?').toString().slice(0, 2).toUpperCase()}
+                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white text-[9px] font-bold shrink-0">
+                          {(s.studentName || s.studentId || '?').toString().slice(0, 2).toUpperCase()}
                         </div>
-                        <span className="text-[12px] text-zinc-700 font-medium">{s.studentId || 'Anonymous'}</span>
+                        <div>
+                          <p className="text-[12px] text-zinc-700 font-semibold leading-none">{s.studentName || 'Anonymous'}</p>
+                          {s.studentEmail && <p className="text-[10px] text-zinc-400 mt-0.5">{s.studentEmail}</p>}
+                        </div>
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-[12px] font-semibold text-zinc-800">{s.subject || '—'}</span>
-                    </td>
-                    <td className="px-4 py-3 max-w-[200px]">
-                      <span className="text-[11px] text-zinc-500 truncate block" title={s.originalObjective}>
-                        {s.originalObjective || '—'}
+                      <span className="text-[12px] font-semibold text-zinc-800">
+                        {s.title || s.subject || '—'}
                       </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-[11px] text-zinc-500">{s.subject || '—'}</span>
                     </td>
                     <td className="px-4 py-3">
                       <ScoreBadge score={s.totalScore} total={s.totalQuestions} />

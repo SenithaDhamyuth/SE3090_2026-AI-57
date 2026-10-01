@@ -323,6 +323,8 @@ namespace IntelliPrep.API.Controllers
                     s.StudentProfileId,
                     s.StudentId,
                     s.Subject,
+                    s.Title,
+                    s.OriginalObjective,
                     s.Status,
                     s.StartTime,
                     s.EndTime,
@@ -403,6 +405,20 @@ namespace IntelliPrep.API.Controllers
                         "[AssessmentController] Failed to serialise editedQuestions for session {Id}. Keeping original QuestionsJson.",
                         sessionId);
                 }
+            }
+
+            // ── HITL: Save admin-assigned title ─────────────────────────────
+            if (!string.IsNullOrWhiteSpace(dto?.Title))
+            {
+                session.Title = dto.Title.Trim();
+                _logger.LogInformation(
+                    "[AssessmentController] Session {Id}: Title set to '{Title}'.",
+                    sessionId, session.Title);
+            }
+            else
+            {
+                // Default to subject if no title given
+                session.Title ??= session.Subject;
             }
 
             session.Status = "Ready";

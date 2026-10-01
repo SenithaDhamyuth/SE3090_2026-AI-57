@@ -60,5 +60,11 @@ namespace IntelliPrep.API.Models
         /// Defaults to 5 when no number is found in the objective string.
         /// </summary>
         public int RequestedQuestionCount { get; set; } = 5;
+
+        /// <summary>
+        /// Admin-assigned human-readable title for this exam (e.g. "Logic Gates Exam - Batch 3").
+        /// Defaults to the Subject if not set by admin during HITL approval.
+        /// </summary>
+        public string? Title { get; set; }
     }
 }

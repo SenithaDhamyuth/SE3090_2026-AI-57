@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/cached_exam.dart';
 import '../services/database_helper.dart';
 import '../api_constants.dart';
+import 'exam_review_screen.dart';
 
 /// Fetches the MCQ questions for a session by calling the join endpoint.
 ///
@@ -456,12 +457,37 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
         total: total,
         percentage: pct,
         sessionId: widget.qrPayload,
-        onClose: () => Navigator.of(context)
-          ..pop()  // close sheet
-          ..pop(), // back to home
+        onViewResults: () {
+          // Close sheet
+          Navigator.pop(context);
+          // Navigate directly to Review screen
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (ctx) => ExamReviewScreen(
+                sessionId: widget.qrPayload,
+                subject: 'A/L ICT',
+                title: 'Mock Exam',
+                score: score,
+                totalQuestions: total,
+                date: DateTime.now().toIso8601String(),
+                questionsJson: jsonEncode(
+                  _questions.map((q) => {
+                    'id': q.id,
+                    'text': q.text,
+                    'options': q.options,
+                    'correctOptionIndex': q.correctIndex,
+                  }).toList()
+                ),
+                answersJson: jsonEncode(_answers),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
+
 
   // ── Timer display ────────────────────────────────────────────────────
 
@@ -906,14 +932,14 @@ class _ResultsSheet extends StatelessWidget {
     required this.total,
     required this.percentage,
     required this.sessionId,
-    required this.onClose,
+    required this.onViewResults,
   });
 
   final int score;
   final int total;
   final int percentage;
   final String sessionId;
-  final VoidCallback onClose;
+  final VoidCallback onViewResults;
 
   Color get _gradeColor {
     if (percentage >= 75) return Colors.green;
@@ -1034,15 +1060,16 @@ class _ResultsSheet extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             height: 50,
-            child: FilledButton(
+            child: FilledButton.icon(
               style: FilledButton.styleFrom(
                 backgroundColor: Colors.orange,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14)),
               ),
-              onPressed: onClose,
-              child: const Text(
-                'Back to Home',
+              onPressed: onViewResults,
+              icon: const Icon(Icons.analytics_rounded, size: 20),
+              label: const Text(
+                '🎯 View My Results',
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
               ),
             ),
@@ -1052,3 +1079,4 @@ class _ResultsSheet extends StatelessWidget {
     );
   }
 }
+

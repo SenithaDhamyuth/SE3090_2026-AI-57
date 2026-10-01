@@ -155,8 +155,9 @@ function QuestionEditor({ question, index, total, onChange, onDelete }) {
 
 // ─── Approval Card ─────────────────────────────────────────────────────────────
 function ApprovalCard({ item, onApprove, onReject, processingIds }) {
-  const [expanded,  setExpanded]  = useState(false);
-  const [questions, setQuestions] = useState(null); // null = not yet initialised
+  const [expanded,   setExpanded]   = useState(false);
+  const [questions,  setQuestions]  = useState(null); // null = not yet initialised
+  const [examTitle,  setExamTitle]  = useState('');   // admin-assigned exam title
 
   const isExam       = item.type === 'Exam Session';
   const isProcessing = processingIds.has(item.uniqueId);
@@ -178,10 +179,12 @@ function ApprovalCard({ item, onApprove, onReject, processingIds }) {
     }
   }, [isExam, item.questionsJson]);
 
-  // Initialise questions state when expanded for the first time
+  // Initialise questions state and title when expanded for the first time
   const handleToggle = () => {
     if (!expanded && isExam && questions === null) {
       setQuestions(parseQuestions());
+      // Default title = OriginalObjective or Subject
+      setExamTitle(item.originalObjective || item.subject || '');
     }
     setExpanded(prev => !prev);
   };
@@ -204,6 +207,7 @@ function ApprovalCard({ item, onApprove, onReject, processingIds }) {
   };
 
   const validate = () => {
+    if (!examTitle.trim()) return 'Please provide an Exam Title before approving.';
     if (!questions || questions.length === 0) return 'No questions to approve. Add at least one question.';
     for (let i = 0; i < questions.length; i++) {
       const q = questions[i];
@@ -222,9 +226,9 @@ function ApprovalCard({ item, onApprove, onReject, processingIds }) {
     if (isExam) {
       const err = validate();
       if (err) { alert(`Please fix this before approving:\n\n${err}`); return; }
-      onApprove(item, questions);
+      onApprove(item, questions, examTitle.trim());
     } else {
-      onApprove(item, null);
+      onApprove(item, null, null);
     }
   };
 
@@ -290,6 +294,23 @@ function ApprovalCard({ item, onApprove, onReject, processingIds }) {
           {isExam ? (
             /* ════ EXAM: Always-on inline question editor ════ */
             <div className="px-5 py-5 space-y-4">
+              {/* Exam Title input — visible when expanded */}
+              <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
+                <label className="block text-[10px] font-bold text-orange-700 uppercase tracking-wider mb-2">
+                  📋 Exam Title <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={examTitle}
+                  onChange={e => setExamTitle(e.target.value)}
+                  placeholder="e.g. Logic Gates — Batch 3 (Set by admin)"
+                  className="w-full px-3 py-2 text-[13px] font-semibold text-zinc-800 border border-orange-300 rounded-lg outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400 bg-white transition-all"
+                />
+                <p className="text-[10px] text-orange-500 mt-1.5 font-medium">
+                  This title will be visible to students in the app and in the Admin Marks dashboard.
+                </p>
+              </div>
+
               <div className="flex items-center justify-between">
                 <p className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
                   {questions ? `${questions.length} Question${questions.length !== 1 ? 's' : ''} — Edit directly below` : 'Loading…'}
@@ -481,7 +502,7 @@ export default function PendingApprovals() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const handleApprove = async (item, editedQuestions) => {
+  const handleApprove = async (item, editedQuestions, examTitle) => {
     setProcessingIds(prev => new Set(prev).add(item.uniqueId));
     try {
       const token  = localStorage.getItem('admin_token') || '';
@@ -494,7 +515,10 @@ export default function PendingApprovals() {
         method: 'PUT',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         ...(isExam && {
-          body: JSON.stringify({ editedQuestions: editedQuestions ?? [] }),
+          body: JSON.stringify({
+            editedQuestions: editedQuestions ?? [],
+            title: examTitle ?? '',
+          }),
         }),
       });
       const data = await res.json();
@@ -505,7 +529,7 @@ export default function PendingApprovals() {
         'success',
         'Approved Successfully',
         isExam
-          ? `Exam #${item.id} approved with ${editedQuestions?.length ?? 0} questions saved to the database.`
+          ? `Exam #${item.id} "${examTitle || item.subject}" approved with ${editedQuestions?.length ?? 0} questions.`
           : `Study Plan #${item.id} is now approved.`
       );
     } catch (err) {

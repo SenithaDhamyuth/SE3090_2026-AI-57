@@ -44,6 +44,9 @@ namespace IntelliPrep.API.DTOs
     /// </summary>
     public class ApproveSessionDto
     {
+        /// <summary>Admin-assigned exam title. Saved to ExamSession.Title during HITL approval.</summary>
+        public string? Title { get; set; }
+
         /// <summary>
         /// Admin-edited list of MCQ questions. Each object must match the schema
         /// expected by the Flutter exam_timer_screen:
