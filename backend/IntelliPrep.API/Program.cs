@@ -139,6 +139,19 @@ app.MapControllers();
 // Seed Default Admin
 using var scope = app.Services.CreateScope();
 var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+var migrationLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+    .CreateLogger("DatabaseMigrations");
+
+try
+{
+    await dbContext.Database.MigrateAsync();
+    migrationLogger.LogInformation("Database migrations applied successfully.");
+}
+catch (Exception ex)
+{
+    migrationLogger.LogError(ex, "Failed to apply database migrations during startup.");
+    throw;
+}
 
 var adminUser = dbContext.Users.FirstOrDefault(u => u.Email == "admin@intelliprep.com");
 if (adminUser == null)

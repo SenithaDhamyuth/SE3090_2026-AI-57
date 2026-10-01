@@ -312,9 +312,10 @@ namespace IntelliPrep.API.Controllers
         // Returns all exam sessions (for the admin ExamSessions frontend)
         // ─────────────────────────────────────────────────────────────
         [HttpGet("sessions")]
-        public async Task<IActionResult> GetAllSessions()
+        public async Task<IActionResult> GetAllSessions(CancellationToken cancellationToken)
         {
             var sessions = await _context.ExamSessions
+            .AsNoTracking()
                 .OrderByDescending(s => s.StartTime)
                 .Select(s => new
                 {
@@ -335,7 +336,7 @@ namespace IntelliPrep.API.Controllers
                     // Convenience flag so the table Actions column can show "Ready" badge
                     questionsReady = s.QuestionsJson != "[]" && s.QuestionsJson != ""
                 })
-                .ToListAsync();
+                .ToListAsync(cancellationToken);
 
             return Ok(sessions);
         }

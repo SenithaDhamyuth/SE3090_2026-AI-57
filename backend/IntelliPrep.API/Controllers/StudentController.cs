@@ -355,8 +355,8 @@ public class AdminMarksController : ControllerBase
                 subject           = s.Subject,
                 title             = s.Title ?? s.Subject,
                 totalScore        = s.TotalScore,
-                endTime           = s.EndTime != null ? s.EndTime.Value.ToString("yyyy-MM-dd HH:mm") + " UTC" : null,
-                startTime         = s.StartTime.ToString("yyyy-MM-dd HH:mm") + " UTC",
+                endTime           = s.EndTime,
+                startTime         = s.StartTime,
                 durationMinutes   = s.DurationMinutes,
                 questionsJson     = s.QuestionsJson,
                 originalObjective = s.OriginalObjective,
@@ -368,6 +368,7 @@ public class AdminMarksController : ControllerBase
         var profiles   = await _db.StudentProfiles
             .AsNoTracking()
             .Where(p => profileIds.Contains(p.Id))
+            .Select(p => new { p.Id, p.UserId })
             .ToListAsync(cancellationToken);
 
         // Parse UserId strings into ints to join with Users
@@ -380,6 +381,7 @@ public class AdminMarksController : ControllerBase
         var users = await _db.Users
             .AsNoTracking()
             .Where(u => userIds.Contains(u.Id))
+            .Select(u => new { u.Id, u.FullName, u.Email })
             .ToDictionaryAsync(u => u.Id, cancellationToken);
 
         var profileMap = profiles.ToDictionary(
@@ -419,8 +421,8 @@ public class AdminMarksController : ControllerBase
                 s.title,
                 s.totalScore,
                 totalQuestions  = qCount,
-                s.endTime,
-                s.startTime,
+                endTime         = s.endTime?.ToString("yyyy-MM-dd HH:mm") + (s.endTime.HasValue ? " UTC" : string.Empty),
+                startTime       = s.startTime.ToString("yyyy-MM-dd HH:mm") + " UTC",
                 s.durationMinutes,
                 s.originalObjective,
             };
