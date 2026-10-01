@@ -357,13 +357,17 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
 
       final uri = ApiConstants.endpoint('api/student/submit');
 
-      final body = jsonEncode({
+      final payload = {
         'sessionGuid': widget.qrPayload,
         'answersJson': jsonEncode(_answers),
         'totalScore': _calculateScore(),
-      });
+      };
 
-      await http
+      final body = jsonEncode(payload);
+
+      print('[ExamTimerScreen] → POST /api/student/submit | payload keys: ${payload.keys.toList()} | score=${payload['totalScore']}');
+
+      final response = await http
           .post(
             uri,
             headers: {
@@ -374,12 +378,15 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
             },
             body: body,
           )
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 15));
+
+      print('[ExamTimerScreen] ← Backend submit response: HTTP ${response.statusCode} | body: ${response.body}');
 
       // Ignore the response body — any 2xx is treated as success.
-    } catch (e) {
+    } catch (e, stack) {
       // Best-effort: log but never surface this error to the student.
       debugPrint('[ExamTimerScreen] Backend submit failed (non-fatal): $e');
+      debugPrint('[ExamTimerScreen] Stack: $stack');
     }
   }
 

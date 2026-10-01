@@ -11,6 +11,7 @@ import PastPaperAnalytics from './PastPaperAnalytics';
 import QuestionBankForm from './QuestionBankForm';
 import AdminLogin from './AdminLogin';
 import PendingApprovals from './PendingApprovals';
+import StudentMarks from './StudentMarks';
 
 function App() {
   return (
@@ -33,6 +34,7 @@ function App() {
           <Route path="analytics" element={<PastPaperAnalytics />} />
           <Route path="question-bank" element={<QuestionBankForm />} />
           <Route path="approvals" element={<PendingApprovals />} />
+          <Route path="marks" element={<StudentMarks />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

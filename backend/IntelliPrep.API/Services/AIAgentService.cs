@@ -519,13 +519,7 @@ namespace IntelliPrep.API.Services
             CancellationToken cancellationToken = default)
         {
             _logger.LogInformation(
-                "[AIAgent:Agent2] GenerateStudyPlanAsync started — targetDate={Date}",
-                request.TargetExamDate.ToString("yyyy-MM-dd"));
-
-            if (request.TargetExamDate <= DateTime.UtcNow.Date)
-            {
-                return Fail<GenerateStudyPlanResult>("TargetExamDate must be in the future.");
-            }
+                "[AIAgent:Agent2] GenerateStudyPlanAsync started");
 
             string rawLlmOutput = string.Empty;
 
@@ -574,9 +568,9 @@ namespace IntelliPrep.API.Services
 
                 // ── 2. Build the massive RAG-injected system prompt ────────────
                 var systemPrompt = BuildAgent2SystemPrompt(
-                    syllabusLimits, topicProbabilities, request.TargetExamDate,
+                    syllabusLimits, topicProbabilities,
                     request.ExcludedTopics, noDataFallback);
-                var userMessage  = BuildAgent2UserMessage(request.TargetExamDate);
+                var userMessage  = BuildAgent2UserMessage();
 
                 _logger.LogDebug("[AIAgent:Agent2] System prompt built ({Len} chars). Calling Groq LLM...", systemPrompt.Length);
 
@@ -661,6 +655,17 @@ namespace IntelliPrep.API.Services
                     };
                 }
 
+                if (planDays.Count != 7 || !planDays.Select(day => day.Day).Order().SequenceEqual(Enumerable.Range(1, 7)))
+                {
+                    return new GenerateStudyPlanResult
+                    {
+                        Success = false,
+                        Message = "The generated plan must contain exactly one entry for each day from 1 through 7.",
+                        PlanDays = planDays,
+                        RawLlmOutput = rawLlmOutput
+                    };
+                }
+
                 // ── 6. Deterministic field-level validation ────────────────────
                 var validPriorities = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "High", "Medium", "Low" };
                 var invalidDays = planDays
@@ -688,7 +693,6 @@ namespace IntelliPrep.API.Services
                 var studyPlan = new StudyPlan
                 {
                     StudentId      = 0, // 0 indicates a general template
-                    TargetExamDate = request.TargetExamDate,
                     PlanDetailsJson = JsonSerializer.Serialize(planDays, _jsonOpts),
                     IsApproved     = false,   // ← HUMAN-IN-THE-LOOP: admin must approve
                     CreatedAt      = DateTime.UtcNow
@@ -1077,7 +1081,6 @@ namespace IntelliPrep.API.Services
         private static string BuildAgent2SystemPrompt(
             List<SyllabusLimit> syllabusLimits,
             List<TopicProbabilityDto> analytics,
-            DateTime targetDate,
             List<string> excludedTopics,
             string? noDataFallback = null)
         {
@@ -1118,7 +1121,7 @@ namespace IntelliPrep.API.Services
             sb.AppendLine("════════════════════════════════════════════════════════════════");
             sb.AppendLine("You are an expert A/L ICT tutor generating a personalised 7-Day Study Master Plan.");
             sb.AppendLine("You MUST generate EXACTLY 7 days of study content (Day 1 to Day 7). No more, no less.");
-            sb.AppendLine("DO NOT generate a schedule spanning to the target exam date — this is a fixed 7-day sprint only.");
+            sb.AppendLine("Generate a fixed 7-day study plan; do not schedule beyond Day 7.");
             sb.AppendLine();
 
             // ═══════════════════════════════════════════════════════════
@@ -1213,7 +1216,6 @@ namespace IntelliPrep.API.Services
             sb.AppendLine("SECTION 5 — SCHEDULE CONSTRAINTS");
             sb.AppendLine("════════════════════════════════════════════════════════════════");
             sb.AppendLine($"  Start date      : {today:yyyy-MM-dd} (today, Day 1)");
-            sb.AppendLine($"  Target exam date: {targetDate:yyyy-MM-dd} (context only — do NOT schedule to this date)");
             sb.AppendLine("  Plan length     : EXACTLY 7 days (Day 1 through Day 7 only)");
             sb.AppendLine("  Priority values : MUST be exactly one of: High | Medium | Low");
             sb.AppendLine("    • High   = topic has ≥ 15% past-paper probability");
@@ -1245,12 +1247,11 @@ namespace IntelliPrep.API.Services
             return sb.ToString();
         }
 
-        private static string BuildAgent2UserMessage(DateTime targetDate) =>
+        private static string BuildAgent2UserMessage() =>
             $"Generate a 1-Week General Master Plan for the student. " +
             $"Follow ALL rules from the system prompt — especially the EXCLUSION LIST in Section 0 and the 7-day distribution rules in Section 2. " +
             $"The plan MUST cover EXACTLY 7 days (Day 1 to Day 7). " +
             $"If only 1-2 non-excluded topics are available, break them into sub-topics spread across all 7 days — do NOT cram everything into Day 1. " +
-            $"Target exam date context (do not schedule to this date): {targetDate:yyyy-MM-dd}. " +
             $"Return ONLY the JSON array containing exactly 7 objects. Start immediately with [. No other text.";
 
         // ── Agent 2 (Researcher) prompt builders ───────────────────────────────

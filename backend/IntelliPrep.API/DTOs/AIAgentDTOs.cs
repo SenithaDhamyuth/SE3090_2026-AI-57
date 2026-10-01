@@ -178,19 +178,12 @@ namespace IntelliPrep.API.DTOs
     // ═══════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Input to Agent 2. Contains the target exam date and optional exclusions needed to
-    /// generate a general, syllabus-bounded, bi-weekly study plan template for any student.
+    /// Input to Agent 2. Contains optional exclusions used to generate a
+    /// general, syllabus-bounded, seven-day study plan template.
     /// StudentId is intentionally omitted — the plan is a general template derived from dataset weights.
     /// </summary>
     public sealed record GenerateStudyPlanRequest
     {
-        /// <summary>
-        /// ISO 8601 target exam date. The planner will create one entry per day
-        /// from today until this date, structured into bi-weekly (14-day) blocks.
-        /// </summary>
-        [JsonPropertyName("targetExamDate")]
-        public DateTime TargetExamDate { get; init; }
-
         /// <summary>
         /// Optional list of topic names the LLM must completely ignore when
         /// building the study plan. Matched case-insensitively in the prompt.
@@ -198,6 +191,15 @@ namespace IntelliPrep.API.DTOs
         /// </summary>
         [JsonPropertyName("excludedTopics")]
         public List<string> ExcludedTopics { get; init; } = [];
+    }
+
+    /// <summary>
+    /// Input to Agent 2 approval. Contains the edited JSON plan.
+    /// </summary>
+    public sealed record ApproveStudyPlanRequest
+    {
+        [JsonPropertyName("planDetailsJson")]
+        public List<StudyDayDto> PlanDetailsJson { get; init; } = [];
     }
 
     /// <summary>

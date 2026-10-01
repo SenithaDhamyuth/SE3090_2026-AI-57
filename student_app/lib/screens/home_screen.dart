@@ -837,10 +837,39 @@ class _StudyDayTile extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// TAB 2 — PROGRESS
+// TAB 2 — PROGRESS (fetches live results from backend)
 // ═══════════════════════════════════════════════════════════════════════════
 
-class _ProgressTab extends StatelessWidget {
+class _RemoteResult {
+  final String sessionGuid;
+  final String subject;
+  final int totalScore;
+  final int totalQuestions;
+  final String? endTime;
+  final int durationMinutes;
+
+  const _RemoteResult({
+    required this.sessionGuid,
+    required this.subject,
+    required this.totalScore,
+    required this.totalQuestions,
+    required this.endTime,
+    required this.durationMinutes,
+  });
+
+  factory _RemoteResult.fromJson(Map<String, dynamic> json) {
+    return _RemoteResult(
+      sessionGuid:    json['sessionGuid'] as String? ?? '',
+      subject:        json['subject'] as String? ?? 'A/L ICT',
+      totalScore:     json['totalScore'] as int? ?? 0,
+      totalQuestions: json['totalQuestions'] as int? ?? 0,
+      endTime:        json['endTime'] as String?,
+      durationMinutes: json['durationMinutes'] as int? ?? 30,
+    );
+  }
+}
+
+class _ProgressTab extends StatefulWidget {
   const _ProgressTab({
     required this.cachedExams,
     required this.isLoading,
@@ -852,15 +881,76 @@ class _ProgressTab extends StatelessWidget {
   final Future<void> Function() onRefresh;
 
   @override
+  State<_ProgressTab> createState() => _ProgressTabState();
+}
+
+class _ProgressTabState extends State<_ProgressTab> {
+  List<_RemoteResult> _remoteResults = [];
+  bool _loadingRemote = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchRemoteResults();
+  }
+
+  Future<void> _fetchRemoteResults() async {
+    setState(() { _loadingRemote = true; });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+      if (token.isEmpty) {
+        setState(() { _loadingRemote = false; });
+        return;
+      }
+      final url = ApiConstants.endpoint('api/student/my-results');
+      final response = await http.get(url, headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      }).timeout(const Duration(seconds: 10));
+
+      print('[ProgressTab] GET /api/student/my-results → ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final list = data['results'] as List<dynamic>? ?? [];
+        setState(() {
+          _remoteResults = list
+              .whereType<Map<String, dynamic>>()
+              .map((e) => _RemoteResult.fromJson(e))
+              .toList();
+          _loadingRemote = false;
+        });
+      } else {
+        print('[ProgressTab] Error response: ${response.body}');
+        setState(() { _loadingRemote = false; });
+      }
+    } catch (e, stack) {
+      print('[ProgressTab] fetchRemoteResults error: $e\n$stack');
+      setState(() { _loadingRemote = false; });
+    }
+  }
+
+  Future<void> _refresh() async {
+    await widget.onRefresh();
+    await _fetchRemoteResults();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final isLoading = widget.isLoading || _loadingRemote;
+
     return RefreshIndicator(
       color: Colors.orange,
-      onRefresh: onRefresh,
+      onRefresh: _refresh,
       child: CustomScrollView(
         slivers: [
           // ── Summary header ───────────────────────────────────────────
           SliverToBoxAdapter(
-            child: _ProgressHeader(exams: cachedExams),
+            child: _ProgressHeader(
+              remoteResults: _remoteResults,
+              cachedExams: widget.cachedExams,
+            ),
           ),
 
           // ── Section label ────────────────────────────────────────────
@@ -871,14 +961,13 @@ class _ProgressTab extends StatelessWidget {
                 children: [
                   const _SectionHeader(
                     icon: Icons.history_rounded,
-                    title: 'Past Sessions',
+                    title: 'My Results',
                     color: Colors.orange,
                   ),
                   const Spacer(),
                   Text(
                     'Pull to refresh',
-                    style: TextStyle(
-                        fontSize: 10, color: Colors.grey.shade400),
+                    style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
                   ),
                 ],
               ),
@@ -890,43 +979,45 @@ class _ProgressTab extends StatelessWidget {
             const SliverToBoxAdapter(
               child: Padding(
                 padding: EdgeInsets.symmetric(vertical: 48),
-                child: Center(
-                    child: CircularProgressIndicator(color: Colors.orange)),
+                child: Center(child: CircularProgressIndicator(color: Colors.orange)),
               ),
             )
-          else if (cachedExams.isEmpty)
+          else if (_remoteResults.isEmpty && widget.cachedExams.isEmpty)
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    vertical: 40, horizontal: 28),
+                padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 28),
                 child: Column(
                   children: [
-                    Icon(Icons.assignment_outlined,
-                        size: 52, color: Colors.grey.shade300),
+                    Icon(Icons.assignment_outlined, size: 52, color: Colors.grey.shade300),
                     const SizedBox(height: 12),
                     Text(
                       'No sessions yet',
-                      style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade500),
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.grey.shade500),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       'Scan a QR code from the Dashboard to start your first exam session.',
-                      style: TextStyle(
-                          fontSize: 12, color: Colors.grey.shade400),
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
                       textAlign: TextAlign.center,
                     ),
                   ],
                 ),
               ),
             )
-          else
+          else if (_remoteResults.isNotEmpty)
+            // Live backend results
             SliverList(
               delegate: SliverChildBuilderDelegate(
-                (_, i) => _SessionTile(exam: cachedExams[i]),
-                childCount: cachedExams.length,
+                (_, i) => _RemoteResultTile(result: _remoteResults[i]),
+                childCount: _remoteResults.length,
+              ),
+            )
+          else
+            // Fallback to SQLite cached exams
+            SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (_, i) => _SessionTile(exam: widget.cachedExams[i]),
+                childCount: widget.cachedExams.length,
               ),
             ),
 
@@ -937,26 +1028,153 @@ class _ProgressTab extends StatelessWidget {
   }
 }
 
-class _ProgressHeader extends StatelessWidget {
-  const _ProgressHeader({required this.exams});
+// ── Remote result tile ─────────────────────────────────────────────────────
+class _RemoteResultTile extends StatelessWidget {
+  const _RemoteResultTile({required this.result});
+  final _RemoteResult result;
 
-  final List<CachedExam> exams;
+  double get _pct => result.totalQuestions == 0
+      ? 0
+      : result.totalScore / result.totalQuestions;
 
-  int get _submitted =>
-      exams.where((e) => e.status == 'submitted').length;
-  int get _inProgress =>
-      exams.where((e) => e.status == 'in_progress').length;
-  double get _avgScore {
-    final scored = exams
-        .where((e) => e.status == 'submitted' && e.totalScore > 0)
-        .toList();
-    if (scored.isEmpty) return 0;
-    return scored.map((e) => e.totalScore).reduce((a, b) => a + b) /
-        scored.length;
+  Color get _scoreColor {
+    if (_pct >= 0.75) return Colors.green;
+    if (_pct >= 0.50) return Colors.orange;
+    return Colors.red;
   }
 
   @override
   Widget build(BuildContext context) {
+    final pctLabel = result.totalQuestions == 0
+        ? '—'
+        : '${(_pct * 100).round()}%';
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(6),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: Colors.orange.withAlpha(20),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.laptop_mac_rounded, color: Colors.orange, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  result.subject,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1A1A1A),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  result.endTime ?? 'Submitted',
+                  style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
+                ),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: _scoreColor.withAlpha(25),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: _scoreColor.withAlpha(60)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.emoji_events_rounded, color: _scoreColor, size: 11),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${result.totalScore}/${result.totalQuestions}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: _scoreColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                pctLabel,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: _scoreColor,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
+class _ProgressHeader extends StatelessWidget {
+  const _ProgressHeader({
+    required this.remoteResults,
+    required this.cachedExams,
+  });
+
+  final List<_RemoteResult> remoteResults;
+  final List<CachedExam> cachedExams;
+
+  int get _totalSubmitted => remoteResults.isNotEmpty
+      ? remoteResults.length
+      : cachedExams.where((e) => e.status == 'submitted').length;
+
+  double get _avgScore {
+    if (remoteResults.isNotEmpty) {
+      final scored = remoteResults.where((r) => r.totalQuestions > 0).toList();
+      if (scored.isEmpty) return 0;
+      return scored.map((r) => r.totalScore / r.totalQuestions * 100).reduce((a, b) => a + b) / scored.length;
+    }
+    final scored = cachedExams.where((e) => e.status == 'submitted' && e.totalScore > 0).toList();
+    if (scored.isEmpty) return 0;
+    return scored.map((e) => e.totalScore.toDouble()).reduce((a, b) => a + b) / scored.length;
+  }
+
+  int get _passCount => remoteResults.isNotEmpty
+      ? remoteResults.where((r) => r.totalQuestions > 0 && r.totalScore / r.totalQuestions >= 0.5).length
+      : cachedExams.where((e) => e.status == 'submitted').length;
+
+  @override
+  Widget build(BuildContext context) {
+    final avgLabel = remoteResults.isEmpty && cachedExams.isEmpty
+        ? '—'
+        : '${_avgScore.toStringAsFixed(0)}%';
+    final passLabel = _totalSubmitted == 0 ? '—' : '$_passCount/$_totalSubmitted';
+
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 22, 20, 22),
       decoration: const BoxDecoration(
@@ -970,7 +1188,7 @@ class _ProgressHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Your Progress',
+            'My Results',
             style: TextStyle(
               color: Colors.white,
               fontSize: 18,
@@ -985,17 +1203,11 @@ class _ProgressHeader extends StatelessWidget {
           const SizedBox(height: 16),
           Row(
             children: [
-              _ProgressStat(
-                  label: 'Submitted', value: '$_submitted'),
+              _ProgressStat(label: 'Completed', value: '$_totalSubmitted'),
               const SizedBox(width: 12),
-              _ProgressStat(
-                  label: 'In Progress', value: '$_inProgress'),
+              _ProgressStat(label: 'Avg Score', value: avgLabel),
               const SizedBox(width: 12),
-              _ProgressStat(
-                  label: 'Avg Score',
-                  value: exams.isEmpty
-                      ? '—'
-                      : '${_avgScore.toStringAsFixed(1)} pts'),
+              _ProgressStat(label: 'Passed', value: passLabel),
             ],
           ),
         ],

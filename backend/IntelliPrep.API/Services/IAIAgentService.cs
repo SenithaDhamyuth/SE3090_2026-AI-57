@@ -60,12 +60,12 @@ namespace IntelliPrep.API.Services
         ///
         /// Retrieves <c>SyllabusLimits</c> and <c>PastPaperAnalytics</c> from the database
         /// and injects them into a structured system prompt. The Groq LLM then generates a
-        /// bi-weekly generalized study schedule from today until <paramref name="request"/>.TargetExamDate.
+        /// generalized seven-day study schedule.
         ///
         /// <b>HUMAN-IN-THE-LOOP</b>: The persisted <c>StudyPlan</c> row is always created with
         /// <c>IsApproved = false</c>. An admin must explicitly approve it before students see it.
         /// </summary>
-        /// <param name="request">Input containing the exam target date and optional excluded topics.</param>
+        /// <param name="request">Input containing optional excluded topics.</param>
         /// <param name="cancellationToken">Propagated to all async I/O operations.</param>
         /// <returns>
         /// A <see cref="GenerateStudyPlanResult"/> with the new plan's database ID,

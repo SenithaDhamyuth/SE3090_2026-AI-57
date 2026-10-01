@@ -120,20 +120,74 @@ namespace IntelliPrep.API.Services
                 seedQuestions.Count > 0 ? seedQuestions[0].Source : "none");
 
             // ── Step 2: Build grounded prompt ────────────────────────────────
-            var prompt = BuildGroundedPrompt(input, seedQuestions, syllabusLimits);
+            // ── Step 3: Call Groq LLM — with BATCHING for large counts ───────
+            const int batchSize = 10;
+            var totalCount = input.RequestedQuestionCount;
+            var allQuestions = new List<SynthesizedMcqItem>();
 
-            // ── Step 3: Call Groq LLM ────────────────────────────────────────
-            var rawJson = await CallGroqForMcqsAsync(prompt, input.Subject, input.RequestedQuestionCount);
+            if (totalCount <= batchSize)
+            {
+                // Small request — single call
+                var prompt  = BuildGroundedPrompt(input, seedQuestions, syllabusLimits);
+                var rawJson = await CallGroqForMcqsAsync(prompt, input.Subject, totalCount);
+                allQuestions.AddRange(ParseMcqJson(rawJson, input.Subject));
+            }
+            else
+            {
+                // Large request — split into batches to avoid token exhaustion
+                var batches = (int)Math.Ceiling((double)totalCount / batchSize);
+                _logger.LogInformation(
+                    "[Agent3:ExamSynthesizer] Large count {Total} detected — splitting into {Batches} batch(es) of {Size}.",
+                    totalCount, batches, batchSize);
+
+                int remaining = totalCount;
+                for (int b = 0; b < batches; b++)
+                {
+                    int currentBatchSize = Math.Min(remaining, batchSize);
+                    remaining -= currentBatchSize;
+
+                    _logger.LogInformation(
+                        "[Agent3:ExamSynthesizer] Batch {Num}/{Total} — generating {Count} question(s).",
+                        b + 1, batches, currentBatchSize);
+
+                    // Create a sub-input for this batch
+                    var batchInput = new SynthesizerInput
+                    {
+                        Subject                = input.Subject,
+                        Objective              = input.Objective,
+                        RequestedQuestionCount = currentBatchSize,
+                        TopicDistribution      = input.TopicDistribution,
+                    };
+
+                    var prompt  = BuildGroundedPrompt(batchInput, seedQuestions, syllabusLimits);
+                    var rawJson = await CallGroqForMcqsAsync(prompt, input.Subject, currentBatchSize);
+                    var batchQuestions = ParseMcqJson(rawJson, input.Subject);
+
+                    allQuestions.AddRange(batchQuestions);
+
+                    _logger.LogInformation(
+                        "[Agent3:ExamSynthesizer] Batch {Num} yielded {Count} question(s). Running total: {RunTotal}.",
+                        b + 1, batchQuestions.Count, allQuestions.Count);
+
+                    // Small delay between batches to avoid rate-limiting
+                    if (b < batches - 1)
+                        await Task.Delay(500);
+                }
+            }
+
+            _logger.LogInformation(
+                "[Agent3:ExamSynthesizer] Aggregated {Total} MCQ(s) across all batch(es).", allQuestions.Count);
 
             // ── Step 4: Parse to output contract ────────────────────────────
+            var aggregatedJson = System.Text.Json.JsonSerializer.Serialize(allQuestions, _jsonOpts);
             return new SynthesizerOutput
             {
                 Subject               = input.Subject,
                 Objective             = input.Objective,
                 RequestedQuestionCount = input.RequestedQuestionCount,
                 TopicDistribution     = input.TopicDistribution,
-                RawLlmJson            = rawJson,
-                Questions             = ParseMcqJson(rawJson, input.Subject)
+                RawLlmJson            = aggregatedJson,
+                Questions             = allQuestions
             };
         }
 

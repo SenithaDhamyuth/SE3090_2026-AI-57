@@ -200,8 +200,6 @@ public class AIAgentController : ControllerBase
     /// Sample request body:
     /// <code>
     /// {
-    ///   "studentId": 7,
-    ///   "targetExamDate": "2026-12-15T00:00:00Z",
     ///   "excludedTopics": ["Boolean Algebra", "File Handling"]
     /// }
     /// </code>
@@ -219,13 +217,10 @@ public class AIAgentController : ControllerBase
         if (!ModelState.IsValid)
             return ValidationProblem(ModelState);
 
-        if (request.TargetExamDate <= DateTime.UtcNow.Date)
-            return BadRequest(new { message = "TargetExamDate must be a future date." });
-
         var adminEmail = User.FindFirstValue(ClaimTypes.Email) ?? "unknown-admin";
         _logger.LogInformation(
-            "[AIAgentController] Admin '{Admin}' triggered GeneratePlan for target={Date}.",
-            adminEmail, request.TargetExamDate.ToString("yyyy-MM-dd"));
+            "[AIAgentController] Admin '{Admin}' triggered GeneratePlan.",
+            adminEmail);
 
         var result = await _agentService.GenerateStudyPlanAsync(request, cancellationToken);
 
@@ -262,10 +257,27 @@ public class AIAgentController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ApprovePlan(
         [FromRoute] int planId,
+        [FromBody] ApproveStudyPlanRequest request,
         CancellationToken cancellationToken)
     {
         if (planId <= 0)
             return BadRequest(new { message = "planId must be a positive integer." });
+
+        if (request.PlanDetailsJson == null || request.PlanDetailsJson.Count != 7)
+            return BadRequest(new { message = "planDetailsJson must contain exactly 7 study days." });
+
+        var validPriorities = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "High", "Medium", "Low" };
+        var invalidDays = request.PlanDetailsJson
+            .Select((day, index) => new { day, expectedDay = index + 1 })
+            .Where(item => item.day is null
+                || item.day.Day != item.expectedDay
+                || string.IsNullOrWhiteSpace(item.day.Topic)
+                || string.IsNullOrWhiteSpace(item.day.Subtopics)
+                || !validPriorities.Contains(item.day.Priority))
+            .ToList();
+
+        if (invalidDays.Count > 0)
+            return BadRequest(new { message = "Each day must have its expected day number, topic, subtopics, and a valid priority (High, Medium, or Low)." });
 
         var plan = await _db.StudyPlans.FindAsync([planId], cancellationToken);
 
@@ -282,9 +294,10 @@ public class AIAgentController : ControllerBase
             });
         }
 
-        // ── Human-in-the-loop: stamp who approved and when ──────────────
+        // ── Human-in-the-loop: save edited plan and stamp who approved ──────────────
         var adminEmail = User.FindFirstValue(ClaimTypes.Email) ?? "unknown-admin";
 
+        plan.PlanDetailsJson = System.Text.Json.JsonSerializer.Serialize(request.PlanDetailsJson, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase });
         plan.IsApproved      = true;
         plan.ApprovedByEmail = adminEmail;
         plan.ApprovedAt      = DateTime.UtcNow;
@@ -350,7 +363,6 @@ public class AIAgentController : ControllerBase
             {
                 p.Id,
                 p.StudentId,
-                targetExamDate = p.TargetExamDate.ToString("yyyy-MM-dd"),
                 p.IsApproved,
                 p.ApprovedByEmail,
                 approvedAt = p.ApprovedAt.HasValue
@@ -397,13 +409,35 @@ public class AIAgentController : ControllerBase
         {
             plan.Id,
             plan.StudentId,
-            targetExamDate  = plan.TargetExamDate.ToString("yyyy-MM-dd"),
             plan.IsApproved,
             plan.ApprovedByEmail,
             approvedAt      = plan.ApprovedAt?.ToString("yyyy-MM-dd HH:mm") + (plan.ApprovedAt.HasValue ? " UTC" : string.Empty),
             createdAt       = plan.CreatedAt.ToString("yyyy-MM-dd HH:mm") + " UTC",
             planDetailsJson = plan.PlanDetailsJson   // full schedule for rendering
         });
+    }
+
+    /// <summary>Rejects and deletes a pending study plan.</summary>
+    [HttpDelete("plans/{planId:int}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> DeletePendingPlan(
+        [FromRoute] int planId,
+        CancellationToken cancellationToken)
+    {
+        var plan = await _db.StudyPlans.FindAsync([planId], cancellationToken);
+        if (plan is null)
+            return NotFound(new { message = $"Study plan with Id = {planId} was not found." });
+
+        _db.StudyPlans.Remove(plan);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "[AIAgentController] ✅ Study plan Id={PlanId} deleted by admin.",
+            planId);
+
+        return Ok(new { message = $"Study plan #{planId} has been deleted successfully." });
     }
 
     // ═══════════════════════════════════════════════════════════════════════

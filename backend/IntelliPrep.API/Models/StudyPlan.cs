@@ -19,10 +19,6 @@ namespace IntelliPrep.API.Models
         [Required]
         public int StudentId { get; set; }
 
-        /// <summary>The date the student wants to sit their A/L ICT exam.</summary>
-        [Required]
-        public DateTime TargetExamDate { get; set; }
-
         /// <summary>
         /// Serialised JSON array produced by Agent 2, e.g.:
         /// [{"day":1,"date":"2026-09-26","topic":"Logic Gates","subtopics":"...","priority":"High"}]
@@ -46,3 +42,4 @@ namespace IntelliPrep.API.Models
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 }
+

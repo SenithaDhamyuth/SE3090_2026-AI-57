@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Brain, CalendarDays, CheckCircle2, Clock, AlertCircle,
+  Brain, CheckCircle2, Clock, AlertCircle,
   RefreshCw, X, Sparkles, User, ShieldCheck,
   ClipboardList, Loader2, Eye, ListChecks,
   BookOpen, ChevronRight, ChevronLeft, Ban,
   Zap, Layers, Network, Database, Code2, Globe, Cpu,
-  BarChart3, FlaskConical, Wifi, Monitor, Download
+  BarChart3, FlaskConical, Wifi, Monitor, Download, Trash2
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -217,11 +217,6 @@ function PlanTimeline({ days }) {
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-bold ${cfg.badge}`}>
                         {cfg.label}
                       </span>
-                      {isLast && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-700 border border-zinc-200 text-[10px] font-bold">
-                          <CheckCircle2 size={9} /> Exam Day
-                        </span>
-                      )}
                     </div>
                     <p className="mt-1.5 text-[13px] font-bold text-zinc-800 leading-snug">{d.topic}</p>
                     {d.subtopics && (
@@ -240,24 +235,16 @@ function PlanTimeline({ days }) {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // GENERATE PLAN MODAL — 3-step wizard
-//   Step 1: Exam date
+//   Step 1: Plan options
 //   Step 2: Topic exclusion checkboxes (Grade 12 / Grade 13)
 //   Step 3: Generated plan preview (timeline)
 // ═══════════════════════════════════════════════════════════════════════════════
 function GeneratePlanModal({ onClose, onSuccess }) {
   const [step, setStep]                   = useState(1);   // 1 | 2 | 3
-  const [form, setForm]                   = useState({ targetExamDate: '' });
   const [excludedTopics, setExcludedTopics] = useState([]);
   const [loading, setLoading]             = useState(false);
   const [alert, setAlert]                 = useState(null);
   const [planResult, setPlanResult]       = useState(null); // { planDays, planId, message }
-
-  const minDate = new Date();
-  minDate.setDate(minDate.getDate() + 1);
-  const minDateStr = minDate.toISOString().split('T')[0];
-
-  const handleChange = e =>
-    setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
 
   const toggleTopic = (label) =>
     setExcludedTopics(prev =>
@@ -268,10 +255,6 @@ function GeneratePlanModal({ onClose, onSuccess }) {
   const handleStep1Next = e => {
     e.preventDefault();
     setAlert(null);
-    if (!form.targetExamDate) {
-      setAlert({ type: 'error', text: 'Please select a target exam date.' });
-      return;
-    }
     setStep(2);
   };
 
@@ -283,7 +266,6 @@ function GeneratePlanModal({ onClose, onSuccess }) {
       const res = await authFetch(`${API_BASE}/api/aiagent/generate-plan`, {
         method: 'POST',
         body: JSON.stringify({
-          targetExamDate: new Date(form.targetExamDate).toISOString(),
           excludedTopics,
         }),
       });
@@ -309,7 +291,7 @@ function GeneratePlanModal({ onClose, onSuccess }) {
   };
 
   // ── Step labels ───────────────────────────────────────────────────────────
-  const stepLabels = ['Details', 'Exclude Topics', 'Preview'];
+  const stepLabels = ['Plan Options', 'Exclude Topics', 'Preview'];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -380,31 +362,9 @@ function GeneratePlanModal({ onClose, onSuccess }) {
               <Brain size={14} className="shrink-0 mt-0.5 text-orange-600" />
               <span>
                 The AI retrieves syllabus boundaries and past-paper probabilities from the database,
-                then generates a general bi-weekly study template. 
+                then generates a general seven-day study plan.
                 You can <strong>exclude topics</strong> if you want to skip certain areas.
               </span>
-            </div>
-
-            {/* Target exam date */}
-            <div>
-              <label className="block text-sm font-medium text-zinc-700 mb-1.5" htmlFor="targetExamDate">
-                Target Exam Date <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <CalendarDays size={15} className="text-zinc-400" />
-                </div>
-                <input
-                  type="date"
-                  id="targetExamDate"
-                  name="targetExamDate"
-                  min={minDateStr}
-                  required
-                  value={form.targetExamDate}
-                  onChange={handleChange}
-                  className="block w-full pl-9 pr-3 py-2 border border-zinc-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm text-zinc-900 outline-none transition-colors"
-                />
-              </div>
             </div>
 
             {/* Actions */}
@@ -594,8 +554,9 @@ function GeneratePlanModal({ onClose, onSuccess }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // PLAN DETAIL MODAL
 // ═══════════════════════════════════════════════════════════════════════════════
-function PlanDetailModal({ planId, onClose }) {
+function PlanDetailModal({ planId, onClose, onApprove, onReject, approving, deleting }) {
   const [plan, setPlan]     = useState(null);
+  const [days, setDays]     = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]   = useState(null);
   const [view, setView]     = useState('table'); // 'timeline' | 'table'
@@ -613,7 +574,20 @@ function PlanDetailModal({ planId, onClose }) {
           throw new Error(d?.message || `Server error ${res.status}`);
         }
         const data = await res.json();
-        if (!cancelled) setPlan(data);
+        if (!cancelled) {
+          setPlan(data);
+          const parsedDays = typeof data.planDetailsJson === 'string'
+            ? JSON.parse(data.planDetailsJson)
+            : data.planDetailsJson;
+          if (!Array.isArray(parsedDays)) throw new Error('The saved plan is not a JSON array.');
+          setDays(parsedDays.map((day, index) => ({
+            day: day?.day ?? index + 1,
+            date: typeof day?.date === 'string' ? day.date : '',
+            topic: typeof day?.topic === 'string' ? day.topic : '',
+            subtopics: typeof day?.subtopics === 'string' ? day.subtopics : '',
+            priority: typeof day?.priority === 'string' ? day.priority : 'Medium',
+          })));
+        }
       } catch (err) {
         if (!cancelled) setError(err.message);
       } finally {
@@ -644,10 +618,13 @@ function PlanDetailModal({ planId, onClose }) {
     }
   };
 
-  let days = [];
-  if (plan?.planDetailsJson) {
-    try { days = JSON.parse(plan.planDetailsJson); } catch { days = []; }
-  }
+  const isPending = plan && !plan.isApproved;
+  const canApprove = days.length === 7 && days.every(day =>
+    day.topic.trim() && day.subtopics.trim() && ['High', 'Medium', 'Low'].includes(day.priority)
+  );
+  const updateDay = (index, field, value) => setDays(current =>
+    current.map((day, dayIndex) => dayIndex === index ? { ...day, [field]: value } : day)
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -657,13 +634,13 @@ function PlanDetailModal({ planId, onClose }) {
         <div className="px-6 py-4 border-b border-zinc-100 bg-zinc-50/60 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <ListChecks size={17} className="text-orange-600" />
-            <span className="font-bold text-zinc-800 text-[15px]">
-              Study Plan #{planId} — Schedule
+              <span className="font-bold text-zinc-800 text-[15px]">
+              Study Plan #{planId} — {isPending ? 'Review and edit' : 'Schedule'}
             </span>
           </div>
           <div className="flex items-center gap-2">
             {/* Download PDF button */}
-            {!loading && days.length > 0 && view === 'table' && (
+            {!loading && !isPending && days.length > 0 && view === 'table' && (
               <button
                 onClick={handleExportPDF}
                 disabled={exporting}
@@ -674,20 +651,21 @@ function PlanDetailModal({ planId, onClose }) {
               </button>
             )}
 
-            {/* View toggle */}
-            <div className="flex items-center gap-1 bg-zinc-100 rounded-lg p-0.5 ml-2">
-              {[['timeline', 'Timeline'], ['table', 'Table']].map(([key, label]) => (
-                <button
-                  key={key}
-                  onClick={() => setView(key)}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
-                    view === key ? 'bg-white text-zinc-800 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            {!isPending && (
+              <div className="flex items-center gap-1 bg-zinc-100 rounded-lg p-0.5 ml-2">
+                {[['timeline', 'Timeline'], ['table', 'Table']].map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setView(key)}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                      view === key ? 'bg-white text-zinc-800 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
             <button
               onClick={onClose}
               className="p-1.5 rounded-lg border border-zinc-200 text-zinc-400 hover:text-zinc-700 hover:border-zinc-300 transition-all ml-1"
@@ -706,15 +684,62 @@ function PlanDetailModal({ planId, onClose }) {
             </div>
           )}
           {error && <Alert type="error" text={error} />}
+          {!loading && !error && isPending && days.length !== 7 && (
+            <Alert type="error" text={`This plan contains ${days.length} day(s). Exactly 7 days are required before approval.`} />
+          )}
           {!loading && !error && days.length === 0 && (
             <p className="text-sm text-zinc-400 text-center py-10">No schedule data available.</p>
           )}
 
-          {!loading && days.length > 0 && view === 'timeline' && (
-            <PlanTimeline days={days} />
+          {!loading && !error && isPending && days.length > 0 && (
+            <div className="space-y-3">
+              {days.map((day, index) => (
+                <section key={index} className="rounded-lg border border-zinc-200 bg-white p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-orange-100 text-xs font-bold text-orange-700">
+                      {day.day}
+                    </span>
+                    <span className="text-xs text-zinc-400">{day.date || `Day ${day.day}`}</span>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="text-xs font-semibold text-zinc-600">
+                      Topic
+                      <input
+                        value={day.topic}
+                        onChange={event => updateDay(index, 'topic', event.target.value)}
+                        className="mt-1 block w-full rounded-md border border-zinc-300 px-3 py-2 text-sm font-normal text-zinc-800 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                      />
+                    </label>
+                    <label className="text-xs font-semibold text-zinc-600">
+                      Priority
+                      <select
+                        value={day.priority}
+                        onChange={event => updateDay(index, 'priority', event.target.value)}
+                        className="mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-normal text-zinc-800 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                      >
+                        {['High', 'Medium', 'Low'].map(priority => <option key={priority}>{priority}</option>)}
+                      </select>
+                    </label>
+                    <label className="text-xs font-semibold text-zinc-600 sm:col-span-2">
+                      Topics and study activities
+                      <textarea
+                        rows={3}
+                        value={day.subtopics}
+                        onChange={event => updateDay(index, 'subtopics', event.target.value)}
+                        className="mt-1 block w-full resize-y rounded-md border border-zinc-300 px-3 py-2 text-sm font-normal leading-relaxed text-zinc-800 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                      />
+                    </label>
+                  </div>
+                </section>
+              ))}
+            </div>
           )}
 
-          {!loading && days.length > 0 && view === 'table' && (
+          {!loading && days.length > 0 && view === 'timeline' && (
+            !isPending && <PlanTimeline days={days} />
+          )}
+
+          {!loading && days.length > 0 && !isPending && view === 'table' && (
             <div ref={tableRef} className="overflow-x-auto rounded-lg border border-zinc-200 bg-white">
               <table className="w-full text-left">
                 <thead>
@@ -745,6 +770,26 @@ function PlanDetailModal({ planId, onClose }) {
             </div>
           )}
         </div>
+        {isPending && (
+          <div className="flex items-center justify-between gap-3 border-t border-zinc-100 bg-zinc-50/60 px-5 py-4">
+            <button
+              onClick={() => onReject(planId)}
+              disabled={deleting || approving}
+              className="inline-flex items-center gap-2 rounded-md border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+              Reject / Delete
+            </button>
+            <button
+              onClick={() => onApprove(planId, days)}
+              disabled={!canApprove || approving || deleting}
+              className="inline-flex items-center gap-2 rounded-md bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {approving ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
+              {approving ? 'Approving…' : 'Approve Plan'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -759,6 +804,7 @@ export default function StudyPlanManager() {
   const [pageAlert, setPageAlert]       = useState(null);
   const [filter, setFilter]             = useState('all');
   const [approvingId, setApprovingId]   = useState(null);
+  const [deletingId, setDeletingId]     = useState(null);
   const [showGenModal, setShowGenModal] = useState(false);
   const [detailPlanId, setDetailPlanId] = useState(null);
 
@@ -789,11 +835,14 @@ export default function StudyPlanManager() {
     return () => controller.abort();
   }, [fetchPlans]);
 
-  const handleApprove = async (planId) => {
+  const handleApprove = async (planId, planDays) => {
     setApprovingId(planId);
     setPageAlert(null);
     try {
-      const res = await authFetch(`${API_BASE}/api/aiagent/approve-plan/${planId}`, { method: 'PUT' });
+      const res = await authFetch(`${API_BASE}/api/aiagent/approve-plan/${planId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ planDetailsJson: planDays }),
+      });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.message || `Server error ${res.status}`);
       setPlans(prev =>
@@ -803,11 +852,34 @@ export default function StudyPlanManager() {
             : p
         )
       );
+      setDetailPlanId(null);
       setPageAlert({ type: 'success', text: `Plan #${planId} approved. The student can now view their schedule.` });
     } catch (err) {
       setPageAlert({ type: 'error', text: err.message });
     } finally {
       setApprovingId(null);
+    }
+  };
+
+  const handleReject = async (planId) => {
+    const plan = plans.find(p => p.id === planId);
+    const label = plan?.isApproved ? 'approved' : 'pending';
+    if (!window.confirm(`Delete this ${label} study plan #${planId}? This cannot be undone.`)) return;
+    setDeletingId(planId);
+    setPageAlert(null);
+    try {
+      const res = await authFetch(`${API_BASE}/api/aiagent/plans/${planId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.message || `Server error ${res.status}`);
+      }
+      setPlans(current => current.filter(p => p.id !== planId));
+      setDetailPlanId(null);
+      setPageAlert({ type: 'success', text: `Plan #${planId} was deleted successfully.` });
+    } catch (err) {
+      setPageAlert({ type: 'error', text: err.message });
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -835,7 +907,14 @@ export default function StudyPlanManager() {
         />
       )}
       {detailPlanId && (
-        <PlanDetailModal planId={detailPlanId} onClose={() => setDetailPlanId(null)} />
+        <PlanDetailModal
+          planId={detailPlanId}
+          onClose={() => setDetailPlanId(null)}
+          onApprove={handleApprove}
+          onReject={handleReject}
+          approving={approvingId === detailPlanId}
+          deleting={deletingId === detailPlanId}
+        />
       )}
 
       {/* ── Page header ── */}
@@ -942,7 +1021,7 @@ export default function StudyPlanManager() {
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-zinc-100 bg-zinc-50/50">
-                  {['Plan ID', 'Student ID', 'Target Exam Date', 'Created', 'Status', 'Approved By', 'Actions'].map(col => (
+                  {['Plan ID', 'Student', 'Created', 'Status', 'Approved By', 'Actions'].map(col => (
                     <th key={col} className="px-5 py-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-400 whitespace-nowrap">
                       {col}
                     </th>
@@ -960,15 +1039,14 @@ export default function StudyPlanManager() {
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-2">
                           <div className="w-6 h-6 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
-                            {plan.studentId}
+                            {plan.studentId === 0 ? '🌍' : (plan.studentId || '?')}
                           </div>
-                          <span className="text-[12px] text-zinc-600 font-medium">Student #{plan.studentId}</span>
-                        </div>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center gap-1.5 text-[12px] text-zinc-700 font-medium">
-                          <CalendarDays size={12} className="text-zinc-400" />
-                          {plan.targetExamDate}
+                          <span className="text-[12px] text-zinc-600 font-medium">
+                            {plan.studentId === 0
+                              ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200 text-[11px] font-bold">🌍 Global Plan (All Students)</span>
+                              : `Student #${plan.studentId}`
+                            }
+                          </span>
                         </div>
                       </td>
                       <td className="px-5 py-3.5">
@@ -1002,18 +1080,25 @@ export default function StudyPlanManager() {
                             <Eye size={12} /> View
                           </button>
                           {!plan.isApproved && (
-                            <button
-                              onClick={() => handleApprove(plan.id)}
-                              disabled={isApprovingThis}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-zinc-600 hover:bg-zinc-700 text-white text-[11px] font-bold shadow-sm disabled:opacity-60 disabled:cursor-not-allowed transition-all active:scale-95"
-                            >
-                              {isApprovingThis ? (
-                                <><Loader2 size={12} className="animate-spin" /> Approving…</>
-                              ) : (
-                                <><ShieldCheck size={12} /> Review &amp; Approve</>
-                              )}
-                            </button>
+                            <>
+                              <button
+                                onClick={() => setDetailPlanId(plan.id)}
+                                disabled={isApprovingThis || deletingId === plan.id}
+                                className="inline-flex items-center gap-1.5 rounded-md bg-orange-600 px-3 py-1.5 text-[11px] font-bold text-white shadow-sm transition-all hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                <ShieldCheck size={12} /> Review &amp; Edit
+                              </button>
+                            </>
                           )}
+                          {/* Delete button available for ALL plans — needed to remove old Global Plans */}
+                          <button
+                            onClick={() => handleReject(plan.id)}
+                            disabled={isApprovingThis || deletingId === plan.id}
+                            title={plan.isApproved ? 'Delete approved plan' : 'Reject and delete pending plan'}
+                            className="inline-flex items-center justify-center rounded-md border border-red-200 bg-white p-1.5 text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {deletingId === plan.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                          </button>
                         </div>
                       </td>
                     </tr>

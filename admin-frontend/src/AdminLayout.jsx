@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Cpu, Home, ClipboardList, Users, Brain, Menu, X, BarChart2, Database, ShieldCheck, LogOut } from 'lucide-react';
+import { Cpu, Home, ClipboardList, Users, Brain, Menu, X, BarChart2, Database, ShieldCheck, LogOut, Trophy } from 'lucide-react';
 
 const NAV = [
   { to: '/', icon: Home, label: 'Dashboard' },
@@ -10,6 +10,7 @@ const NAV = [
   { to: '/analytics', icon: BarChart2, label: 'Past Paper Analytics' },
   { to: '/question-bank', icon: Database, label: 'Question Bank' },
   { to: '/approvals', icon: ShieldCheck, label: 'Pending Approvals', badge: true },
+  { to: '/marks', icon: Trophy, label: 'Student Marks' },
 ];
 
 export default function AdminLayout() {

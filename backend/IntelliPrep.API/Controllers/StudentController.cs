@@ -41,7 +41,7 @@ public class StudentController : ControllerBase
         // Fetch the latest approved study plan for this student
         var plan = await _db.StudyPlans
             .AsNoTracking()
-            .Where(p => p.StudentId == studentId && p.IsApproved)
+            .Where(p => p.IsApproved && (p.StudentId == studentId || p.StudentId == 0))
             .OrderByDescending(p => p.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -58,7 +58,6 @@ public class StudentController : ControllerBase
             return Ok(new
             {
                 planId = plan.Id,
-                targetExamDate = plan.TargetExamDate.ToString("yyyy-MM-dd"),
                 approvedAt = plan.ApprovedAt,
                 schedule = planDetails
             });
@@ -68,6 +67,67 @@ public class StudentController : ControllerBase
             _logger.LogError(ex, "[StudentController] Failed to deserialize PlanDetailsJson for plan {Id}", plan.Id);
             return StatusCode(500, new { message = "Internal error parsing study plan details." });
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // GET /api/student/my-results
+    //
+    // Called by Flutter "Progress" tab to fetch the student's completed exams.
+    // Returns sessions where StudentId matches (from QR field) OR where the
+    // session GUID exists in the request.  Since Flutter submits anonymously,
+    // we return any Completed session associated with the student's JWT userId.
+    // ─────────────────────────────────────────────────────────────────────────
+    [HttpGet("my-results")]
+    [Authorize(Roles = "Student")]
+    public async Task<IActionResult> GetMyResults(CancellationToken cancellationToken)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdClaim, out int studentId))
+            return Unauthorized(new { message = "Invalid student token." });
+
+        // We match on StudentProfileId since that is stamped when session is created
+        var sessions = await _db.ExamSessions
+            .AsNoTracking()
+            .Where(s => s.Status == "Completed" && s.StudentProfileId == studentId)
+            .OrderByDescending(s => s.EndTime)
+            .Select(s => new
+            {
+                sessionGuid     = s.SessionId,
+                subject         = s.Subject,
+                totalScore      = s.TotalScore,
+                endTime         = s.EndTime != null ? s.EndTime.Value.ToString("yyyy-MM-dd HH:mm") + " UTC" : null,
+                durationMinutes = s.DurationMinutes,
+                questionsJson   = s.QuestionsJson,
+            })
+            .ToListAsync(cancellationToken);
+
+        // Calculate question count per session
+        var results = sessions.Select(s =>
+        {
+            int qCount = 0;
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(s.questionsJson) && s.questionsJson != "[]")
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(s.questionsJson);
+                    if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+                        qCount = doc.RootElement.GetArrayLength();
+                }
+            }
+            catch { /* ignore */ }
+
+            return new
+            {
+                s.sessionGuid,
+                s.subject,
+                s.totalScore,
+                totalQuestions = qCount,
+                s.endTime,
+                s.durationMinutes,
+            };
+        }).ToList();
+
+        return Ok(new { results });
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -245,3 +305,89 @@ public class StudentSubmitDto
     /// <summary>Score calculated client-side.</summary>
     public int TotalScore { get; set; }
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// ADMIN MARKS CONTROLLER
+// GET /api/admin/marks
+// Returns all completed exam sessions for the admin Student Marks dashboard.
+// ─────────────────────────────────────────────────────────────────────────
+[ApiController]
+[Route("api/admin")]
+[Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+public class AdminMarksController : ControllerBase
+{
+    private readonly ApplicationDbContext _db;
+    private readonly ILogger<AdminMarksController> _logger;
+
+    public AdminMarksController(ApplicationDbContext db, ILogger<AdminMarksController> logger)
+    {
+        _db = db;
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// Returns all completed exam sessions with student info for the admin marks dashboard.
+    /// </summary>
+    [HttpGet("marks")]
+    public async Task<IActionResult> GetStudentMarks(CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("[AdminMarksController] Fetching all completed exam sessions.");
+
+        var sessions = await _db.ExamSessions
+            .AsNoTracking()
+            .Where(s => s.Status == "Completed")
+            .OrderByDescending(s => s.EndTime)
+            .Select(s => new
+            {
+                sessionId       = s.Id,
+                sessionGuid     = s.SessionId,
+                studentId       = s.StudentId,
+                subject         = s.Subject,
+                totalScore      = s.TotalScore,
+                totalQuestions  = 0, // calculated below
+                endTime         = s.EndTime != null ? s.EndTime.Value.ToString("yyyy-MM-dd HH:mm") + " UTC" : null,
+                startTime       = s.StartTime.ToString("yyyy-MM-dd HH:mm") + " UTC",
+                durationMinutes = s.DurationMinutes,
+                questionsJson   = s.QuestionsJson,
+                originalObjective = s.OriginalObjective,
+            })
+            .ToListAsync(cancellationToken);
+
+        // Count questions from the JSON
+        var result = sessions.Select(s =>
+        {
+            int qCount = 0;
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(s.questionsJson) && s.questionsJson != "[]")
+                {
+                    var arr = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(s.questionsJson);
+                    if (arr.ValueKind == System.Text.Json.JsonValueKind.Array)
+                        qCount = arr.GetArrayLength();
+                }
+            }
+            catch { /* ignore */ }
+
+            return new
+            {
+                s.sessionId,
+                s.sessionGuid,
+                s.studentId,
+                s.subject,
+                s.totalScore,
+                totalQuestions  = qCount,
+                s.endTime,
+                s.startTime,
+                s.durationMinutes,
+                s.originalObjective,
+            };
+        }).ToList();
+
+        return Ok(new
+        {
+            totalSessions = result.Count,
+            sessions      = result
+        });
+    }
+}
+
