@@ -395,14 +395,22 @@ namespace IntelliPrep.API.Services
         {
             var systemPrompt =
                 "You are Agent 3 — the A/L ICT Exam Synthesizer for IntelliPrep, a Sri Lanka A/L exam preparation platform. " +
-                "Your only task is to generate brand-new, original MCQ questions strictly bounded by the provided syllabus limits. " +
-                "You MUST prioritise the user's specific objective and topic distribution over seed examples. " +
+                "Your ONLY task is to generate brand-new, original MCQ questions that DIRECTLY address the user's specific objective. " +
+                "⚠️  CRITICAL: Read the MANDATORY OBJECTIVE at the top of the user message first and treat it as your #1 constraint. " +
                 "You MUST output ONLY a valid JSON array — no markdown, no text before or after the JSON. " +
                 "Every question must be educationally accurate for the A/L ICT Sri Lanka curriculum. " +
                 $"CRITICAL: You MUST generate EXACTLY {requestedCount} questions. " +
                 $"Each question MUST have EXACTLY 5 options. " +
                 $"The correctOptionIndex MUST be a valid zero-based index (0–4) into the options array. " +
                 $"Outputting anything other than exactly {requestedCount} elements in the array will cause a system failure.";
+
+            // ── 🔍 PRODUCTION TRACE: Log exact prompts for Render debugging ───
+            _logger.LogInformation(
+                "[Agent3:ExamSynthesizer] ═══ GROQ SYSTEM PROMPT ═══\n{SystemPrompt}",
+                systemPrompt);
+            _logger.LogInformation(
+                "[Agent3:ExamSynthesizer] ═══ GROQ USER PROMPT ({Len} chars) ═══\n{UserPrompt}",
+                userPrompt.Length, userPrompt);
 
             for (int attempt = 0; attempt < _apiKeys.Length; attempt++)
             {

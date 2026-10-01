@@ -334,7 +334,36 @@ namespace IntelliPrep.API.Services
         {
             var sb = new StringBuilder();
 
-            sb.AppendLine($"Here are some historical A/L ICT past paper questions for the topic \"{subject}\":");
+            // ── PRIORITY 1: User's specific objective (top of message, highest LLM attention) ─
+            sb.AppendLine("════════════════════════════════════════════════");
+            sb.AppendLine("⚠️  MANDATORY OBJECTIVE — READ THIS FIRST");
+            sb.AppendLine("════════════════════════════════════════════════");
+            if (!string.IsNullOrWhiteSpace(originalObjective))
+            {
+                sb.AppendLine($"The admin/user has made this SPECIFIC REQUEST:");
+                sb.AppendLine($"  \"{originalObjective}\"");
+                sb.AppendLine();
+                sb.AppendLine("You MUST address this exact objective in every question you generate.");
+                sb.AppendLine("Do NOT generate generic or off-topic questions.");
+                sb.AppendLine($"Do NOT default to common {subject} topics if they are not mentioned in the objective.");
+                sb.AppendLine($"Every question must directly relate to the user's stated focus area.");
+            }
+            else
+            {
+                sb.AppendLine($"Generate balanced A/L ICT questions for the topic: \"{subject}\".");
+            }
+            sb.AppendLine();
+
+            // ── PRIORITY 2: Count constraint ──────────────────────────────────
+            sb.AppendLine($"You MUST generate EXACTLY {requestedCount} questions — no more, no less.");
+            sb.AppendLine($"Subject: {subject}");
+            sb.AppendLine();
+
+            // ── PRIORITY 3: Historical seed examples for format/difficulty reference ─
+            sb.AppendLine("════════════════════════════════════════════════");
+            sb.AppendLine("HISTORICAL FORMAT EXAMPLES (reference only — do NOT copy these)");
+            sb.AppendLine("════════════════════════════════════════════════");
+            sb.AppendLine("Use these ONLY as a format and difficulty-level reference:");
             sb.AppendLine();
 
             for (var i = 0; i < seeds.Count; i++)
@@ -352,23 +381,19 @@ namespace IntelliPrep.API.Services
                 sb.AppendLine();
             }
 
-            sb.AppendLine($"Using these examples ONLY as a baseline in terms of format and difficulty distribution,");
-            sb.AppendLine($"generate exactly {requestedCount} ENTIRELY NEW multiple-choice questions for the topic \"{subject}\".");
-
-            // Inject the user's original objective so the LLM focuses on their specific intent
-            if (!string.IsNullOrWhiteSpace(originalObjective))
-            {
-                sb.AppendLine($"CRITICAL: The questions MUST strictly focus on this specific user objective: '{originalObjective}'.");
-                sb.AppendLine($"You MUST prioritize '{originalObjective}' over the topics found in the historical seed questions.");
-                sb.AppendLine($"Do not write generic {subject} questions — directly address the user's stated focus area.");
-            }
-
-            sb.AppendLine($"Each question must have exactly 5 options.");
-            sb.AppendLine($"Output ONLY a strict JSON array. No markdown, no explanation, no prose outside the JSON.");
-            sb.AppendLine($"Each element must have exactly these fields:");
+            // ── PRIORITY 4: Strict output format ─────────────────────────────
+            sb.AppendLine("════════════════════════════════════════════════");
+            sb.AppendLine("STRICT JSON OUTPUT CONTRACT");
+            sb.AppendLine("════════════════════════════════════════════════");
+            sb.AppendLine("Output ONLY a valid JSON array. No markdown fences, no prose, no text outside the array.");
+            sb.AppendLine($"The array MUST contain EXACTLY {requestedCount} elements.");
+            sb.AppendLine("Each element MUST exactly match this shape:");
             sb.AppendLine(@"  { ""questionText"": ""..."", ""options"": [""A"",""B"",""C"",""D"",""E""], ""correctOptionIndex"": 0, ""explanation"": ""..."" }");
-            sb.AppendLine($"correctOptionIndex is zero-based (0 = first option, 4 = fifth option).");
-            sb.AppendLine($"You MUST output exactly {requestedCount} elements in the JSON array — no more, no less.");
+            sb.AppendLine("Rules:");
+            sb.AppendLine("  1. options MUST be an array of EXACTLY 5 non-empty strings.");
+            sb.AppendLine("  2. correctOptionIndex is zero-based (0 = first option, 4 = fifth option).");
+            sb.AppendLine("  3. explanation MUST be a non-empty string.");
+            sb.AppendLine($"  4. EXACTLY {requestedCount} elements in the array — no more, no less.");
 
             return sb.ToString();
         }
@@ -384,14 +409,23 @@ namespace IntelliPrep.API.Services
         {
             var systemPrompt =
                 "You are the A/L ICT Content Synthesizer agent for IntelliPrep, a Sri Lanka A/L exam preparation platform. " +
-                "Your only job is to generate new, original MCQ questions based on historical past paper examples. " +
-                "You MUST prioritize the user's specific objective over the seed questions. " +
+                "Your ONLY job is to generate new, original MCQ questions that DIRECTLY address the user's specific objective. " +
+                "⚠️  CRITICAL: Read the MANDATORY OBJECTIVE section at the top of the user message first. " +
+                "You MUST follow the user's objective with ABSOLUTE priority over everything else. " +
                 "You MUST output ONLY a valid JSON array. No markdown code fences, no text before or after the JSON. " +
                 "Every question must be educationally accurate for the A/L ICT Sri Lanka curriculum. " +
-                $"CRITICAL INSTRUCTION: You MUST generate EXACTLY {requestedCount} entirely new questions. " +
-                $"Do not merely match the number of examples provided. " +
-                $"If you output less than {requestedCount} questions, the system will crash. " +
-                $"I repeat, output EXACTLY {requestedCount} questions in the JSON array.";
+                $"CRITICAL: You MUST generate EXACTLY {requestedCount} questions. " +
+                $"Each question MUST have EXACTLY 5 options in the 'options' array. " +
+                $"Outputting anything other than exactly {requestedCount} elements in the array is a system failure.";
+
+            // ── 🔍 PRODUCTION TRACE: Log the exact prompts sent to Groq ────────
+            // These appear in Render's log stream and allow debugging of wrong-topic generation.
+            _logger.LogInformation(
+                "[ContentSynthesizer] ═══ GROQ SYSTEM PROMPT ═══\n{SystemPrompt}",
+                systemPrompt);
+            _logger.LogInformation(
+                "[ContentSynthesizer] ═══ GROQ USER PROMPT ({Len} chars) ═══\n{UserPrompt}",
+                userPrompt.Length, userPrompt);
 
             for (int attempt = 0; attempt < _apiKeys.Length; attempt++)
             {

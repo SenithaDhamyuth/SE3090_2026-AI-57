@@ -354,10 +354,14 @@ namespace IntelliPrep.API.Controllers
         // ─────────────────────────────────────────────────────────────────────
         // PUT /api/assessment/approve/{sessionId}
         // Human-in-the-Loop: Admin approves a PendingAdminApproval session.
-        // Changes Status → "Ready" and notifies the student via email.
+        // Accepts an optional body containing the admin-edited questions array.
+        // Overwrites QuestionsJson with the curated payload before marking Ready,
+        // so the mobile app always receives the final admin-approved question set.
         // ─────────────────────────────────────────────────────────────────────
         [HttpPut("approve/{sessionId:int}")]
-        public async Task<IActionResult> ApproveSession(int sessionId)
+        public async Task<IActionResult> ApproveSession(
+            int sessionId,
+            [FromBody] ApproveSessionDto? dto = null)
         {
             _logger.LogInformation(
                 "[AssessmentController] approve called | SessionId: {Id}", sessionId);
@@ -372,6 +376,34 @@ namespace IntelliPrep.API.Controllers
                     error   = $"Session {sessionId} cannot be approved — current status is '{session.Status}', expected 'PendingAdminApproval'.",
                     current = session.Status
                 });
+
+            // ── HITL: Overwrite questions with admin-curated version ──────────
+            // If the frontend sends an editedQuestionsJson array (from the edit UI),
+            // we serialise it straight to QuestionsJson so the mobile app receives
+            // exactly what the admin approved — NOT the raw LLM output.
+            if (dto?.EditedQuestions != null && dto.EditedQuestions.Count > 0)
+            {
+                try
+                {
+                    var serialised = System.Text.Json.JsonSerializer.Serialize(
+                        dto.EditedQuestions,
+                        new System.Text.Json.JsonSerializerOptions
+                        {
+                            PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+                        });
+                    session.QuestionsJson = serialised;
+
+                    _logger.LogInformation(
+                        "[AssessmentController] ✏️  Session {Id}: QuestionsJson overwritten with {Count} admin-edited question(s).",
+                        sessionId, dto.EditedQuestions.Count);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "[AssessmentController] Failed to serialise editedQuestions for session {Id}. Keeping original QuestionsJson.",
+                        sessionId);
+                }
+            }
 
             session.Status = "Ready";
             await _context.SaveChangesAsync();
@@ -404,10 +436,11 @@ namespace IntelliPrep.API.Controllers
 
             return Ok(new
             {
-                message    = $"Session {sessionId} has been approved. Status is now 'Ready'.",
+                message           = $"Session {sessionId} has been approved. Status is now 'Ready'.",
                 sessionId,
-                newStatus  = "Ready",
-                approvedAt = DateTime.UtcNow
+                newStatus         = "Ready",
+                approvedAt        = DateTime.UtcNow,
+                questionsUpdated  = dto?.EditedQuestions?.Count ?? 0
             });
         }
 
