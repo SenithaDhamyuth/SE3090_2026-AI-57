@@ -228,7 +228,9 @@ export default function PendingApprovals() {
       ]);
 
       const examsData = examsRes.ok ? await examsRes.json() : [];
-      const plansData = plansRes.ok ? await plansRes.json() : [];
+      const plansRaw  = plansRes.ok ? await plansRes.json() : {};
+      // GET /api/aiagent/plans returns { totalPlans, pendingCount, plans: [...] }
+      const plansData = Array.isArray(plansRaw) ? plansRaw : (plansRaw.plans ?? []);
 
       const pendingExams = (Array.isArray(examsData) ? examsData : []).filter(e => e.status === 'PendingAdminApproval').map(e => ({
         ...e,

@@ -566,8 +566,20 @@ export default function ExamSessions() {
     addToast('info', 'Synthesizer Running…', `Calling Groq LLM for "${subject}" questions. This may take 10–20 s.`);
 
     try {
-      const url = `${import.meta.env.VITE_API_URL || 'https://intelliprep-rhx3.onrender.com'}/api/aiagent/synthesize-exam/${sessionId}?subject=${encodeURIComponent(subject)}`;
-      const res = await fetch(url, { method: 'POST' });
+      const url = `${import.meta.env.VITE_API_URL || 'https://intelliprep-rhx3.onrender.com'}/api/aiagent/synthesize-exam/${sessionId}`;
+      const token = localStorage.getItem('admin_token') || '';
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          subject: subject,
+          objective: `Generate ICT MCQ questions on ${subject}`,
+          requestedQuestionCount: 5,
+        }),
+      });
       const data = await res.json();
 
       if (!res.ok) {
