@@ -92,12 +92,15 @@ public class StudentController : ControllerBase
             .OrderByDescending(s => s.EndTime)
             .Select(s => new
             {
-                sessionGuid     = s.SessionId,
-                subject         = s.Subject,
-                totalScore      = s.TotalScore,
-                endTime         = s.EndTime != null ? s.EndTime.Value.ToString("yyyy-MM-dd HH:mm") + " UTC" : null,
-                durationMinutes = s.DurationMinutes,
-                questionsJson   = s.QuestionsJson,
+                sessionGuid       = s.SessionId,
+                subject           = s.Subject,
+                title             = s.Title ?? s.Subject,
+                totalScore        = s.TotalScore,
+                endTime           = s.EndTime != null ? s.EndTime.Value.ToString("yyyy-MM-dd HH:mm") + " UTC" : null,
+                durationMinutes   = s.DurationMinutes,
+                questionsJson     = s.QuestionsJson,
+                answersJson       = s.AnswersJson,
+                originalObjective = s.OriginalObjective
             })
             .ToListAsync(cancellationToken);
 
@@ -120,15 +123,20 @@ public class StudentController : ControllerBase
             {
                 s.sessionGuid,
                 s.subject,
+                s.title,
                 s.totalScore,
                 totalQuestions = qCount,
                 s.endTime,
                 s.durationMinutes,
+                s.questionsJson,
+                s.answersJson,
+                s.originalObjective
             };
         }).ToList();
 
         return Ok(new { results });
     }
+
 
     // ─────────────────────────────────────────────────────────────────────────
     // GET /api/student/papers/join/{accessCode}
@@ -333,28 +341,58 @@ public class AdminMarksController : ControllerBase
     {
         _logger.LogInformation("[AdminMarksController] Fetching all completed exam sessions.");
 
-        var sessions = await _db.ExamSessions
+        // Load completed sessions with student info
+        var rawSessions = await _db.ExamSessions
             .AsNoTracking()
             .Where(s => s.Status == "Completed")
             .OrderByDescending(s => s.EndTime)
             .Select(s => new
             {
-                sessionId       = s.Id,
-                sessionGuid     = s.SessionId,
-                studentId       = s.StudentId,
-                subject         = s.Subject,
-                totalScore      = s.TotalScore,
-                totalQuestions  = 0, // calculated below
-                endTime         = s.EndTime != null ? s.EndTime.Value.ToString("yyyy-MM-dd HH:mm") + " UTC" : null,
-                startTime       = s.StartTime.ToString("yyyy-MM-dd HH:mm") + " UTC",
-                durationMinutes = s.DurationMinutes,
-                questionsJson   = s.QuestionsJson,
+                sessionId         = s.Id,
+                sessionGuid       = s.SessionId,
+                studentProfileId  = s.StudentProfileId,
+                studentId         = s.StudentId,
+                subject           = s.Subject,
+                title             = s.Title ?? s.Subject,
+                totalScore        = s.TotalScore,
+                endTime           = s.EndTime != null ? s.EndTime.Value.ToString("yyyy-MM-dd HH:mm") + " UTC" : null,
+                startTime         = s.StartTime.ToString("yyyy-MM-dd HH:mm") + " UTC",
+                durationMinutes   = s.DurationMinutes,
+                questionsJson     = s.QuestionsJson,
                 originalObjective = s.OriginalObjective,
             })
             .ToListAsync(cancellationToken);
 
-        // Count questions from the JSON
-        var result = sessions.Select(s =>
+        // Enrich with student names via StudentProfiles → Users join
+        var profileIds = rawSessions.Select(s => s.studentProfileId).Distinct().ToList();
+        var profiles   = await _db.StudentProfiles
+            .AsNoTracking()
+            .Where(p => profileIds.Contains(p.Id))
+            .ToListAsync(cancellationToken);
+
+        // Parse UserId strings into ints to join with Users
+        var userIds = profiles
+            .Select(p => int.TryParse(p.UserId, out var uid) ? uid : 0)
+            .Where(uid => uid > 0)
+            .Distinct()
+            .ToList();
+
+        var users = await _db.Users
+            .AsNoTracking()
+            .Where(u => userIds.Contains(u.Id))
+            .ToDictionaryAsync(u => u.Id, cancellationToken);
+
+        var profileMap = profiles.ToDictionary(
+            p => p.Id,
+            p =>
+            {
+                if (int.TryParse(p.UserId, out var uid) && users.TryGetValue(uid, out var u))
+                    return (name: u.FullName, email: u.Email);
+                return (name: $"Student #{p.Id}", email: string.Empty);
+            });
+
+        // Count questions and build result
+        var result = rawSessions.Select(s =>
         {
             int qCount = 0;
             try
@@ -368,12 +406,17 @@ public class AdminMarksController : ControllerBase
             }
             catch { /* ignore */ }
 
+            profileMap.TryGetValue(s.studentProfileId, out var student);
+
             return new
             {
                 s.sessionId,
                 s.sessionGuid,
                 s.studentId,
+                studentName   = student.name ?? $"Student #{s.studentId}",
+                studentEmail  = student.email ?? string.Empty,
                 s.subject,
+                s.title,
                 s.totalScore,
                 totalQuestions  = qCount,
                 s.endTime,

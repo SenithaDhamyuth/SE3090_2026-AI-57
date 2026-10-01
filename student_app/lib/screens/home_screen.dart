@@ -7,6 +7,7 @@ import '../models/cached_exam.dart';
 import '../services/database_helper.dart';
 import 'qr_scanner_screen.dart';
 import 'login_screen.dart';
+import 'exam_review_screen.dart';
 
 /// HomeScreen — main shell of the IntelliPrep Student App.
 ///
@@ -843,31 +844,41 @@ class _StudyDayTile extends StatelessWidget {
 class _RemoteResult {
   final String sessionGuid;
   final String subject;
+  final String title;
   final int totalScore;
   final int totalQuestions;
   final String? endTime;
   final int durationMinutes;
+  final String? questionsJson;
+  final String? answersJson;
 
   const _RemoteResult({
     required this.sessionGuid,
     required this.subject,
+    required this.title,
     required this.totalScore,
     required this.totalQuestions,
     required this.endTime,
     required this.durationMinutes,
+    this.questionsJson,
+    this.answersJson,
   });
 
   factory _RemoteResult.fromJson(Map<String, dynamic> json) {
     return _RemoteResult(
-      sessionGuid:    json['sessionGuid'] as String? ?? '',
-      subject:        json['subject'] as String? ?? 'A/L ICT',
-      totalScore:     json['totalScore'] as int? ?? 0,
-      totalQuestions: json['totalQuestions'] as int? ?? 0,
-      endTime:        json['endTime'] as String?,
+      sessionGuid:     json['sessionGuid'] as String? ?? '',
+      subject:         json['subject'] as String? ?? 'A/L ICT',
+      title:           json['title'] as String? ?? json['subject'] as String? ?? 'A/L ICT',
+      totalScore:      json['totalScore'] as int? ?? 0,
+      totalQuestions:  json['totalQuestions'] as int? ?? 0,
+      endTime:         json['endTime'] as String?,
       durationMinutes: json['durationMinutes'] as int? ?? 30,
+      questionsJson:   json['questionsJson'] as String?,
+      answersJson:     json['answersJson'] as String?,
     );
   }
 }
+
 
 class _ProgressTab extends StatefulWidget {
   const _ProgressTab({
@@ -1049,22 +1060,40 @@ class _RemoteResultTile extends StatelessWidget {
         ? '—'
         : '${(_pct * 100).round()}%';
 
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.grey.shade200),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(6),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ExamReviewScreen(
+              sessionId: result.sessionGuid,
+              subject: result.subject,
+              title: result.title,
+              score: result.totalScore,
+              totalQuestions: result.totalQuestions,
+              date: result.endTime ?? 'Unknown',
+              questionsJson: result.questionsJson ?? '[]',
+              answersJson: result.answersJson ?? '{}',
+            ),
           ),
-        ],
-      ),
-      child: Row(
+        );
+      },
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.grey.shade200),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(6),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
         children: [
           Container(
             width: 44,
@@ -1081,17 +1110,34 @@ class _RemoteResultTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  result.subject,
+                  result.title,
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF1A1A1A),
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 3),
-                Text(
-                  result.endTime ?? 'Submitted',
-                  style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
+                Row(
+                  children: [
+                    Text(
+                      result.subject,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey.shade500,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(width: 3, height: 3, decoration: BoxDecoration(color: Colors.grey.shade400, shape: BoxShape.circle)),
+                    const SizedBox(width: 6),
+                    Text(
+                      result.endTime ?? 'Submitted',
+                      style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -1135,7 +1181,7 @@ class _RemoteResultTile extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ));
   }
 }
 

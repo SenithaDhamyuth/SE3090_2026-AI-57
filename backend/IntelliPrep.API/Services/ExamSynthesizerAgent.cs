@@ -134,45 +134,81 @@ namespace IntelliPrep.API.Services
             }
             else
             {
-                // Large request — split into batches to avoid token exhaustion
+                const int maxRetries = 3;
                 var batches = (int)Math.Ceiling((double)totalCount / batchSize);
                 _logger.LogInformation(
-                    "[Agent3:ExamSynthesizer] Large count {Total} detected — splitting into {Batches} batch(es) of {Size}.",
+                    "[Agent3:ExamSynthesizer] Large count {Total} → {Batches} parallel batch(es) of max {Size}.",
                     totalCount, batches, batchSize);
 
-                int remaining = totalCount;
+                // Build list of chunk sizes
+                var chunkSizes = new List<int>();
+                int rem = totalCount;
                 for (int b = 0; b < batches; b++)
                 {
-                    int currentBatchSize = Math.Min(remaining, batchSize);
-                    remaining -= currentBatchSize;
+                    int chunk = Math.Min(rem, batchSize);
+                    chunkSizes.Add(chunk);
+                    rem -= chunk;
+                }
 
-                    _logger.LogInformation(
-                        "[Agent3:ExamSynthesizer] Batch {Num}/{Total} — generating {Count} question(s).",
-                        b + 1, batches, currentBatchSize);
-
-                    // Create a sub-input for this batch
+                // Run all chunks in parallel, each with up to maxRetries attempts
+                var batchTasks = chunkSizes.Select(async (chunkSize, bIdx) =>
+                {
                     var batchInput = new SynthesizerInput
                     {
                         Subject                = input.Subject,
                         Objective              = input.Objective,
-                        RequestedQuestionCount = currentBatchSize,
+                        RequestedQuestionCount = chunkSize,
                         TopicDistribution      = input.TopicDistribution,
                     };
+                    var prompt = BuildGroundedPrompt(batchInput, seedQuestions, syllabusLimits);
 
-                    var prompt  = BuildGroundedPrompt(batchInput, seedQuestions, syllabusLimits);
-                    var rawJson = await CallGroqForMcqsAsync(prompt, input.Subject, currentBatchSize);
-                    var batchQuestions = ParseMcqJson(rawJson, input.Subject);
+                    for (int attempt = 1; attempt <= maxRetries; attempt++)
+                    {
+                        try
+                        {
+                            _logger.LogInformation(
+                                "[Agent3:ExamSynthesizer] Batch {Idx} attempt {Attempt}/{Max} — {Count} question(s).",
+                                bIdx + 1, attempt, maxRetries, chunkSize);
 
+                            var rawJson = await CallGroqForMcqsAsync(prompt, input.Subject, chunkSize);
+                            var parsed  = ParseMcqJson(rawJson, input.Subject);
+
+                            if (parsed.Count == 0 && attempt < maxRetries)
+                            {
+                                _logger.LogWarning(
+                                    "[Agent3:ExamSynthesizer] Batch {Idx} attempt {Attempt} returned 0 questions — retrying.",
+                                    bIdx + 1, attempt);
+                                await Task.Delay(800 * attempt);
+                                continue;
+                            }
+
+                            _logger.LogInformation(
+                                "[Agent3:ExamSynthesizer] Batch {Idx} attempt {Attempt} succeeded: {Count} question(s).",
+                                bIdx + 1, attempt, parsed.Count);
+                            return parsed;
+                        }
+                        catch (Exception ex) when (attempt < maxRetries)
+                        {
+                            _logger.LogWarning(ex,
+                                "[Agent3:ExamSynthesizer] Batch {Idx} attempt {Attempt} threw — retrying.",
+                                bIdx + 1, attempt);
+                            await Task.Delay(800 * attempt);
+                        }
+                    }
+
+                    _logger.LogError(
+                        "[Agent3:ExamSynthesizer] Batch {Idx} FAILED after {Max} attempts. Returning empty.",
+                        bIdx + 1, maxRetries);
+                    return new List<SynthesizedMcqItem>();
+                });
+
+                var batchResults = await Task.WhenAll(batchTasks);
+                foreach (var batchQuestions in batchResults)
                     allQuestions.AddRange(batchQuestions);
 
-                    _logger.LogInformation(
-                        "[Agent3:ExamSynthesizer] Batch {Num} yielded {Count} question(s). Running total: {RunTotal}.",
-                        b + 1, batchQuestions.Count, allQuestions.Count);
-
-                    // Small delay between batches to avoid rate-limiting
-                    if (b < batches - 1)
-                        await Task.Delay(500);
-                }
+                _logger.LogInformation(
+                    "[Agent3:ExamSynthesizer] All {Batches} batch(es) complete. Total questions: {Total}.",
+                    batches, allQuestions.Count);
             }
 
             _logger.LogInformation(
