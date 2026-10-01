@@ -580,7 +580,6 @@ class _StudyPlanTabState extends State<_StudyPlanTab> {
       final scheduleList = data['schedule'] as List<dynamic>;
       final days = scheduleList.map((e) => _StudyDay.fromJson(e)).toList();
       return {
-        'targetDate': data['targetExamDate'] ?? 'Unknown',
         'days': days,
       };
     } else if (response.statusCode == 404) {
@@ -641,7 +640,6 @@ class _StudyPlanTabState extends State<_StudyPlanTab> {
         }
 
         final data = snapshot.data!;
-        final targetDate = data['targetDate'] as String;
         final plan = data['days'] as List<_StudyDay>;
 
         return CustomScrollView(
@@ -669,10 +667,6 @@ class _StudyPlanTabState extends State<_StudyPlanTab> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      'Target exam: $targetDate · personalised for you',
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
-                    ),
                     const SizedBox(height: 14),
                   ],
                 ),

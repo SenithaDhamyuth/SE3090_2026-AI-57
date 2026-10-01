@@ -59,6 +59,7 @@ Future<List<Map<String, dynamic>>> fetchQuestions(String sessionId) async {
         : rawQuestions;
 
     if (parsed is! List) {
+      print('❌ JSON Error: parsed questionsJson is not a List. Type is ${parsed.runtimeType}');
       return [];
     }
 
@@ -67,10 +68,13 @@ Future<List<Map<String, dynamic>>> fetchQuestions(String sessionId) async {
         .map((question) => Map<String, dynamic>.from(question))
         .toList();
   } on TimeoutException {
+    print('❌ API Error: Connection timed out.');
     throw Exception('Connection failed. Check your internet connection.');
-  } on FormatException {
+  } on FormatException catch (e, stack) {
+    print('❌ JSON FormatException: ${e.message}\n$stack');
     throw Exception('Connection failed. Check your internet connection.');
-  } catch (e) {
+  } catch (e, stack) {
+    print('❌ API Catch-all Error: $e\n$stack');
     if (e is Exception && e.toString().contains('Connection failed')) {
       rethrow;
     }
@@ -163,23 +167,69 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
     }
   }
 
+  // Helper to find a value ignoring case
+  dynamic _getValueIgnoreCase(Map<String, dynamic> map, List<String> keys) {
+    for (final key in keys) {
+      if (map.containsKey(key)) return map[key];
+      final lowerKey = key.toLowerCase();
+      for (final entry in map.entries) {
+        if (entry.key.toLowerCase() == lowerKey) return entry.value;
+      }
+    }
+    return null;
+  }
+
   Future<void> _loadQuestions() async {
     try {
       final rawQuestions = await fetchQuestions(widget.qrPayload);
-      final loadedQuestions = rawQuestions
-          .map((entry) => _Question(
-                id: int.tryParse('${entry['id'] ?? entry['questionId'] ?? 0}') ?? 0,
-                text: (entry['text'] ?? entry['question'] ?? 'Untitled question')
-                    .toString(),
-                options: (entry['options'] as List? ?? const [])
-                    .map((option) => option.toString())
-                    .toList(),
-                correctIndex: int.tryParse(
-                        '${entry['correctIndex'] ?? entry['correctAnswerIndex'] ?? entry['answerIndex'] ?? 0}') ??
-                    0,
-              ))
-          .where((question) => question.id != 0 && question.text.isNotEmpty)
-          .toList();
+      
+      int fallbackIdCounter = 1;
+      
+      final loadedQuestions = rawQuestions.map((entry) {
+        // Find question ID
+        final rawId = _getValueIgnoreCase(entry, ['questionNo', 'id', 'questionId']);
+        int id = int.tryParse('$rawId') ?? 0;
+        if (id == 0) {
+          id = fallbackIdCounter++;
+        }
+
+        // Find question text
+        final rawText = _getValueIgnoreCase(entry, ['questionText', 'text', 'question']);
+        final text = (rawText ?? 'Untitled question').toString();
+
+        // Find options
+        final rawOptions = _getValueIgnoreCase(entry, ['options']);
+        final options = (rawOptions as List? ?? const [])
+            .map((option) => option.toString())
+            .toList();
+
+        // Find correct option index
+        final rawCorrect = _getValueIgnoreCase(entry, [
+          'correctOptionIndex',
+          'correctOption',
+          'correctIndex',
+          'answerIndex',
+          'answer'
+        ]);
+        
+        // Handle 1-based or 0-based index properly depending on data
+        int correctIdx = int.tryParse('$rawCorrect') ?? 0;
+        
+        return _Question(
+          id: id,
+          text: text,
+          options: options,
+          correctIndex: correctIdx,
+        );
+      }).where((question) {
+        // We only require text to not be empty now, since questionNo might be 0 or missing in some rogue JSONs.
+        if (question.text.isEmpty) {
+          print('⚠️ Warning: Dropped question because text was empty.');
+          return false;
+        }
+        return true;
+      }).toList();
+
 
       if (!mounted) return;
 
