@@ -737,6 +737,9 @@ export default function PastPaperAnalytics() {
   const [search, setSearch]         = useState('');
   const [yearFilter, setYearFilter]  = useState('');
 
+  // ── AI Analysis trigger ────────────────────────────────────────────────────
+  const [analyzing, setAnalyzing] = useState(false);
+
   // ── Generate Paper ─────────────────────────────────────────────────────────
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [paperResult, setPaperResult]             = useState(null);
@@ -759,6 +762,8 @@ export default function PastPaperAnalytics() {
             year: item.year ?? item.Year ?? 0,
             topicName: item.topicName ?? item.TopicName ?? '',
             probabilityPercentage: Number(item.probabilityPercentage ?? item.ProbabilityPercentage ?? 0),
+            generatedByAgent: item.generatedByAgent ?? item.GeneratedByAgent ?? false,
+            createdAt: item.createdAt ?? item.CreatedAt ?? null,
           }))
         : [];
 
@@ -776,6 +781,38 @@ export default function PastPaperAnalytics() {
         setPageAlert({ type: 'error', text: `Failed to load records: ${err.message}` });
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  // ── Run AI Analysis ────────────────────────────────────────────────────────
+  const handleRunAnalysis = useCallback(async () => {
+    setAnalyzing(true);
+    setPageAlert(null);
+    try {
+      const res = await authFetch(`${API_BASE}/api/admin/analytics/analyze`, { method: 'POST' });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.message || `Server error ${res.status}`);
+
+      // Refresh charts with the newly analysed data returned by the endpoint
+      const fresh = Array.isArray(data.records) ? data.records : [];
+      const normalized = fresh.map(item => ({
+        id: item.id,
+        year: item.year ?? 0,
+        topicName: item.topicName ?? '',
+        probabilityPercentage: Number(item.probabilityPercentage ?? 0),
+        generatedByAgent: item.generatedByAgent ?? true,
+        createdAt: item.createdAt ?? null,
+      }));
+      setRecords(normalized);
+
+      setPageAlert({
+        type: 'success',
+        text: data.message ?? `AI analysis complete — ${fresh.length} topic probabilities updated.`,
+      });
+    } catch (err) {
+      setPageAlert({ type: 'error', text: `AI analysis failed: ${err.message}` });
+    } finally {
+      setAnalyzing(false);
     }
   }, []);
 
@@ -894,20 +931,35 @@ export default function PastPaperAnalytics() {
         </div>
 
         {/* Action buttons */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          {/* ── Run AI Analysis ── */}
+          <button
+            onClick={handleRunAnalysis}
+            disabled={analyzing || loading}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 disabled:cursor-not-allowed text-white text-[13px] font-semibold shadow-md shadow-orange-200 transition-all active:scale-95"
+          >
+            {analyzing ? (
+              <><Loader2 size={15} className="animate-spin" /> AI Agents are analyzing…</>
+            ) : (
+              <><Sparkles size={15} /> Run AI Analysis on New Data</>
+            )}
+          </button>
+
           {/* Generate Predicted Paper */}
           <button
             onClick={() => { setShowGenerateModal(true); setPaperResult(null); }}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-slate-800 to-slate-700 hover:from-slate-700 hover:to-slate-600 text-white text-[13px] font-semibold shadow-md shadow-slate-900/20 transition-all active:scale-95"
+            disabled={analyzing}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-to-r from-slate-800 to-slate-700 hover:from-slate-700 hover:to-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-[13px] font-semibold shadow-md shadow-slate-900/20 transition-all active:scale-95"
           >
-            <Sparkles size={15} className="text-orange-400" />
+            <Zap size={15} className="text-orange-400" />
             Generate 2026 Predicted Paper
           </button>
 
           {/* Add Record */}
           <button
             onClick={() => { setShowAdd(s => !s); setEditingId(null); setPageAlert(null); }}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-[13px] font-semibold shadow-sm transition-all active:scale-95"
+            disabled={analyzing}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed text-zinc-700 text-[13px] font-semibold transition-all active:scale-95"
           >
             {showAdd ? <><X size={14} /> Cancel</> : <><Plus size={14} /> Add Record</>}
           </button>
@@ -938,6 +990,54 @@ export default function PastPaperAnalytics() {
           </div>
         ))}
       </div>
+
+      {/* ── AI Analysis status banner ── */}
+      {analyzing && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-orange-50 border border-orange-200 shadow-sm">
+          <Loader2 size={18} className="animate-spin text-orange-500 shrink-0" />
+          <div>
+            <p className="text-[13px] font-bold text-orange-800">AI Agents are analyzing your past paper data…</p>
+            <p className="text-[11px] text-orange-600 mt-0.5">
+              Agent 1 is reading all questions, computing topic probabilities via the Groq LLM, and saving results to the database. This may take 30–60 seconds.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {!analyzing && records.length === 0 && !loading && (
+        <div className="flex items-start gap-4 px-5 py-4 rounded-xl bg-zinc-50 border border-zinc-200 border-dashed">
+          <div className="w-10 h-10 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center shrink-0 mt-0.5">
+            <Sparkles size={20} className="text-orange-500" />
+          </div>
+          <div className="flex-1">
+            <p className="text-[13px] font-bold text-zinc-700">No AI analysis results yet</p>
+            <p className="text-[12px] text-zinc-400 mt-0.5 leading-snug">
+              Click <strong className="text-orange-600">Run AI Analysis on New Data</strong> to trigger Agent 1, which will read all questions in the database, compute topic probabilities using the Groq LLM, and save the results here. Charts will populate automatically once complete.
+            </p>
+          </div>
+          <button
+            onClick={handleRunAnalysis}
+            disabled={analyzing}
+            className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-[12px] font-semibold transition-all"
+          >
+            <Sparkles size={13} /> Run Now
+          </button>
+        </div>
+      )}
+
+      {!analyzing && records.length > 0 && (() => {
+        const lastRun = records
+          .filter(r => r.createdAt)
+          .map(r => new Date(r.createdAt))
+          .sort((a, b) => b - a)[0];
+        return lastRun ? (
+          <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-zinc-50 border border-zinc-200 text-[11px] text-zinc-500">
+            <CheckCircle2 size={13} className="text-zinc-400 shrink-0" />
+            Last AI analysis run: <strong className="text-zinc-700 ml-1">{lastRun.toLocaleString()}</strong>
+            <span className="ml-auto font-medium">{records.filter(r => r.generatedByAgent).length} AI-generated · {records.filter(r => !r.generatedByAgent).length} manual</span>
+          </div>
+        ) : null;
+      })()}
 
       {/* ── Visualisation cards ── */}
       <div className="grid md:grid-cols-5 gap-4">

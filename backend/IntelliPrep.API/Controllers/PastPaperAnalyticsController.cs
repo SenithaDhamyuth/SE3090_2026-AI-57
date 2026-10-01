@@ -1,6 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 using IntelliPrep.API.Data;
+using IntelliPrep.API.DTOs;
 using IntelliPrep.API.Models;
+using IntelliPrep.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -8,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 namespace IntelliPrep.API.Controllers;
 
 /// <summary>
-/// CRUD endpoints for PastPaperAnalytics records.
+/// Analytics endpoints for PastPaperAnalytics records.
 /// Route prefix: api/admin/analytics
 /// All endpoints require the Admin role.
 /// </summary>
@@ -18,44 +20,154 @@ namespace IntelliPrep.API.Controllers;
 public class PastPaperAnalyticsController : ControllerBase
 {
     private readonly ApplicationDbContext _db;
+    private readonly IAIAgentService      _aiAgent;
+    private readonly ILogger<PastPaperAnalyticsController> _logger;
 
-    public PastPaperAnalyticsController(ApplicationDbContext db)
+    public PastPaperAnalyticsController(
+        ApplicationDbContext db,
+        IAIAgentService      aiAgent,
+        ILogger<PastPaperAnalyticsController> logger)
     {
-        _db = db;
+        _db      = db;
+        _aiAgent = aiAgent;
+        _logger  = logger;
     }
 
     // ── GET api/admin/analytics ───────────────────────────────────────────────
-    /// <summary>Returns all past-paper analytic records, ordered by probability descending.</summary>
+    /// <summary>
+    /// Returns the latest AI-generated analytic records from the PastPaperAnalytics
+    /// table. Returns an empty array if no analysis has been run yet.
+    /// This endpoint does NOT compute anything — call POST /analyze to run the AI.
+    /// </summary>
     [HttpGet]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetAll(CancellationToken ct)
     {
-        var totalQuestions = await _db.Questions.CountAsync(ct);
-        if (totalQuestions == 0)
-        {
-            return Ok(Array.Empty<object>());
-        }
-
-        var groupedCounts = await _db.Questions
+        // Read only the single highest-probability record per topic
+        // (avoids showing duplicates when analysis has been run multiple times)
+        var records = await _db.PastPaperAnalytics
             .AsNoTracking()
-            .GroupBy(q => q.Lesson_Name)
-            .Select(g => new { TopicName = g.Key, Count = g.Count() })
+            .OrderByDescending(r => r.ProbabilityPercentage)
             .ToListAsync(ct);
 
-        var records = groupedCounts
-            .Select(g => new
-            {
-                TopicName = g.TopicName,
-                ProbabilityPercentage = Math.Round((double)g.Count / totalQuestions * 100, 2)
-            })
-            .OrderByDescending(x => x.ProbabilityPercentage)
+        // Deduplicate: keep only the latest / highest probability per topic name
+        var byTopic = records
+            .GroupBy(r => r.TopicName, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.OrderByDescending(r => r.CreatedAt).First())
+            .OrderByDescending(r => r.ProbabilityPercentage)
             .ToList();
 
-        return Ok(records.Select(r => new
+        return Ok(byTopic.Select(r => new
         {
-            topicName = r.TopicName,
-            probabilityPercentage = r.ProbabilityPercentage
+            id                    = r.Id,
+            topicName             = r.TopicName,
+            year                  = r.Year,
+            probabilityPercentage = r.ProbabilityPercentage,
+            generatedByAgent      = r.GeneratedByAgent,
+            createdAt             = r.CreatedAt
         }));
+    }
+
+    // ── POST api/admin/analytics/analyze ─────────────────────────────────────
+    /// <summary>
+    /// Triggers Agent 1 (LLM Past Paper Analyst) to analyse all questions currently
+    /// in the Questions table, compute fresh topic probabilities, and persist the
+    /// results to PastPaperAnalytics. Old AI-generated rows for the same topics are
+    /// replaced to avoid unbounded table growth.
+    ///
+    /// This endpoint is intentionally SLOW (calls the Groq LLM). The frontend should
+    /// show a loading state while waiting. Only call this when the admin explicitly
+    /// clicks "Run AI Analysis".
+    /// </summary>
+    [HttpPost("analyze")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> RunAnalysis(CancellationToken ct)
+    {
+        _logger.LogInformation("[AnalyticsController] Admin triggered AI analysis on /api/admin/analytics/analyze");
+
+        // ── 1. Gather all distinct topic names from the Questions table ────────
+        var topics = await _db.Questions
+            .AsNoTracking()
+            .Where(q => !string.IsNullOrEmpty(q.Lesson_Name))
+            .Select(q => q.Lesson_Name!)
+            .Distinct()
+            .ToListAsync(ct);
+
+        if (topics.Count == 0)
+        {
+            _logger.LogWarning("[AnalyticsController] No questions in DB — cannot run analysis.");
+            return BadRequest(new
+            {
+                success = false,
+                message = "No questions found in the database. Upload past paper questions first before running analysis."
+            });
+        }
+
+        _logger.LogInformation(
+            "[AnalyticsController] Found {N} distinct topics to analyse: {Topics}",
+            topics.Count, string.Join(", ", topics));
+
+        // ── 2. Invoke Agent 1 (LLM Past Paper Analyst) ────────────────────────
+        //       AnalyzePastPapersAsync already: builds the LLM prompt, calls Groq,
+        //       validates the JSON, and SAVES to PastPaperAnalytics table.
+        //       We use year=0 to signify "aggregated across all years".
+        var request = new AnalyzePastPapersRequest
+        {
+            Topics = topics,
+            Year   = 0   // 0 = multi-year aggregate analysis
+        };
+
+        var result = await _aiAgent.AnalyzePastPapersAsync(request, ct);
+
+        if (!result.Success)
+        {
+            _logger.LogError(
+                "[AnalyticsController] Agent 1 analysis failed: {Message}", result.Message);
+            return StatusCode(500, new
+            {
+                success = false,
+                message = result.Message,
+                rawLlmOutput = result.RawLlmOutput
+            });
+        }
+
+        _logger.LogInformation(
+            "[AnalyticsController] ✅ Agent 1 analysis complete — {N} records saved.",
+            result.RowsSaved);
+
+        // ── 3. Return the freshly saved records directly ───────────────────────
+        //       Re-fetch from DB so the response reflects actual persisted data.
+        var saved = await _db.PastPaperAnalytics
+            .AsNoTracking()
+            .Where(r => r.GeneratedByAgent)
+            .OrderByDescending(r => r.ProbabilityPercentage)
+            .ToListAsync(ct);
+
+        // Deduplicate by topic (keep most recent)
+        var deduped = saved
+            .GroupBy(r => r.TopicName, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.OrderByDescending(r => r.CreatedAt).First())
+            .OrderByDescending(r => r.ProbabilityPercentage)
+            .ToList();
+
+        return Ok(new
+        {
+            success      = true,
+            message      = $"AI analysis complete. {result.RowsSaved} topic probabilities calculated and saved.",
+            topicsAnalysed = topics.Count,
+            rowsSaved    = result.RowsSaved,
+            records      = deduped.Select(r => new
+            {
+                id                    = r.Id,
+                topicName             = r.TopicName,
+                year                  = r.Year,
+                probabilityPercentage = r.ProbabilityPercentage,
+                generatedByAgent      = r.GeneratedByAgent,
+                createdAt             = r.CreatedAt
+            })
+        });
     }
 
     // ── GET api/admin/analytics/{id} ──────────────────────────────────────────
@@ -94,7 +206,7 @@ public class PastPaperAnalyticsController : ControllerBase
             TopicName             = req.TopicName.Trim(),
             Year                  = req.Year,
             ProbabilityPercentage = Math.Round(req.ProbabilityPercentage, 2),
-            GeneratedByAgent      = false,   // ← manually entered by admin
+            GeneratedByAgent      = false,
             CreatedAt             = DateTime.UtcNow
         };
 
@@ -189,3 +301,5 @@ public sealed class UpdateAnalyticRequest
     [Range(0, 100)]
     public decimal ProbabilityPercentage { get; init; }
 }
+
+
