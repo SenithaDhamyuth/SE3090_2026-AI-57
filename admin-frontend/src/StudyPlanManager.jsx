@@ -56,11 +56,11 @@ const GRADE_13_TOPICS = [
 
 const StatusBadge = ({ approved }) =>
   approved ? (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold bg-emerald-50 text-emerald-700 border-emerald-200">
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold bg-zinc-50 text-zinc-700 border-zinc-200">
       <CheckCircle2 size={10} /> Approved
     </span>
   ) : (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold bg-amber-50 text-amber-700 border-amber-200">
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold bg-orange-50 text-orange-700 border-orange-200">
       <Clock size={10} /> Pending Review
     </span>
   );
@@ -80,9 +80,9 @@ const PriorityBadge = ({ priority }) => {
 
 const Alert = ({ type, text, onDismiss }) => {
   const styles = {
-    success: 'bg-emerald-50 border-emerald-200 text-emerald-800',
+    success: 'bg-zinc-50 border-zinc-200 text-zinc-800',
     error:   'bg-red-50 border-red-200 text-red-800',
-    info:    'bg-blue-50 border-blue-200 text-blue-800',
+    info:    'bg-orange-50 border-orange-200 text-orange-800',
   };
   const Icon = type === 'success' ? CheckCircle2 : AlertCircle;
   return (
@@ -206,7 +206,7 @@ function PlanTimeline({ days }) {
 
               {/* Card */}
               <div className={`flex-1 bg-white rounded-xl border shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-3.5 mb-0.5 transition-all duration-150 hover:shadow-md ${
-                isLast ? 'border-emerald-200 bg-emerald-50/30' : (isHigh ? 'border-red-200 bg-red-50/10' : 'border-zinc-200')
+                isLast ? 'border-zinc-200 bg-zinc-50/30' : (isHigh ? 'border-red-200 bg-red-50/10' : 'border-zinc-200')
               }`}>
                 <div className="flex items-start justify-between gap-2 flex-wrap">
                   <div className="flex-1 min-w-0">
@@ -218,7 +218,7 @@ function PlanTimeline({ days }) {
                         {cfg.label}
                       </span>
                       {isLast && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-700 border border-zinc-200 text-[10px] font-bold">
                           <CheckCircle2 size={9} /> Exam Day
                         </span>
                       )}
@@ -434,8 +434,8 @@ function GeneratePlanModal({ onClose, onSuccess }) {
             {/* Scrollable body */}
             <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
               {/* Sub-header */}
-              <div className="bg-blue-50 border border-blue-200/70 rounded-lg p-3 flex gap-2 text-xs text-blue-800">
-                <CheckCircle2 size={14} className="shrink-0 mt-0.5 text-blue-500" />
+              <div className="bg-orange-50 border border-orange-200/70 rounded-lg p-3 flex gap-2 text-xs text-orange-800">
+                <CheckCircle2 size={14} className="shrink-0 mt-0.5 text-orange-500" />
                 <span>
                   Check the topics your student has <strong>already studied</strong>.
                   These will be completely excluded from the generated plan so the AI focuses
@@ -513,14 +513,14 @@ function GeneratePlanModal({ onClose, onSuccess }) {
         {step === 3 && planResult && (
           <div className="flex flex-col overflow-hidden flex-1">
             {/* Success header */}
-            <div className="px-6 py-4 bg-emerald-50 border-b border-emerald-100 shrink-0">
+            <div className="px-6 py-4 bg-zinc-50 border-b border-zinc-100 shrink-0">
               <div className="flex items-center gap-2">
-                <CheckCircle2 size={16} className="text-emerald-600" />
-                <p className="text-[13px] font-semibold text-emerald-800">
+                <CheckCircle2 size={16} className="text-zinc-600" />
+                <p className="text-[13px] font-semibold text-zinc-800">
                   Plan #{planResult.planId} generated — {planResult.planDays.length} day schedule
                 </p>
               </div>
-              <p className="text-[11px] text-emerald-600 mt-0.5">
+              <p className="text-[11px] text-zinc-600 mt-0.5">
                 Awaiting admin approval before the student can view this plan.
               </p>
             </div>
@@ -667,7 +667,7 @@ function PlanDetailModal({ planId, onClose }) {
               <button
                 onClick={handleExportPDF}
                 disabled={exporting}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[12px] font-semibold transition-colors disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-600 hover:bg-zinc-700 text-white text-[12px] font-semibold transition-colors disabled:opacity-50"
               >
                 {exporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
                 Export PDF
@@ -817,8 +817,8 @@ export default function StudyPlanManager() {
 
   const stats = [
     { label: 'Total Plans',    value: plans.length,  icon: ClipboardList, color: 'text-zinc-700',    bg: 'bg-zinc-100',    border: 'border-zinc-200' },
-    { label: 'Pending Review', value: pendingCount,   icon: Clock,         color: 'text-amber-700',   bg: 'bg-amber-50',    border: 'border-amber-200/60' },
-    { label: 'Approved',       value: approvedCount,  icon: CheckCircle2,  color: 'text-emerald-700', bg: 'bg-emerald-50',  border: 'border-emerald-200/60' },
+    { label: 'Pending Review', value: pendingCount,   icon: Clock,         color: 'text-orange-700',   bg: 'bg-orange-50',    border: 'border-orange-200/60' },
+    { label: 'Approved',       value: approvedCount,  icon: CheckCircle2,  color: 'text-zinc-700', bg: 'bg-zinc-50',  border: 'border-zinc-200/60' },
   ];
 
   return (
@@ -981,7 +981,7 @@ export default function StudyPlanManager() {
                         {plan.isApproved ? (
                           <div>
                             <p className="text-[11px] font-semibold text-zinc-700 flex items-center gap-1">
-                              <ShieldCheck size={11} className="text-emerald-600" />
+                              <ShieldCheck size={11} className="text-zinc-600" />
                               {plan.approvedBy ?? 'Admin'}
                             </p>
                             {plan.approvedAt && (
@@ -1005,7 +1005,7 @@ export default function StudyPlanManager() {
                             <button
                               onClick={() => handleApprove(plan.id)}
                               disabled={isApprovingThis}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shadow-sm disabled:opacity-60 disabled:cursor-not-allowed transition-all active:scale-95"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-zinc-600 hover:bg-zinc-700 text-white text-[11px] font-bold shadow-sm disabled:opacity-60 disabled:cursor-not-allowed transition-all active:scale-95"
                             >
                               {isApprovingThis ? (
                                 <><Loader2 size={12} className="animate-spin" /> Approving…</>
@@ -1032,7 +1032,7 @@ export default function StudyPlanManager() {
               <span className="font-semibold text-zinc-600">{plans.length}</span> plans
             </p>
             {pendingCount > 0 && (
-              <p className="text-[11px] text-amber-600 font-semibold flex items-center gap-1">
+              <p className="text-[11px] text-orange-600 font-semibold flex items-center gap-1">
                 <Clock size={11} />
                 {pendingCount} plan{pendingCount !== 1 ? 's' : ''} awaiting your approval
               </p>

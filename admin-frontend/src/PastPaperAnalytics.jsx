@@ -23,7 +23,7 @@ const authFetch = (url, opts = {}) => {
 
 const Alert = ({ type, text, onDismiss }) => {
   const style =
-    type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+    type === 'success' ? 'bg-zinc-50 border-zinc-200 text-zinc-800'
     : type === 'error' ? 'bg-red-50 border-red-200 text-red-800'
     : 'bg-blue-50 border-blue-200 text-blue-800';
   const Icon = type === 'success' ? CheckCircle2 : AlertCircle;
@@ -43,8 +43,8 @@ const Alert = ({ type, text, onDismiss }) => {
 // ── Probability colour ramp ───────────────────────────────────────────────────
 const probColour = (p) => {
   if (p >= 15) return { bar: 'bg-gradient-to-r from-red-500 to-red-400',    text: 'text-red-700',    badge: 'bg-red-50 text-red-700 border-red-200' };
-  if (p >= 5)  return { bar: 'bg-gradient-to-r from-orange-400 to-amber-400', text: 'text-orange-700', badge: 'bg-orange-50 text-orange-700 border-orange-200' };
-  return              { bar: 'bg-gradient-to-r from-blue-400 to-sky-300',   text: 'text-blue-700',   badge: 'bg-blue-50 text-blue-700 border-blue-200' };
+  if (p >= 5)  return { bar: 'bg-gradient-to-r from-orange-400 to-orange-400', text: 'text-orange-700', badge: 'bg-orange-50 text-orange-700 border-orange-200' };
+  return              { bar: 'bg-gradient-to-r from-blue-400 to-orange-300',   text: 'text-blue-700',   badge: 'bg-blue-50 text-blue-700 border-blue-200' };
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -316,10 +316,10 @@ const AGENT_STEPS = [
   {
     id:     1,
     icon:   FlaskConical,
-    color:  'text-violet-600',
-    bg:     'bg-violet-50',
-    border: 'border-violet-200',
-    ring:   'ring-violet-400',
+    color:  'text-zinc-600',
+    bg:     'bg-zinc-50',
+    border: 'border-zinc-200',
+    ring:   'ring-zinc-400',
     title:  'Agent 1 — Data Analyst',
     desc:   'Analyzing 10+ years of historical exam data patterns…',
     detail: 'Applying exponential-decay weighting across all years. Recent papers carry higher weight.',
@@ -328,10 +328,10 @@ const AGENT_STEPS = [
   {
     id:     2,
     icon:   Zap,
-    color:  'text-sky-600',
-    bg:     'bg-sky-50',
-    border: 'border-sky-200',
-    ring:   'ring-sky-400',
+    color:  'text-orange-600',
+    bg:     'bg-orange-50',
+    border: 'border-orange-200',
+    ring:   'ring-orange-400',
     title:  'Agent 2 — Web Researcher',
     desc:   'Fetching current IT events & tech news from Sri Lanka…',
     detail: 'Gathering real-world scenarios to ground MCQ questions in current events.',
@@ -428,7 +428,7 @@ function GeneratePaperModal({ onClose, onSuccess }) {
                 key={step.id}
                 className={`flex gap-4 p-4 rounded-xl border transition-all duration-500 ${
                   isActive   ? `${step.bg} ${step.border} ring-2 ${step.ring}/30` :
-                  isComplete ? 'bg-emerald-50 border-emerald-200' :
+                  isComplete ? 'bg-zinc-50 border-zinc-200' :
                   isFailed   ? 'bg-red-50 border-red-200' :
                                'bg-zinc-50 border-zinc-200 opacity-50'
                 }`}
@@ -436,14 +436,14 @@ function GeneratePaperModal({ onClose, onSuccess }) {
                 {/* Icon */}
                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
                   isActive   ? step.bg :
-                  isComplete ? 'bg-emerald-100' :
+                  isComplete ? 'bg-zinc-100' :
                   isFailed   ? 'bg-red-100' :
                                'bg-zinc-100'
                 }`}>
                   {isActive && (
                     <Loader2 size={20} className={`animate-spin ${step.color}`} />
                   )}
-                  {isComplete && <CheckCircle2 size={20} className="text-emerald-600" />}
+                  {isComplete && <CheckCircle2 size={20} className="text-zinc-600" />}
                   {isFailed   && <AlertCircle  size={20} className="text-red-600" />}
                   {isPending  && <StepIcon      size={20} className="text-zinc-400" />}
                 </div>
@@ -453,7 +453,7 @@ function GeneratePaperModal({ onClose, onSuccess }) {
                   <div className="flex items-center gap-2">
                     <p className={`text-[13px] font-bold ${
                       isActive   ? 'text-zinc-900' :
-                      isComplete ? 'text-emerald-800' :
+                      isComplete ? 'text-zinc-800' :
                       isFailed   ? 'text-red-800' :
                                    'text-zinc-500'
                     }`}>
@@ -465,14 +465,14 @@ function GeneratePaperModal({ onClose, onSuccess }) {
                       </span>
                     )}
                     {isComplete && (
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-700 border border-zinc-200">
                         DONE
                       </span>
                     )}
                   </div>
                   <p className={`text-[12px] mt-0.5 leading-snug ${
                     isActive   ? 'text-zinc-600' :
-                    isComplete ? 'text-emerald-600' :
+                    isComplete ? 'text-zinc-600' :
                     isFailed   ? 'text-red-600' :
                                  'text-zinc-400'
                   }`}>
@@ -500,7 +500,7 @@ function GeneratePaperModal({ onClose, onSuccess }) {
           {done && (
             <button
               onClick={onClose}
-              className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors"
+              className="px-5 py-2 rounded-lg bg-zinc-600 hover:bg-zinc-700 text-white text-sm font-semibold transition-colors"
             >
               View Results ↓
             </button>
@@ -523,14 +523,14 @@ function GeneratePaperModal({ onClose, onSuccess }) {
 // PAPER RESULTS MODAL — displays the 50 generated MCQs
 // ═══════════════════════════════════════════════════════════════════════════════
 const TOPIC_COLOURS = [
-  'bg-violet-100 text-violet-800 border-violet-200',
-  'bg-sky-100 text-sky-800 border-sky-200',
-  'bg-emerald-100 text-emerald-800 border-emerald-200',
+  'bg-zinc-100 text-zinc-800 border-zinc-200',
   'bg-orange-100 text-orange-800 border-orange-200',
-  'bg-pink-100 text-pink-800 border-pink-200',
-  'bg-teal-100 text-teal-800 border-teal-200',
-  'bg-amber-100 text-amber-800 border-amber-200',
-  'bg-indigo-100 text-indigo-800 border-indigo-200',
+  'bg-zinc-100 text-zinc-800 border-zinc-200',
+  'bg-orange-100 text-orange-800 border-orange-200',
+  'bg-zinc-100 text-zinc-800 border-zinc-200',
+  'bg-zinc-100 text-zinc-800 border-zinc-200',
+  'bg-orange-100 text-orange-800 border-orange-200',
+  'bg-zinc-100 text-zinc-800 border-zinc-200',
 ];
 
 function PaperResultsModal({ paperData, onClose }) {
@@ -607,13 +607,13 @@ function PaperResultsModal({ paperData, onClose }) {
 
         {/* Research context strip */}
         {researchContext.length > 0 && (
-          <div className="px-6 py-3 bg-sky-50 border-b border-sky-200">
-            <p className="text-[11px] font-semibold text-sky-700 mb-1.5 flex items-center gap-1.5">
+          <div className="px-6 py-3 bg-orange-50 border-b border-orange-200">
+            <p className="text-[11px] font-semibold text-orange-700 mb-1.5 flex items-center gap-1.5">
               <Zap size={11} /> Agent 2 Research Context Used:
             </p>
             <div className="flex flex-wrap gap-2">
               {researchContext.map((ctx, i) => (
-                <span key={i} className="text-[11px] bg-sky-100 border border-sky-200 text-sky-800 px-2.5 py-0.5 rounded-full font-medium">
+                <span key={i} className="text-[11px] bg-orange-100 border border-orange-200 text-orange-800 px-2.5 py-0.5 rounded-full font-medium">
                   {ctx.topic} — {ctx.events?.[0]?.headline?.slice(0, 55)}…
                 </span>
               ))}
@@ -653,13 +653,13 @@ function PaperResultsModal({ paperData, onClose }) {
                         key={oi}
                         className={`flex items-start gap-2 px-3 py-2 rounded-lg border text-[12px] transition-all ${
                           isRevealed && isCorrect
-                            ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-semibold'
+                            ? 'bg-zinc-50 border-zinc-300 text-zinc-900 font-semibold'
                             : 'bg-white border-zinc-200 text-zinc-700'
                         }`}
                       >
                         <span className={`shrink-0 w-5 h-5 rounded-full border flex items-center justify-center text-[10px] font-bold ${
                           isRevealed && isCorrect
-                            ? 'bg-emerald-500 border-emerald-500 text-white'
+                            ? 'bg-zinc-500 border-zinc-500 text-white'
                             : 'border-zinc-300 text-zinc-500'
                         }`}>
                           {optNo}
@@ -672,9 +672,9 @@ function PaperResultsModal({ paperData, onClose }) {
 
                 {/* Explanation (revealed) */}
                 {isRevealed && q.explanation && (
-                  <div className="ml-11 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg">
-                    <p className="text-[11px] font-semibold text-amber-700 mb-0.5">Explanation</p>
-                    <p className="text-[12px] text-amber-900 leading-snug">{q.explanation}</p>
+                  <div className="ml-11 px-3 py-2.5 bg-orange-50 border border-orange-200 rounded-lg">
+                    <p className="text-[11px] font-semibold text-orange-700 mb-0.5">Explanation</p>
+                    <p className="text-[12px] text-orange-900 leading-snug">{q.explanation}</p>
                   </div>
                 )}
 
@@ -684,7 +684,7 @@ function PaperResultsModal({ paperData, onClose }) {
                     onClick={() => toggleReveal(q.questionNo)}
                     className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
                       isRevealed
-                        ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
+                        ? 'bg-zinc-50 border-zinc-200 text-zinc-700 hover:bg-zinc-100'
                         : 'bg-zinc-50 border-zinc-200 text-zinc-500 hover:text-zinc-800 hover:border-zinc-300'
                     }`}
                   >
@@ -924,8 +924,8 @@ export default function PastPaperAnalytics() {
         {[
           { label: 'Total Records',    value: records.length,    icon: Hash,       color: 'text-zinc-700',    bg: 'bg-zinc-100',    border: 'border-zinc-200' },
           { label: 'Avg Probability',  value: avgProb + '%',     icon: TrendingUp, color: 'text-orange-700',  bg: 'bg-orange-50',   border: 'border-orange-200/60' },
-          { label: 'Years Covered',    value: years.length || '—', icon: CalendarDays, color: 'text-sky-700',  bg: 'bg-sky-50',     border: 'border-sky-200/60' },
-          { label: 'Top Topic',        value: topRecord?.topicName ?? '—', icon: BarChart2, color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200/60' },
+          { label: 'Years Covered',    value: years.length || '—', icon: CalendarDays, color: 'text-orange-700',  bg: 'bg-orange-50',     border: 'border-orange-200/60' },
+          { label: 'Top Topic',        value: topRecord?.topicName ?? '—', icon: BarChart2, color: 'text-zinc-700', bg: 'bg-zinc-50', border: 'border-zinc-200/60' },
         ].map((s, i) => (
           <div key={i} className={`flex items-center gap-3 px-4 py-3.5 rounded-xl bg-white border shadow-[0_1px_3px_rgba(0,0,0,0.04)] ${s.border}`}>
             <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${s.bg} ${s.color} shrink-0`}>
@@ -1117,7 +1117,7 @@ export default function PastPaperAnalytics() {
                         {/* Source badge */}
                         <td className="px-5 py-3.5">
                           {rec.generatedByAgent ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200 text-[10px] font-semibold">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-50 text-zinc-700 border border-zinc-200 text-[10px] font-semibold">
                               <Bot size={10} /> AI Agent
                             </span>
                           ) : (

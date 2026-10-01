@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
-import { Cpu, Home, ClipboardList, Users, Brain, Menu, X, BarChart2, Database, ShieldCheck } from 'lucide-react';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { Cpu, Home, ClipboardList, Users, Brain, Menu, X, BarChart2, Database, ShieldCheck, LogOut } from 'lucide-react';
 
 const NAV = [
   { to: '/', icon: Home, label: 'Dashboard' },
@@ -12,8 +12,17 @@ const NAV = [
   { to: '/approvals', icon: ShieldCheck, label: 'Pending Approvals', badge: true },
 ];
 
-export default function Layout() {
+export default function AdminLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const handleLogout = () => {
+    localStorage.removeItem('admin_token');
+    navigate('/login', { replace: true });
+  };
+
+  const currentNav = NAV.find(n => n.to === location.pathname) || { label: 'Admin Dashboard' };
 
   const SidebarContent = () => (
     <>
@@ -38,7 +47,9 @@ export default function Layout() {
             onClick={() => setMobileOpen(false)}
             className={({ isActive }) =>
               `w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-left transition-all ${
-                isActive ? 'bg-orange-50 text-orange-700 font-semibold border-r-2 border-orange-600' : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-800'
+                isActive 
+                  ? 'bg-orange-50 text-orange-700 font-semibold border-r-2 border-orange-600' 
+                  : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-800'
               }`
             }
           >
@@ -57,8 +68,8 @@ export default function Layout() {
   );
 
   return (
-    <div className="min-h-screen flex bg-zinc-50/60 font-sans antialiased">
-      <aside className="hidden md:flex w-[220px] flex-col bg-white border-r border-zinc-200/80 shrink-0 sticky top-0 h-screen">
+    <div className="min-h-screen flex bg-zinc-50 font-sans antialiased">
+      <aside className="hidden md:flex w-[220px] flex-col bg-white border-r border-zinc-200 shrink-0 sticky top-0 h-screen shadow-sm">
         <SidebarContent />
       </aside>
 
@@ -68,7 +79,7 @@ export default function Layout() {
           <div className="relative flex flex-col w-[220px] bg-white h-full shadow-2xl">
             <button
               onClick={() => setMobileOpen(false)}
-              className="absolute top-4 right-4 p-1.5 rounded-lg bg-zinc-100 text-zinc-500"
+              className="absolute top-4 right-4 p-1.5 rounded-lg bg-zinc-100 text-zinc-500 hover:bg-zinc-200 transition-colors"
             >
               <X size={15} />
             </button>
@@ -78,24 +89,29 @@ export default function Layout() {
       )}
 
       <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
-        <header className="sticky top-0 z-10 h-14 bg-white/90 backdrop-blur-md border-b border-zinc-200/80 flex items-center px-4 md:px-6 gap-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-          <button
-            onClick={() => setMobileOpen(true)}
-            className="md:hidden p-2 rounded-lg border border-zinc-200 text-zinc-500"
-          >
-            <Menu size={15} />
-          </button>
+        <header className="sticky top-0 z-10 h-16 bg-white/95 backdrop-blur-md border-b border-zinc-200 flex items-center justify-between px-4 md:px-6 shadow-sm">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setMobileOpen(true)}
+              className="md:hidden p-2 rounded-lg border border-zinc-200 text-zinc-500 hover:bg-zinc-50 transition-colors"
+            >
+              <Menu size={18} />
+            </button>
+            <h1 className="text-lg font-bold text-zinc-800 tracking-tight">{currentNav.label}</h1>
+          </div>
 
-          <div className="flex-1" />
-
-          <div className="flex items-center gap-2.5 pr-2">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-orange-700 flex items-center justify-center text-white text-[11px] font-bold">
-              SA
-            </div>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold text-red-600 bg-red-50 border border-red-100 rounded-lg hover:bg-red-100 hover:text-red-700 transition-colors"
+            >
+              <LogOut size={16} />
+              <span className="hidden sm:inline">Logout</span>
+            </button>
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 bg-zinc-50">
           <Outlet />
         </main>
       </div>

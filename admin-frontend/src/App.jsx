@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 
-import Layout from './Layout';
+import AdminLayout from './AdminLayout';
+import ProtectedRoute from './ProtectedRoute';
 import Dashboard from './Dashboard';
 import ExamSessions from './ExamSessions';
 import StudentManagement from './StudentManagement';
@@ -12,19 +13,19 @@ import AdminLogin from './AdminLogin';
 import PendingApprovals from './PendingApprovals';
 
 function App() {
-  const [token, setToken] = useState(localStorage.getItem('admin_token'));
-
-  if (!token) {
-    return <AdminLogin onLogin={(newToken) => setToken(newToken)} />;
-  }
-
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<Layout onLogout={() => {
-          localStorage.removeItem('admin_token');
-          setToken(null);
-        }} />}>
+        <Route path="/login" element={<AdminLogin />} />
+        
+        <Route 
+          path="/" 
+          element={
+            <ProtectedRoute>
+              <AdminLayout />
+            </ProtectedRoute>
+          }
+        >
           <Route index element={<Dashboard />} />
           <Route path="exams" element={<ExamSessions />} />
           <Route path="students" element={<StudentManagement />} />

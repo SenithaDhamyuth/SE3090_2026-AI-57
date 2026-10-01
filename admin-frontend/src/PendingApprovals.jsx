@@ -66,7 +66,7 @@ function ApprovalCard({ item, onApprove, onReject, processingIds }) {
       <div className="px-5 py-4 flex items-start gap-4">
         {/* Type Icon */}
         <div className={`shrink-0 flex items-center justify-center w-10 h-10 rounded-xl border ${
-          isExam ? 'bg-violet-50 border-violet-100 text-violet-600' : 'bg-blue-50 border-blue-100 text-blue-600'
+          isExam ? 'bg-zinc-50 border-zinc-100 text-zinc-600' : 'bg-orange-50 border-orange-100 text-orange-600'
         }`}>
           {isExam ? <Sparkles size={20} /> : <Brain size={20} />}
         </div>
@@ -76,7 +76,7 @@ function ApprovalCard({ item, onApprove, onReject, processingIds }) {
           <div className="flex flex-wrap items-center gap-1.5 mb-2">
             <span className="font-mono text-[10px] font-semibold text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded">ID: {item.id}</span>
             <span className={`text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded border ${
-              isExam ? 'text-violet-600 bg-violet-50 border-violet-100' : 'text-blue-600 bg-blue-50 border-blue-100'
+              isExam ? 'text-zinc-600 bg-zinc-50 border-zinc-100' : 'text-orange-600 bg-orange-50 border-orange-100'
             }`}>
               {item.type}
             </span>
@@ -117,7 +117,7 @@ function ApprovalCard({ item, onApprove, onReject, processingIds }) {
               {Array.isArray(details) && details.length > 0 ? details.map((q, i) => (
                 <div key={i} className="bg-white border border-zinc-200 rounded-lg p-4">
                   <p className="text-[13px] text-zinc-800 leading-relaxed font-medium mb-3">
-                    <span className="text-violet-600 mr-2">{i + 1}.</span>{q.questionText}
+                    <span className="text-zinc-600 mr-2">{i + 1}.</span>{q.questionText}
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {(q.options || []).map((opt, oi) => {
@@ -354,13 +354,13 @@ export default function PendingApprovals() {
           <div className="w-2 h-2 rounded-full bg-orange-500" />
           <div><p className="text-[10px] text-zinc-500 font-medium">Total Pending</p><p className="text-2xl font-bold text-orange-700">{pendingCount}</p></div>
         </div>
-        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-violet-200 bg-violet-50">
-          <div className="w-2 h-2 rounded-full bg-violet-500" />
-          <div><p className="text-[10px] text-zinc-500 font-medium">Exam Sessions</p><p className="text-2xl font-bold text-violet-700">{examCount}</p></div>
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-zinc-200 bg-zinc-50">
+          <div className="w-2 h-2 rounded-full bg-zinc-500" />
+          <div><p className="text-[10px] text-zinc-500 font-medium">Exam Sessions</p><p className="text-2xl font-bold text-zinc-700">{examCount}</p></div>
         </div>
-        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-blue-200 bg-blue-50">
-          <div className="w-2 h-2 rounded-full bg-blue-500" />
-          <div><p className="text-[10px] text-zinc-500 font-medium">Study Plans</p><p className="text-2xl font-bold text-blue-700">{planCount}</p></div>
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-orange-200 bg-orange-50">
+          <div className="w-2 h-2 rounded-full bg-orange-500" />
+          <div><p className="text-[10px] text-zinc-500 font-medium">Study Plans</p><p className="text-2xl font-bold text-orange-700">{planCount}</p></div>
         </div>
       </div>
 

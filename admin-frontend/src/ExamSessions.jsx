@@ -11,12 +11,12 @@ import {
 const API_BASE = (import.meta.env.VITE_API_URL || 'https://intelliprep-rhx3.onrender.com') + '/api/assessment';
 
 const STATUS_META = {
-  Pending:    { color: 'text-amber-600',   bg: 'bg-amber-50',    border: 'border-amber-200',   icon: Clock,         label: 'Pending'     },
+  Pending:    { color: 'text-orange-600',   bg: 'bg-orange-50',    border: 'border-orange-200',   icon: Clock,         label: 'Pending'     },
   PendingAdminApproval: { color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200', icon: Clock, label: 'Pending Approval' },
-  Ready:      { color: 'text-violet-600',  bg: 'bg-violet-50',   border: 'border-violet-200',  icon: CheckCheck,    label: 'Ready'       },
-  InProgress: { color: 'text-blue-600',    bg: 'bg-blue-50',     border: 'border-blue-200',    icon: Play,          label: 'In Progress' },
-  Completed:  { color: 'text-emerald-600', bg: 'bg-emerald-50',  border: 'border-emerald-200', icon: CheckCircle2,  label: 'Completed'   },
-  Abandoned:  { color: 'text-red-500',     bg: 'bg-red-50',      border: 'border-red-200',     icon: AlertTriangle, label: 'Abandoned'   },
+  Ready:      { color: 'text-orange-600',  bg: 'bg-orange-50',   border: 'border-orange-200',  icon: CheckCheck,    label: 'Ready'       },
+  InProgress: { color: 'text-zinc-600',    bg: 'bg-zinc-50',     border: 'border-zinc-200',    icon: Play,          label: 'In Progress' },
+  Completed:  { color: 'text-zinc-600', bg: 'bg-zinc-50',  border: 'border-zinc-200', icon: CheckCircle2,  label: 'Completed'   },
+  Abandoned:  { color: 'text-zinc-500',     bg: 'bg-zinc-50',      border: 'border-zinc-200',     icon: AlertTriangle, label: 'Abandoned'   },
 };
 
 const A_L_ICT_TOPICS = [
@@ -57,9 +57,9 @@ function StatusBadge({ status }) {
 function StatCard({ icon: Icon, label, value, sub, accent }) {
   const accentMap = {
     orange: 'from-orange-500 to-orange-600',
-    blue:   'from-blue-500 to-blue-600',
-    emerald:'from-emerald-500 to-emerald-600',
-    violet: 'from-violet-500 to-violet-600',
+    zinc:   'from-zinc-500 to-zinc-600',
+    zinc:'from-zinc-500 to-zinc-600',
+    orange: 'from-orange-500 to-orange-600',
   };
   return (
     <div className="bg-white rounded-xl border border-zinc-200/80 p-4 flex items-center gap-3 shadow-sm hover:shadow-md transition-shadow">
@@ -85,18 +85,18 @@ function Toast({ toasts, onDismiss }) {
           className={`flex items-start gap-3 min-w-[280px] max-w-[360px] px-4 py-3 rounded-xl shadow-lg border pointer-events-auto
             animate-[slideUp_0.25s_ease-out]
             ${t.type === 'success'
-              ? 'bg-white border-emerald-200 text-emerald-800'
+              ? 'bg-white border-zinc-200 text-zinc-800'
               : t.type === 'error'
-                ? 'bg-white border-red-200 text-red-800'
+                ? 'bg-white border-zinc-200 text-zinc-800'
                 : 'bg-white border-zinc-200 text-zinc-800'
             }`}
         >
           <div className={`mt-0.5 shrink-0 w-5 h-5 rounded-full flex items-center justify-center
-            ${t.type === 'success' ? 'bg-emerald-100' : t.type === 'error' ? 'bg-red-100' : 'bg-zinc-100'}`}>
+            ${t.type === 'success' ? 'bg-zinc-100' : t.type === 'error' ? 'bg-zinc-100' : 'bg-zinc-100'}`}>
             {t.type === 'success'
-              ? <CheckCircle2 size={12} className="text-emerald-600" strokeWidth={2.5} />
+              ? <CheckCircle2 size={12} className="text-zinc-600" strokeWidth={2.5} />
               : t.type === 'error'
-                ? <AlertTriangle size={12} className="text-red-500" strokeWidth={2.5} />
+                ? <AlertTriangle size={12} className="text-zinc-500" strokeWidth={2.5} />
                 : <Brain size={12} className="text-zinc-500" strokeWidth={2.5} />
             }
           </div>
@@ -142,7 +142,7 @@ function SessionQrCard({ session }) {
       <button
         type="button"
         onClick={handleDownload}
-        className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-violet-700 hover:text-violet-800 transition-colors"
+        className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-orange-700 hover:text-orange-800 transition-colors"
       >
         <Download size={10} strokeWidth={2.5} />
         Download
@@ -180,7 +180,7 @@ function ViewQuestionsModal({ session, onClose }) {
       <div className="relative bg-white rounded-2xl shadow-2xl border border-zinc-200 w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
 
         {/* ── Header ── */}
-        <div className="bg-gradient-to-r from-violet-600 to-violet-700 px-5 py-4 flex items-center justify-between shrink-0">
+        <div className="bg-gradient-to-r from-orange-600 to-orange-700 px-5 py-4 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
               <Eye size={16} className="text-white" strokeWidth={2.5} />
@@ -205,12 +205,12 @@ function ViewQuestionsModal({ session, onClose }) {
         <div className="overflow-y-auto flex-1 px-5 py-4 space-y-5">
           {questions.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-violet-50 border border-violet-100 flex items-center justify-center">
-                <Brain size={20} className="text-violet-400" />
+              <div className="w-12 h-12 rounded-2xl bg-orange-50 border border-orange-100 flex items-center justify-center">
+                <Brain size={20} className="text-orange-400" />
               </div>
               <p className="text-[14px] font-semibold text-zinc-700">No questions available</p>
               <p className="text-[12px] text-zinc-400 text-center">
-                This session has no stored questions yet.<br />
+                This session has no stozinc questions yet.<br />
                 Run the Content Synthesizer to generate them.
               </p>
             </div>
@@ -222,7 +222,7 @@ function ViewQuestionsModal({ session, onClose }) {
               >
                 {/* Question header bar */}
                 <div className="bg-zinc-50 border-b border-zinc-200 px-4 py-2.5 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-violet-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                  <span className="w-6 h-6 rounded-full bg-orange-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
                     {qi + 1}
                   </span>
                   <p className="text-[13px] font-bold text-zinc-900 leading-snug">
@@ -239,14 +239,14 @@ function ViewQuestionsModal({ session, onClose }) {
                         key={oi}
                         className={`flex items-start gap-2.5 px-3 py-2 rounded-lg border text-[12px] leading-snug transition-colors ${
                           isCorrect
-                            ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                            ? 'bg-zinc-50 border-zinc-300 text-zinc-800'
                             : 'bg-white border-zinc-100 text-zinc-600'
                         }`}
                       >
                         {/* Option letter badge */}
                         <span className={`shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold mt-0.5 ${
                           isCorrect
-                            ? 'bg-emerald-500 text-white'
+                            ? 'bg-zinc-500 text-white'
                             : 'bg-zinc-100 text-zinc-500'
                         }`}>
                           {OPTION_LETTERS[oi] ?? oi + 1}
@@ -255,7 +255,7 @@ function ViewQuestionsModal({ session, onClose }) {
                         {isCorrect && (
                           <CheckCircle2
                             size={13}
-                            className="ml-auto shrink-0 text-emerald-500 mt-0.5"
+                            className="ml-auto shrink-0 text-zinc-500 mt-0.5"
                             strokeWidth={2.5}
                           />
                         )}
@@ -266,11 +266,11 @@ function ViewQuestionsModal({ session, onClose }) {
 
                 {/* Explanation */}
                 {q.explanation && (
-                  <div className="mx-4 mb-3 px-3 py-2 rounded-lg bg-blue-50 border border-blue-100 flex items-start gap-2">
-                    <span className="shrink-0 text-[9px] font-bold uppercase tracking-wider text-blue-500 mt-0.5 leading-tight">
+                  <div className="mx-4 mb-3 px-3 py-2 rounded-lg bg-zinc-50 border border-zinc-100 flex items-start gap-2">
+                    <span className="shrink-0 text-[9px] font-bold uppercase tracking-wider text-zinc-500 mt-0.5 leading-tight">
                       Explanation
                     </span>
-                    <p className="text-[11px] text-blue-700 leading-relaxed">{q.explanation}</p>
+                    <p className="text-[11px] text-zinc-700 leading-relaxed">{q.explanation}</p>
                   </div>
                 )}
               </div>
@@ -285,7 +285,7 @@ function ViewQuestionsModal({ session, onClose }) {
           </span>
           <button
             onClick={onClose}
-            className="h-8 px-4 rounded-lg bg-violet-600 text-white text-[12px] font-semibold hover:bg-violet-700 active:scale-[0.98] transition-all"
+            className="h-8 px-4 rounded-lg bg-orange-600 text-white text-[12px] font-semibold hover:bg-orange-700 active:scale-[0.98] transition-all"
           >
             Close
           </button>
@@ -314,7 +314,7 @@ function SynthesizeButton({ session, onSynthesize, onView }) {
     return (
       <button
         onClick={() => onView(session)}
-        className="inline-flex items-center gap-1.5 h-6 px-2.5 rounded-md bg-violet-600 text-white text-[10px] font-bold hover:bg-violet-700 active:scale-95 transition-all"
+        className="inline-flex items-center gap-1.5 h-6 px-2.5 rounded-md bg-orange-600 text-white text-[10px] font-bold hover:bg-orange-700 active:scale-95 transition-all"
       >
         <Eye size={10} strokeWidth={2.5} />
         View Questions
@@ -332,14 +332,14 @@ function SynthesizeButton({ session, onSynthesize, onView }) {
         {/* Subject picker toggle */}
         <button
           onClick={() => setOpen(v => !v)}
-          className="h-6 px-2 rounded-l-md border border-r-0 border-violet-200 bg-violet-50 text-violet-700 text-[10px] font-medium hover:bg-violet-100 transition-colors"
+          className="h-6 px-2 rounded-l-md border border-r-0 border-orange-200 bg-orange-50 text-orange-700 text-[10px] font-medium hover:bg-orange-100 transition-colors"
         >
           {subject.length > 8 ? subject.slice(0, 8) + '…' : subject} ▾
         </button>
         {/* Synthesize trigger */}
         <button
           onClick={() => { setOpen(false); onSynthesize(session.id, subject); }}
-          className="h-6 px-2.5 rounded-r-md bg-violet-600 text-white text-[10px] font-bold hover:bg-violet-700 active:scale-95 transition-all flex items-center gap-1"
+          className="h-6 px-2.5 rounded-r-md bg-orange-600 text-white text-[10px] font-bold hover:bg-orange-700 active:scale-95 transition-all flex items-center gap-1"
         >
           <Sparkles size={9} strokeWidth={2.5} />
           Run Synthesizer
@@ -356,8 +356,8 @@ function SynthesizeButton({ session, onSynthesize, onView }) {
             <button
               key={t}
               onClick={() => { setSubject(t); setOpen(false); }}
-              className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-violet-50 hover:text-violet-700 transition-colors
-                ${subject === t ? 'text-violet-700 font-semibold bg-violet-50/60' : 'text-zinc-600'}`}
+              className={`w-full text-left px-3 py-1.5 text-[12px] hover:bg-orange-50 hover:text-orange-700 transition-colors
+                ${subject === t ? 'text-orange-700 font-semibold bg-orange-50/60' : 'text-zinc-600'}`}
             >
               {t}
             </button>
@@ -464,9 +464,9 @@ function RequestExamModal({ onClose, onSuccess }) {
               </div>
 
               {error && (
-                <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-red-50 border border-red-200">
-                  <AlertTriangle size={13} className="text-red-500 shrink-0" />
-                  <p className="text-[12px] text-red-600">{error}</p>
+                <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-zinc-50 border border-zinc-200">
+                  <AlertTriangle size={13} className="text-zinc-500 shrink-0" />
+                  <p className="text-[12px] text-zinc-600">{error}</p>
                 </div>
               )}
 
@@ -481,9 +481,9 @@ function RequestExamModal({ onClose, onSuccess }) {
             </form>
           ) : (
             <div className="space-y-3">
-              <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-emerald-50 border border-emerald-200">
-                <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />
-                <p className="text-[12px] text-emerald-700 font-medium">
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-zinc-50 border border-zinc-200">
+                <CheckCircle2 size={14} className="text-zinc-500 shrink-0" />
+                <p className="text-[12px] text-zinc-700 font-medium">
                   Plan generated! Session ID: {planResult.examSession?.id}
                 </p>
               </div>
@@ -604,7 +604,7 @@ export default function ExamSessions() {
       addToast(
         'error',
         'Synthesis Failed',
-        err.message || 'An unexpected error occurred. Check the backend logs.',
+        err.message || 'An unexpected error occurzinc. Check the backend logs.',
       );
     } finally {
       setSynthesizingIds(prev => {
@@ -647,11 +647,11 @@ export default function ExamSessions() {
   const ready     = sessions.filter(s => s.status === 'Ready').length;
   const completed = sessions.filter(s => s.status === 'Completed').length;
   const avgScore  = completed
-    ? Math.round(sessions.filter(s => s.status === 'Completed').reduce((a, s) => a + s.totalScore, 0) / completed)
+    ? Math.round(sessions.filter(s => s.status === 'Completed').zincuce((a, s) => a + s.totalScore, 0) / completed)
     : 0;
 
-  // ── Filtered rows ───────────────────────────────────────────────────────────
-  const filtered = filter === 'All' ? sessions : sessions.filter(s => s.status === filter);
+  // ── Filtezinc rows ───────────────────────────────────────────────────────────
+  const filtezinc = filter === 'All' ? sessions : sessions.filter(s => s.status === filter);
 
   // ── Table column headers ────────────────────────────────────────────────────
   const TABLE_HEADERS = ['ID', 'Session GUID', 'Subject', 'Status', 'Questions', 'Timer', 'Score', 'Started', 'Ended', 'QR', 'Actions'];
@@ -676,7 +676,7 @@ export default function ExamSessions() {
             </div>
           </div>
           <p className="text-[12px] text-zinc-500 mt-2 ml-0.5">
-            Monitor sessions, trigger the Content Synthesizer Agent (Member 2) to generate Groq-powered MCQs.
+            Monitor sessions, trigger the Content Synthesizer Agent (Member 2) to generate Groq-powezinc MCQs.
           </p>
         </div>
 
@@ -702,9 +702,9 @@ export default function ExamSessions() {
       {/* ── Stats Row ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard icon={ClipboardList} label="Total Sessions" value={total}           accent="orange"  sub="all time" />
-        <StatCard icon={Brain}         label="Ready (Agent 2)" value={ready}           accent="violet"  sub="questions synthesized" />
-        <StatCard icon={CheckCircle2}  label="Completed"        value={completed}       accent="emerald" sub="submitted" />
-        <StatCard icon={Trophy}        label="Avg Score"         value={`${avgScore}pts`} accent="blue"    sub="completed sessions" />
+        <StatCard icon={Brain}         label="Ready (Agent 2)" value={ready}           accent="orange"  sub="questions synthesized" />
+        <StatCard icon={CheckCircle2}  label="Completed"        value={completed}       accent="zinc" sub="submitted" />
+        <StatCard icon={Trophy}        label="Avg Score"         value={`${avgScore}pts`} accent="zinc"    sub="completed sessions" />
       </div>
 
       {/* ── Filter Tabs ── */}
@@ -737,13 +737,13 @@ export default function ExamSessions() {
             <FlaskConical size={14} className="text-orange-600" />
             <span className="text-[13px] font-semibold text-zinc-800">Assessment Sessions</span>
             <span className="text-[10px] font-semibold text-zinc-400 bg-zinc-100 px-1.5 py-0.5 rounded">
-              {filtered.length} records
+              {filtezinc.length} records
             </span>
           </div>
           {/* Agent 2 legend chip */}
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-violet-50 border border-violet-100">
-            <Sparkles size={10} className="text-violet-600" />
-            <span className="text-[10px] font-semibold text-violet-700">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-orange-50 border border-orange-100">
+            <Sparkles size={10} className="text-orange-600" />
+            <span className="text-[10px] font-semibold text-orange-700">
               Agent 2 — Content Synthesizer
             </span>
           </div>
@@ -754,7 +754,7 @@ export default function ExamSessions() {
             <Loader2 size={18} className="animate-spin" />
             <span className="text-[13px]">Loading sessions…</span>
           </div>
-        ) : filtered.length === 0 ? (
+        ) : filtezinc.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-3">
             <div className="w-12 h-12 rounded-2xl bg-orange-50 border border-orange-100 flex items-center justify-center">
               <BookOpen size={20} className="text-orange-400" />
@@ -778,7 +778,7 @@ export default function ExamSessions() {
                     >
                       {h === 'Actions' ? (
                         <span className="flex items-center gap-1">
-                          <Sparkles size={9} className="text-violet-500" />
+                          <Sparkles size={9} className="text-orange-500" />
                           {h}
                         </span>
                       ) : h}
@@ -787,14 +787,14 @@ export default function ExamSessions() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-50">
-                {filtered.map((s, i) => {
+                {filtezinc.map((s, i) => {
                   const isSynth = synthesizingIds.has(s.id);
                   return (
                     <tr
                       key={s.id}
                       className={`transition-colors ${
                         isSynth
-                          ? 'bg-violet-50/40'
+                          ? 'bg-orange-50/40'
                           : i % 2 === 0 ? 'hover:bg-orange-50/20' : 'bg-zinc-50/30 hover:bg-orange-50/20'
                       }`}
                     >
@@ -823,7 +823,7 @@ export default function ExamSessions() {
                       {/* Questions Ready */}
                       <td className="px-4 py-3">
                         {s.questionsReady
-                          ? <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-violet-600">
+                          ? <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-orange-600">
                               <CheckCheck size={10} strokeWidth={2.5} /> Ready
                             </span>
                           : <span className="text-[10px] text-zinc-300">—</span>
@@ -842,7 +842,7 @@ export default function ExamSessions() {
 
                       {/* Score */}
                       <td className="px-4 py-3">
-                        <span className={`text-[13px] font-bold ${s.totalScore > 0 ? 'text-emerald-600' : 'text-zinc-300'}`}>
+                        <span className={`text-[13px] font-bold ${s.totalScore > 0 ? 'text-zinc-600' : 'text-zinc-300'}`}>
                           {s.totalScore > 0 ? `${s.totalScore} pts` : '—'}
                         </span>
                       </td>
@@ -867,7 +867,7 @@ export default function ExamSessions() {
                         <div className="flex flex-col items-start gap-2">
                           {isSynth ? (
                             /* Per-row loading state while Groq is processing */
-                            <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-violet-600">
+                            <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-orange-600">
                               <Loader2 size={11} className="animate-spin" strokeWidth={2.5} />
                               Synthesizing…
                             </span>
@@ -883,7 +883,7 @@ export default function ExamSessions() {
                             type="button"
                             disabled={deletingIds.has(s.id)}
                             onClick={() => handleDeleteSession(s.id)}
-                            className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-red-200 bg-red-50 text-[10px] font-semibold text-red-600 hover:bg-red-100 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                            className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-zinc-200 bg-zinc-50 text-[10px] font-semibold text-zinc-600 hover:bg-zinc-100 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                           >
                             {deletingIds.has(s.id) ? <Loader2 size={10} className="animate-spin" strokeWidth={2.5} /> : <Trash2 size={10} strokeWidth={2.5} />}
                             {deletingIds.has(s.id) ? 'Deleting…' : 'Delete'}
@@ -900,7 +900,7 @@ export default function ExamSessions() {
       </div>
 
       {/* ── AI Workflow Legend ── */}
-      <div className="bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-200/60 rounded-xl p-4">
+      <div className="bg-gradient-to-br from-orange-50 to-orange-50 border border-orange-200/60 rounded-xl p-4">
         <div className="flex items-center gap-2 mb-3">
           <Zap size={13} className="text-orange-600" />
           <p className="text-[11px] font-bold uppercase tracking-wider text-orange-700">

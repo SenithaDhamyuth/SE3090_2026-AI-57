@@ -208,11 +208,6 @@ export default function StudentManagement() {
 
   const newestStudent = students.length > 0 ? students[0] : null;
 
-  const handleLogout = () => {
-    localStorage.removeItem('admin_token');
-    window.location.href = '/login';
-  };
-
   return (
     <div className="p-6 md:p-8 max-w-6xl mx-auto">
       <div className="mb-8 flex items-start justify-between gap-4">
@@ -220,15 +215,6 @@ export default function StudentManagement() {
           <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Student Management</h1>
           <p className="text-zinc-500 mt-1 text-sm">Add and manage students for IntelliPrep.</p>
         </div>
-
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-100 hover:border-red-300"
-        >
-          <LogOut size={16} />
-          Logout
-        </button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3 mb-8">
@@ -243,7 +229,7 @@ export default function StudentManagement() {
         <div className="bg-white border border-zinc-200 rounded-xl p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-zinc-500">Active Accounts</span>
-            <User className="h-5 w-5 text-emerald-500" />
+            <User className="h-5 w-5 text-zinc-500" />
           </div>
           <div className="mt-4 text-3xl font-bold text-zinc-900">{students.length}</div>
         </div>
@@ -251,7 +237,7 @@ export default function StudentManagement() {
         <div className="bg-white border border-zinc-200 rounded-xl p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-zinc-500">Newest Student</span>
-            <CalendarDays className="h-5 w-5 text-sky-500" />
+            <CalendarDays className="h-5 w-5 text-zinc-500" />
           </div>
           <div className="mt-4 text-lg font-semibold text-zinc-900 truncate">
             {newestStudent ? newestStudent.fullName : 'No students yet'}

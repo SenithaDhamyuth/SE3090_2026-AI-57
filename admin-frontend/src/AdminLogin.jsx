@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Loader2, Mail, Lock, AlertCircle, ArrowRight } from 'lucide-react';
 
-export default function AdminLogin({ onLogin }) {
+export default function AdminLogin() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -30,7 +32,7 @@ export default function AdminLogin({ onLogin }) {
       }
 
       localStorage.setItem('admin_token', data.token);
-      onLogin(data.token);
+      navigate('/', { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {

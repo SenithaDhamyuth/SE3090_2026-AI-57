@@ -45,7 +45,7 @@ const EMPTY = {
 // ── Small alert ───────────────────────────────────────────────────────────────
 function InlineAlert({ type, text, onDismiss }) {
   const styles = {
-    success: 'bg-emerald-50 border-emerald-200 text-emerald-800',
+    success: 'bg-zinc-50 border-zinc-200 text-zinc-800',
     error:   'bg-red-50 border-red-200 text-red-800',
   };
   const Icon = type === 'success' ? CheckCircle2 : AlertCircle;
@@ -256,7 +256,7 @@ export default function QuestionBankForm({ onSuccess }) {
                 <div
                   key={key}
                   className={`relative rounded-lg border transition-colors ${
-                    isCorrect ? 'border-emerald-400 bg-emerald-50/40' : 'border-zinc-200 bg-white'
+                    isCorrect ? 'border-zinc-400 bg-zinc-50/40' : 'border-zinc-200 bg-white'
                   }`}
                 >
                   {/* Correct-answer radio pill */}
@@ -266,8 +266,8 @@ export default function QuestionBankForm({ onSuccess }) {
                     title={`Mark as correct answer`}
                     className={`absolute left-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
                       isCorrect
-                        ? 'border-emerald-500 bg-emerald-500'
-                        : 'border-zinc-300 hover:border-emerald-400'
+                        ? 'border-zinc-500 bg-zinc-500'
+                        : 'border-zinc-300 hover:border-zinc-400'
                     }`}
                   >
                     {isCorrect && <span className="w-2 h-2 rounded-full bg-white block" />}
@@ -284,7 +284,7 @@ export default function QuestionBankForm({ onSuccess }) {
 
                   {/* Label badge */}
                   <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                    isCorrect ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-500'
+                    isCorrect ? 'bg-zinc-100 text-zinc-700' : 'bg-zinc-100 text-zinc-500'
                   }`}>
                     {optNo}{isCorrect ? ' ✓' : ''}
                   </span>
@@ -294,9 +294,9 @@ export default function QuestionBankForm({ onSuccess }) {
           </div>
 
           <p className="text-[11px] text-zinc-400 mt-2 flex items-center gap-1">
-            <CheckCircle2 size={11} className="text-emerald-500" />
+            <CheckCircle2 size={11} className="text-zinc-500" />
             Click the circle next to an option to mark it as the correct answer.
-            Currently: <strong className="text-emerald-700">Option {form.correct_option_no}</strong>
+            Currently: <strong className="text-zinc-700">Option {form.correct_option_no}</strong>
           </p>
         </div>
 

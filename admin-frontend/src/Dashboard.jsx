@@ -86,7 +86,7 @@ export default function Dashboard() {
 
           <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-lg bg-zinc-100 text-zinc-600 flex items-center justify-center">
                 <Activity size={18} />
               </div>
               <div>
