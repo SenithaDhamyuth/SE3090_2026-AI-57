@@ -35,4 +35,29 @@ namespace IntelliPrep.API.DTOs
         /// <summary>Calculated score to persist (can be validated server-side in Sprint 2).</summary>
         public int TotalScore { get; set; }
     }
+
+    /// <summary>
+    /// Request body for PUT /api/assessment/approve/{sessionId}.
+    /// Carries the admin-curated question list from the HITL edit UI in the
+    /// React admin frontend. When provided, AssessmentController overwrites
+    /// QuestionsJson with this payload before flipping status to "Ready".
+    /// </summary>
+    public class ApproveSessionDto
+    {
+        /// <summary>
+        /// Admin-edited list of MCQ questions. Each object must match the schema
+        /// expected by the Flutter exam_timer_screen:
+        ///   { questionText, options: string[], correctOptionIndex: int, explanation?: string }
+        /// </summary>
+        public List<EditedQuestionDto> EditedQuestions { get; set; } = new();
+    }
+
+    /// <summary>Single MCQ question entry as edited by the admin in the HITL UI.</summary>
+    public class EditedQuestionDto
+    {
+        public string QuestionText      { get; set; } = string.Empty;
+        public List<string> Options     { get; set; } = new();
+        public int CorrectOptionIndex   { get; set; }
+        public string? Explanation      { get; set; }
+    }
 }
