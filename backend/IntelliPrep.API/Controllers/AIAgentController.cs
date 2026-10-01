@@ -457,24 +457,34 @@ public class AIAgentController : ControllerBase
         if (sessionId <= 0)
             return BadRequest(new { message = "sessionId must be a positive integer." });
 
-        if (request.RequestedQuestionCount <= 0)
-            return BadRequest(new { message = "requestedQuestionCount must be greater than 0." });
-
         if (!string.IsNullOrWhiteSpace(request.Subject) == false)
             return BadRequest(new { message = "subject is required." });
 
-        // Verify session exists before starting the expensive LLM pipeline
-        var sessionExists = await _db.ExamSessions.AnyAsync(s => s.Id == sessionId);
-        if (!sessionExists)
+        // Verify session exists and grab the actual constraints the student requested
+        var session = await _db.ExamSessions.FirstOrDefaultAsync(s => s.Id == sessionId);
+        if (session == null)
             return NotFound(new { message = $"ExamSession with Id={sessionId} was not found." });
+
+        // CRITICAL FIX: Ignore the generic DTO values. Use the exact constraints saved in the database
+        // when the student first requested the exam.
+        var overriddenRequest = new SynthesizerInput
+        {
+            Subject = request.Subject,
+            Objective = !string.IsNullOrWhiteSpace(session.OriginalObjective) ? session.OriginalObjective : request.Objective,
+            RequestedQuestionCount = session.RequestedQuestionCount > 0 ? session.RequestedQuestionCount : request.RequestedQuestionCount,
+            TopicDistribution = request.TopicDistribution
+        };
+
+        if (overriddenRequest.RequestedQuestionCount <= 0)
+            return BadRequest(new { message = "requestedQuestionCount must be greater than 0." });
 
         var adminEmail = User.FindFirstValue(System.Security.Claims.ClaimTypes.Email) ?? "unknown-admin";
         _logger.LogInformation(
-            "[AIAgentController] Admin '{Admin}' triggered SynthesizeExam | SessionId={SessionId} | Subject='{Subject}' | Count={Count}",
-            adminEmail, sessionId, request.Subject, request.RequestedQuestionCount);
+            "[AIAgentController] Admin '{Admin}' triggered SynthesizeExam | SessionId={SessionId} | Subject='{Subject}' | Exact DB Count={Count} | DB Objective='{Obj}'",
+            adminEmail, sessionId, overriddenRequest.Subject, overriddenRequest.RequestedQuestionCount, overriddenRequest.Objective);
 
         // ── Run Agent 3 → Agent 4 pipeline ────────────────────────────────
-        var result = await _validationAgent.ValidateAndPersistAsync(request, sessionId);
+        var result = await _validationAgent.ValidateAndPersistAsync(overriddenRequest, sessionId);
 
         if (!result.Success)
         {
