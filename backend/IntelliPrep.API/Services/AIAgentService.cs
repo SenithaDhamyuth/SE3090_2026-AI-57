@@ -1082,17 +1082,84 @@ namespace IntelliPrep.API.Services
             string? noDataFallback = null)
         {
             var sb = new StringBuilder();
+            var today = DateTime.UtcNow.Date;
 
-            sb.AppendLine(
-                "You are an expert tutor. Analyze the provided topic probabilities. " +
-                "This is a 1-Week General Master Plan based on the topic weights. " +
-                "You MUST generate EXACTLY 7 days of study plan (Day 1 to Day 7). " +
-                "Do NOT generate the schedule up to the target date. Stop exactly at Day 7. " +
-                "Prioritize the most important subtopics for those 7 days and emphasize the highest-probability topics first.");
+            // ═══════════════════════════════════════════════════════════
+            // SECTION 0 — HARD EXCLUSIONS (read first — highest priority)
+            // ═══════════════════════════════════════════════════════════
+            sb.AppendLine("════════════════════════════════════════════════════════════════");
+            sb.AppendLine("SECTION 0 — ⚠️  CRITICAL EXCLUSION LIST — READ THIS FIRST");
+            sb.AppendLine("════════════════════════════════════════════════════════════════");
+
+            if (excludedTopics.Count == 0)
+            {
+                sb.AppendLine("  No topics have been excluded by the student.");
+                sb.AppendLine("  You may include any syllabus-approved topic in the 7-day plan.");
+            }
+            else
+            {
+                sb.AppendLine("CRITICAL: The following topics have been marked as ALREADY STUDIED or EXCLUDED by the student.");
+                sb.AppendLine("You MUST NOT include ANY of these topics — not as a main topic, not as a sub-topic, not even a passing mention:");
+                sb.AppendLine();
+                foreach (var t in excludedTopics)
+                    sb.AppendLine($"  ❌  EXCLUDED: {t}");
+                sb.AppendLine();
+                sb.AppendLine("Violating this constraint renders the entire plan useless. Ignore excluded topics completely.");
+                sb.AppendLine("If only 1 or 2 non-excluded topics remain, DO NOT re-introduce excluded topics to fill days.");
+                sb.AppendLine("Instead, break the remaining topic(s) into detailed sub-topics and spread them across all 7 days.");
+            }
             sb.AppendLine();
 
-            // ── Past Paper Probabilities (RAG) ─────────────────────────────────
-            sb.AppendLine("═══ PAST PAPER PRIORITY WEIGHTS ═══");
+            // ═══════════════════════════════════════════════════════════
+            // SECTION 1 — ROLE AND CORE RULES
+            // ═══════════════════════════════════════════════════════════
+            sb.AppendLine("════════════════════════════════════════════════════════════════");
+            sb.AppendLine("SECTION 1 — ROLE & CORE RULES");
+            sb.AppendLine("════════════════════════════════════════════════════════════════");
+            sb.AppendLine("You are an expert A/L ICT tutor generating a personalised 7-Day Study Master Plan.");
+            sb.AppendLine("You MUST generate EXACTLY 7 days of study content (Day 1 to Day 7). No more, no less.");
+            sb.AppendLine("DO NOT generate a schedule spanning to the target exam date — this is a fixed 7-day sprint only.");
+            sb.AppendLine();
+
+            // ═══════════════════════════════════════════════════════════
+            // SECTION 2 — 7-DAY DISTRIBUTION RULES
+            // ═══════════════════════════════════════════════════════════
+            sb.AppendLine("════════════════════════════════════════════════════════════════");
+            sb.AppendLine("SECTION 2 — MANDATORY 7-DAY DISTRIBUTION LOGIC");
+            sb.AppendLine("════════════════════════════════════════════════════════════════");
+            sb.AppendLine("⚠️  CRITICAL: You MUST produce a plan covering ALL 7 days, one entry per day.");
+            sb.AppendLine("Follow these rules to distribute content across exactly 7 days:");
+            sb.AppendLine();
+            sb.AppendLine("  Rule A — Many non-excluded topics available (4+ topics):");
+            sb.AppendLine("    Assign one topic per day, prioritising topics by their past-paper weight (highest first).");
+            sb.AppendLine("    Revisit the most critical topics on days 6 and 7 as revision sessions.");
+            sb.AppendLine();
+            sb.AppendLine("  Rule B — Few non-excluded topics available (2-3 topics):");
+            sb.AppendLine("    Break each topic into its specific sub-topics and distribute them:");
+            sb.AppendLine("    Example: 'Networking' can be split into 'OSI Model' (Day 1), 'IP Addressing' (Day 2),");
+            sb.AppendLine("    'TCP/UDP Protocols' (Day 3), 'Routing' (Day 4), 'Network Security' (Day 5),");
+            sb.AppendLine("    'Wireless Networking' (Day 6), 'Revision & Practice' (Day 7).");
+            sb.AppendLine("    The 'topic' field in each day's JSON MUST be the parent topic name.");
+            sb.AppendLine("    The 'subtopics' field MUST contain the specific sub-topic for that day.");
+            sb.AppendLine();
+            sb.AppendLine("  Rule C — Only 1 non-excluded topic available:");
+            sb.AppendLine("    Split that single topic into 7 progressive sub-units, going from foundational to advanced:");
+            sb.AppendLine("    Day 1: Core concepts. Day 2: Terminology. Day 3: Applications.");
+            sb.AppendLine("    Day 4: Past-paper patterns. Day 5: Edge cases. Day 6: Practice problems. Day 7: Full revision.");
+            sb.AppendLine();
+            sb.AppendLine("  ⛔  DO NOT assign the same exact sub-topic to more than one day.");
+            sb.AppendLine("  ⛔  DO NOT leave any day empty or repeat day numbers.");
+            sb.AppendLine("  ⛔  DO NOT add content from excluded topics to fill gaps.");
+            sb.AppendLine();
+
+            // ═══════════════════════════════════════════════════════════
+            // SECTION 3 — PAST PAPER PRIORITY WEIGHTS (RAG context)
+            // ═══════════════════════════════════════════════════════════
+            sb.AppendLine("════════════════════════════════════════════════════════════════");
+            sb.AppendLine("SECTION 3 — PAST PAPER PRIORITY WEIGHTS");
+            sb.AppendLine("════════════════════════════════════════════════════════════════");
+            sb.AppendLine("Use these weights to determine which NON-EXCLUDED topics are most important:");
+            sb.AppendLine();
 
             if (!string.IsNullOrEmpty(noDataFallback))
             {
@@ -1100,19 +1167,29 @@ namespace IntelliPrep.API.Services
             }
             else if (analytics.Count == 0)
             {
-                sb.AppendLine("  (No past-paper data found — distribute topics evenly.)");
+                sb.AppendLine("  (No past-paper data found — distribute the non-excluded topics evenly.)");
             }
             else
             {
                 foreach (var a in analytics)
+                {
+                    // Only show non-excluded analytics to avoid the LLM seeing excluded topics at all
+                    if (excludedTopics.Any(e => string.Equals(e, a.TopicName, StringComparison.OrdinalIgnoreCase)))
+                        continue;
                     sb.AppendLine($"  {a.TopicName}: {a.ProbabilityPercentage:F2}% probability");
+                }
             }
             sb.AppendLine();
 
-            // ── Syllabus Boundaries (RAG) ──────────────────────────────────────
-            sb.AppendLine("═══ SYLLABUS BOUNDARIES (MANDATORY) ═══");
-            sb.AppendLine("You MUST strictly limit ALL content to these approved boundaries. " +
-                          "Never introduce sub-topics outside the Allowed scope, and never include anything listed as EXCLUDED:");
+            // ═══════════════════════════════════════════════════════════
+            // SECTION 4 — SYLLABUS BOUNDARIES (RAG)
+            // ═══════════════════════════════════════════════════════════
+            sb.AppendLine("════════════════════════════════════════════════════════════════");
+            sb.AppendLine("SECTION 4 — SYLLABUS BOUNDARIES (MANDATORY)");
+            sb.AppendLine("════════════════════════════════════════════════════════════════");
+            sb.AppendLine("Restrict ALL sub-topics to the approved scope below. Never include EXCLUDED sub-topics:");
+            sb.AppendLine();
+
             if (syllabusLimits.Count == 0)
             {
                 sb.AppendLine("  (No specific limits found — use the standard A/L ICT syllabus.)");
@@ -1121,60 +1198,60 @@ namespace IntelliPrep.API.Services
             {
                 foreach (var limit in syllabusLimits)
                 {
-                    sb.AppendLine($"  Topic: {limit.TopicName}");
-                    sb.AppendLine($"    Allowed sub-topics : {limit.AllowedScope}");
+                    sb.AppendLine($"  ▶ Topic: {limit.TopicName}");
+                    sb.AppendLine($"    Allowed   : {limit.AllowedScope}");
                     if (!string.IsNullOrWhiteSpace(limit.ExcludedKeywords))
-                        sb.AppendLine($"    EXCLUDED sub-topics: {limit.ExcludedKeywords} — DO NOT include these under any circumstances.");
+                        sb.AppendLine($"    EXCLUDED  : {limit.ExcludedKeywords} — DO NOT include these under any circumstances.");
                 }
             }
             sb.AppendLine();
 
-            // ── User-requested topic exclusions ───────────────────────────────
-            sb.AppendLine("═══ EXCLUDED TOPICS ═══");
-            if (excludedTopics.Count == 0)
-            {
-                sb.AppendLine("  (No topics excluded by the user.)");
-            }
-            else
-            {
-                var excludedList = string.Join(", ", excludedTopics);
-                sb.AppendLine($"EXCLUDED TOPICS: {excludedList}. Do NOT include these in your output.");
-            }
+            // ═══════════════════════════════════════════════════════════
+            // SECTION 5 — SCHEDULE CONSTRAINTS
+            // ═══════════════════════════════════════════════════════════
+            sb.AppendLine("════════════════════════════════════════════════════════════════");
+            sb.AppendLine("SECTION 5 — SCHEDULE CONSTRAINTS");
+            sb.AppendLine("════════════════════════════════════════════════════════════════");
+            sb.AppendLine($"  Start date      : {today:yyyy-MM-dd} (today, Day 1)");
+            sb.AppendLine($"  Target exam date: {targetDate:yyyy-MM-dd} (context only — do NOT schedule to this date)");
+            sb.AppendLine("  Plan length     : EXACTLY 7 days (Day 1 through Day 7 only)");
+            sb.AppendLine("  Priority values : MUST be exactly one of: High | Medium | Low");
+            sb.AppendLine("    • High   = topic has ≥ 15% past-paper probability");
+            sb.AppendLine("    • Medium = topic has 5–14% past-paper probability");
+            sb.AppendLine("    • Low    = topic has < 5% past-paper probability or is a revision day");
             sb.AppendLine();
 
-            // ── Schedule constraints ───────────────────────────────────────────
-            var today    = DateTime.UtcNow.Date;
-            var daysLeft = (targetDate.Date - today).Days;
-
-            sb.AppendLine("═══ SCHEDULE CONSTRAINTS ═══");
-            sb.AppendLine($"  Start date : {today:yyyy-MM-dd} (today)");
-            sb.AppendLine($"  End date   : {targetDate:yyyy-MM-dd} (exam day — but THIS is a 1-Week General Master Plan only)");
-            sb.AppendLine("  Total days : 7 (exactly 7 days only)");
-            sb.AppendLine("  - This is a 1-Week General Master Plan, not a schedule continuing to the target exam date.");
-            sb.AppendLine("  - Generate EXACTLY 7 days of study plan (Day 1 to Day 7). Stop exactly at Day 7.");
-            sb.AppendLine("  - Each day must have exactly ONE main topic.");
-            sb.AppendLine("  - Subtopics must come from the Allowed list above.");
-            sb.AppendLine("  - Priority must be exactly one of: High | Medium | Low (matching the past-paper weights).");
-            sb.AppendLine("  - Focus on the most important subtopics in those 7 days; prioritize the highest-weight topics.");
+            // ═══════════════════════════════════════════════════════════
+            // SECTION 6 — STRICT JSON OUTPUT CONTRACT
+            // ═══════════════════════════════════════════════════════════
+            sb.AppendLine("════════════════════════════════════════════════════════════════");
+            sb.AppendLine("SECTION 6 — STRICT JSON OUTPUT CONTRACT");
+            sb.AppendLine("════════════════════════════════════════════════════════════════");
+            sb.AppendLine("Output ONLY a single valid JSON array. No markdown, no code fences, no prose, no preamble.");
+            sb.AppendLine("Start your response IMMEDIATELY with the opening bracket [.");
             sb.AppendLine();
-
-            // ── Output format ──────────────────────────────────────────────────
-            sb.AppendLine("═══ OUTPUT FORMAT ═══");
-            sb.AppendLine("Output a single valid JSON array containing exactly 7 objects, one for each day. Each element must have these exact keys:");
-            sb.AppendLine("  {\"day\":<int>, \"date\":\"<YYYY-MM-DD>\", \"topic\":\"<string>\", \"subtopics\":\"<comma-separated string>\", \"priority\":\"High|Medium|Low\"}");
-            sb.AppendLine("The plan must be a 1-Week General Master Plan and must stop exactly at Day 7. Do NOT extend to the target exam date.");
-            sb.AppendLine("You must begin your final response IMMEDIATELY with the opening bracket `[`. Do not output any conversational text, greetings, or markdown formatting (like ```json).");
-            sb.AppendLine("Do NOT add any extra keys. The final output MUST be a single valid JSON array containing exactly 7 objects.");
+            sb.AppendLine("The array MUST contain EXACTLY 7 objects — one per study day. Each object must be:");
+            sb.AppendLine(@"  {""day"": <int 1-7>, ""date"": ""<YYYY-MM-DD>"", ""topic"": ""<string>"", ""subtopics"": ""<comma-separated string>"", ""priority"": ""High|Medium|Low""}");
+            sb.AppendLine();
+            sb.AppendLine("Hard rules:");
+            sb.AppendLine("  1. The array MUST have EXACTLY 7 elements. Fewer or more = failure.");
+            sb.AppendLine("  2. 'day' values MUST run sequentially: 1, 2, 3, 4, 5, 6, 7 (no gaps, no repeats).");
+            sb.AppendLine("  3. 'date' MUST be the actual calendar date for that day (Day 1 = today, Day 2 = tomorrow, etc.).");
+            sb.AppendLine("  4. 'topic' MUST NOT be any topic from Section 0's exclusion list.");
+            sb.AppendLine("  5. 'subtopics' MUST be a non-empty string; each day must cover distinct sub-material.");
+            sb.AppendLine("  6. 'priority' MUST be exactly 'High', 'Medium', or 'Low' — nothing else.");
+            sb.AppendLine("  7. Do NOT wrap the array in an object. Do NOT add extra fields.");
 
             return sb.ToString();
         }
 
         private static string BuildAgent2UserMessage(DateTime targetDate) =>
-            $"Generate a 1-Week General Master Plan based on historical dataset weights. " +
-            $"Create EXACTLY 7 days (Day 1 to Day 7) only. " +
-            $"Do NOT extend the schedule to the target exam date. " +
-            $"Target exam date: {targetDate:yyyy-MM-dd}. " +
-            $"Return ONLY the JSON array containing exactly 7 objects — no other text.";
+            $"Generate a 1-Week General Master Plan for the student. " +
+            $"Follow ALL rules from the system prompt — especially the EXCLUSION LIST in Section 0 and the 7-day distribution rules in Section 2. " +
+            $"The plan MUST cover EXACTLY 7 days (Day 1 to Day 7). " +
+            $"If only 1-2 non-excluded topics are available, break them into sub-topics spread across all 7 days — do NOT cram everything into Day 1. " +
+            $"Target exam date context (do not schedule to this date): {targetDate:yyyy-MM-dd}. " +
+            $"Return ONLY the JSON array containing exactly 7 objects. Start immediately with [. No other text.";
 
         // ── Agent 2 (Researcher) prompt builders ───────────────────────────────
 
@@ -1413,6 +1490,14 @@ namespace IntelliPrep.API.Services
             int maxTokens = 4096,
             float temperature = 0.1f)
         {
+            // ── 🔍 PRODUCTION TRACE: Log the exact prompts sent to Groq ────────
+            _logger.LogInformation(
+                "[AIAgent] ═══ GROQ SYSTEM PROMPT ═══\n{SystemPrompt}",
+                systemPrompt);
+            _logger.LogInformation(
+                "[AIAgent] ═══ GROQ USER PROMPT ({Len} chars) ═══\n{UserPrompt}",
+                userMessage.Length, userMessage);
+
             for (int attempt = 0; attempt < _apiKeys.Length; attempt++)
             {
                 var selectedKey = _apiKeys[attempt % _apiKeys.Length];
