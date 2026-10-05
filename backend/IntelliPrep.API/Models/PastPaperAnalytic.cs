@@ -24,6 +24,9 @@ namespace IntelliPrep.API.Models
         /// </summary>
         public int Year { get; set; }
 
+        /// <summary>The number of Questions rows used to generate this analysis.</summary>
+        public int SourceQuestionCount { get; set; } = -1;
+
         /// <summary>
         /// Probability (0–100) that this topic will appear in the upcoming exam,
         /// as computed by the Past Paper Analyst LLM agent.

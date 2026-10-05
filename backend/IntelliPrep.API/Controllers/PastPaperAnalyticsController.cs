@@ -70,14 +70,12 @@ public class PastPaperAnalyticsController : ControllerBase
 
     // ── POST api/admin/analytics/analyze ─────────────────────────────────────
     /// <summary>
-    /// Triggers Agent 1 (LLM Past Paper Analyst) to analyse all questions currently
-    /// in the Questions table, compute fresh topic probabilities, and persist the
-    /// results to PastPaperAnalytics. Old AI-generated rows for the same topics are
-    /// replaced to avoid unbounded table growth.
+    /// Returns cached analytics when the Questions table has not changed. Otherwise,
+    /// triggers Agent 1 to recompute probabilities and replace the previous
+    /// AI-generated rows in PastPaperAnalytics.
     ///
-    /// This endpoint is intentionally SLOW (calls the Groq LLM). The frontend should
-    /// show a loading state while waiting. Only call this when the admin explicitly
-    /// clicks "Run AI Analysis".
+    /// Recalculation calls the Groq LLM, so the frontend should show a loading state
+    /// while a new analysis is running.
     /// </summary>
     [HttpPost("analyze")]
     [ProducesResponseType(StatusCodes.Status200OK)]
@@ -86,6 +84,40 @@ public class PastPaperAnalyticsController : ControllerBase
     public async Task<IActionResult> RunAnalysis(CancellationToken ct)
     {
         _logger.LogInformation("[AnalyticsController] Admin triggered AI analysis on /api/admin/analytics/analyze");
+
+        var questionCount = await _db.Questions.CountAsync(ct);
+        var cachedRecords = await _db.PastPaperAnalytics
+            .AsNoTracking()
+            .Where(r => r.GeneratedByAgent)
+            .OrderByDescending(r => r.ProbabilityPercentage)
+            .ToListAsync(ct);
+
+        if (cachedRecords.Count > 0
+            && cachedRecords.All(r => r.SourceQuestionCount == questionCount))
+        {
+            _logger.LogInformation(
+                "[AnalyticsController] Returning cached analytics for {QuestionCount} questions.",
+                questionCount);
+
+            return Ok(new
+            {
+                success        = true,
+                message        = "Returning cached topic probabilities; no new past-paper questions were added.",
+                topicsAnalysed = cachedRecords.Select(r => r.TopicName)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Count(),
+                rowsSaved      = cachedRecords.Count,
+                records        = cachedRecords.Select(r => new
+                {
+                    id                    = r.Id,
+                    topicName             = r.TopicName,
+                    year                  = r.Year,
+                    probabilityPercentage = r.ProbabilityPercentage,
+                    generatedByAgent      = r.GeneratedByAgent,
+                    createdAt             = r.CreatedAt
+                })
+            });
+        }
 
         // ── 1. Gather all distinct topic names from the Questions table ────────
         var topics = await _db.Questions
@@ -115,8 +147,9 @@ public class PastPaperAnalyticsController : ControllerBase
         //       We use year=0 to signify "aggregated across all years".
         var request = new AnalyzePastPapersRequest
         {
-            Topics = topics,
-            Year   = 0   // 0 = multi-year aggregate analysis
+            Topics             = topics,
+            Year               = 0, // 0 = multi-year aggregate analysis
+            SourceQuestionCount = questionCount
         };
 
         var result = await _aiAgent.AnalyzePastPapersAsync(request, ct);
@@ -301,5 +334,3 @@ public sealed class UpdateAnalyticRequest
     [Range(0, 100)]
     public decimal ProbabilityPercentage { get; init; }
 }
-
-

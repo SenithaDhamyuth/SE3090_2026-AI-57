@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using IntelliPrep.API.Data;
 using IntelliPrep.API.Models;
+using IntelliPrep.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -11,11 +12,15 @@ namespace IntelliPrep.API.Controllers;
 [Route("api/admin")]
 public class StudentManagementController : ControllerBase
 {
-    private readonly ApplicationDbContext _context;
+    private readonly ApplicationDbContext  _context;
+    private readonly INotificationService  _notificationService;
 
-    public StudentManagementController(ApplicationDbContext context)
+    public StudentManagementController(
+        ApplicationDbContext context,
+        INotificationService notificationService)
     {
-        _context = context;
+        _context             = context;
+        _notificationService = notificationService;
     }
 
     [HttpGet("students")]
@@ -63,28 +68,33 @@ public class StudentManagementController : ControllerBase
             return Conflict(new { message = "A student with this email already exists." });
         }
 
-        var password = string.IsNullOrWhiteSpace(request.Password)
-            ? GenerateDefaultPassword()
-            : request.Password.Trim();
+        // Always auto-generate a secure 8-character temporary password.
+        // The admin never needs to set one — the student receives it via email.
+        var temporaryPassword = GenerateSecurePassword();
 
         var student = new User
         {
-            FullName = request.FullName.Trim(),
-            Email = normalizedEmail,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(password),
-            Role = "Student"
+            FullName     = request.FullName.Trim(),
+            Email        = normalizedEmail,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(temporaryPassword),
+            Role         = "Student"
         };
 
         _context.Users.Add(student);
         await _context.SaveChangesAsync();
 
+        // Send welcome email with credentials (best-effort, non-blocking on failure).
+        await _notificationService.SendWelcomeEmailAsync(
+            toEmail:           student.Email,
+            toName:            student.FullName,
+            temporaryPassword: temporaryPassword);
+
         return Ok(new
         {
-            message = "Student account created successfully.",
+            message  = "Student account created and welcome email sent.",
             studentId = student.Id,
-            fullName = student.FullName,
-            email = student.Email,
-            temporaryPassword = password
+            fullName  = student.FullName,
+            email     = student.Email
         });
     }
 
@@ -155,9 +165,40 @@ public class StudentManagementController : ControllerBase
         return Ok(new { message = "Student deleted successfully." });
     }
 
-    private static string GenerateDefaultPassword()
+    private static string GenerateSecurePassword()
     {
-        return "Student@" + Guid.NewGuid().ToString("N")[..8];
+        // Cryptographically secure 8-character password guaranteed to contain
+        // at least one uppercase, one lowercase, one digit, and one special char.
+        const string upper   = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+        const string lower   = "abcdefghjkmnpqrstuvwxyz";
+        const string digits  = "23456789";
+        const string special = "@#!$&";
+        const string all     = upper + lower + digits + special;
+
+        Span<byte> buf = stackalloc byte[16];
+        System.Security.Cryptography.RandomNumberGenerator.Fill(buf);
+
+        // Ensure one char from each required class
+        char[] pw =
+        [
+            upper  [buf[0]  % upper.Length],
+            lower  [buf[1]  % lower.Length],
+            digits [buf[2]  % digits.Length],
+            special[buf[3]  % special.Length],
+            all    [buf[4]  % all.Length],
+            all    [buf[5]  % all.Length],
+            all    [buf[6]  % all.Length],
+            all    [buf[7]  % all.Length],
+        ];
+
+        // Fisher-Yates shuffle so the pattern chars don't cluster at the start
+        for (int i = pw.Length - 1; i > 0; i--)
+        {
+            int j = buf[8 + (i % 8)] % (i + 1);
+            (pw[i], pw[j]) = (pw[j], pw[i]);
+        }
+
+        return new string(pw);
     }
 }
 
@@ -170,8 +211,8 @@ public class CreateStudentRequest
     [Required]
     [EmailAddress]
     public string Email { get; set; } = string.Empty;
-
-    public string? Password { get; set; }
+    // Password is intentionally omitted — the backend auto-generates it
+    // and emails it to the student.
 }
 
 public class UpdateStudentRequest

@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import {
-  UserPlus, Mail, Lock, User, AlertCircle, CheckCircle2,
+  UserPlus, Mail, User, AlertCircle, CheckCircle2,
   Pencil, Trash2, Users, CalendarDays, LoaderCircle
 } from 'lucide-react';
 
 const API_BASE = (import.meta.env.VITE_API_URL || 'https://intelliprep-rhx3.onrender.com') + '';
 
 export default function StudentManagement() {
-  const [formData, setFormData] = useState({ fullName: '', email: '', password: '' });
+  const [formData, setFormData] = useState({ fullName: '', email: '' });
   const [students, setStudents] = useState([]);
   const [loadingStudents, setLoadingStudents] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -57,9 +57,9 @@ export default function StudentManagement() {
 
       setMessage({
         type: 'success',
-        text: `Student created successfully! ${data?.temporaryPassword ? `Temporary Password: ${data.temporaryPassword}` : ''}`
+        text: 'Student created and welcome email sent!'
       });
-      setFormData({ fullName: '', email: '', password: '' });
+      setFormData({ fullName: '', email: '' });
       await fetchStudents();
     } catch (err) {
       setMessage({ type: 'error', text: err.message });
@@ -234,24 +234,13 @@ export default function StudentManagement() {
               </div>
             </div>
 
-            <div>
-              <label className="block text-[10px] tracking-wider font-semibold text-gray-400 mb-2 uppercase" htmlFor="password">
-                Password <span className="text-gray-400 normal-case tracking-normal font-normal">(Optional)</span>
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <Lock size={16} className="text-gray-400" />
-                </div>
-                <input
-                  type="password"
-                  id="password"
-                  name="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  className="block w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl text-[13px] text-gray-900 placeholder-gray-400 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all bg-gray-50/50"
-                  placeholder="••••••••"
-                />
-              </div>
+
+            {/* Auto-generated password notice */}
+            <div className="flex items-start gap-3 rounded-xl border border-orange-100 bg-orange-50 px-4 py-3">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mt-0.5 shrink-0 text-orange-500"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <p className="text-[12px] text-orange-700 leading-relaxed">
+                A <strong>secure temporary password</strong> will be auto-generated and sent directly to the student's email address. The student can change it from their Profile screen.
+              </p>
             </div>
 
             <div className="pt-2 flex justify-end">

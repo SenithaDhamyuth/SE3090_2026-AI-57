@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
+using BCrypt.Net;
 using IntelliPrep.API.Data;
 using IntelliPrep.API.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -300,6 +301,54 @@ public class StudentController : ControllerBase
             status     = session.Status
         });
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // PUT /api/student/profile
+    //
+    // Allows an authenticated student to update their FullName and Password.
+    // The new password is hashed with BCrypt before being persisted.
+    // No database schema changes required — updates the existing User row.
+    // ─────────────────────────────────────────────────────────────────────────
+    [HttpPut("profile")]
+    [Authorize(Roles = "Student")]
+    public async Task<IActionResult> UpdateProfile(
+        [FromBody] UpdateProfileRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+            return ValidationProblem(ModelState);
+
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdClaim, out int studentId))
+        {
+            _logger.LogWarning("[StudentController] UpdateProfile: Invalid or missing NameIdentifier claim.");
+            return Unauthorized(new { message = "Invalid student token." });
+        }
+
+        var user = await _db.Users.FirstOrDefaultAsync(
+            u => u.Id == studentId && u.Role == "Student",
+            cancellationToken);
+
+        if (user == null)
+            return NotFound(new { message = "Student account not found." });
+
+        // Update fields
+        user.FullName     = request.FullName.Trim();
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+
+        await _db.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "[StudentController] Profile updated for student {Id} ({Email}).",
+            user.Id, user.Email);
+
+        return Ok(new
+        {
+            message  = "Profile updated successfully.",
+            fullName = user.FullName,
+            email    = user.Email
+        });
+    }
 }
 
 /// <summary>Request body for POST /api/student/submit (Flutter → backend).</summary>
@@ -313,6 +362,21 @@ public class StudentSubmitDto
 
     /// <summary>Score calculated client-side.</summary>
     public int TotalScore { get; set; }
+}
+
+/// <summary>Request body for PUT /api/student/profile.</summary>
+public class UpdateProfileRequest
+{
+    /// <summary>New display name for the student.</summary>
+    [System.ComponentModel.DataAnnotations.Required]
+    [System.ComponentModel.DataAnnotations.MinLength(2, ErrorMessage = "Full name must be at least 2 characters.")]
+    [System.ComponentModel.DataAnnotations.MaxLength(100)]
+    public string FullName { get; set; } = string.Empty;
+
+    /// <summary>New plain-text password. Must be at least 6 characters.</summary>
+    [System.ComponentModel.DataAnnotations.Required]
+    [System.ComponentModel.DataAnnotations.MinLength(6, ErrorMessage = "Password must be at least 6 characters.")]
+    public string NewPassword { get; set; } = string.Empty;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
