@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  # ── Job 1: Build and test the ASP.NET Core backend ──────────────────────────
+  backend:
+    name: Backend – Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore backend dependencies
+        working-directory: backend
+        run: dotnet restore IntelliPrep.sln
+
+      - name: Build backend solution
+        working-directory: backend
+        run: dotnet build IntelliPrep.sln --no-restore --configuration Release
+
+      - name: Run backend unit tests
+        working-directory: backend
+        run: dotnet test IntelliPrep.sln --no-build --configuration Release --logger "console;verbosity=normal"
+
+  # ── Job 2: Run Flutter widget tests ─────────────────────────────────────────
+  flutter:
+    name: Flutter – Widget Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.x"
+          channel: "stable"
+
+      - name: Get Flutter dependencies
+        working-directory: student_app
+        run: flutter pub get
+
+      - name: Run Flutter widget tests
+        working-directory: student_app
+        run: flutter test --reporter compact

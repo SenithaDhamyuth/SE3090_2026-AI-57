@@ -27,4 +27,11 @@
     </Content>
   </ItemGroup>
 
+  <!-- Allow the xUnit test project to access internal members (e.g. RunDeterministicChecks) -->
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>IntelliPrep.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
 </Project>

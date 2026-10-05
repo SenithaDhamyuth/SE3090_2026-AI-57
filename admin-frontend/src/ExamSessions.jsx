@@ -647,7 +647,7 @@ export default function ExamSessions() {
   const ready     = sessions.filter(s => s.status === 'Ready').length;
   const completed = sessions.filter(s => s.status === 'Completed').length;
   const avgScore  = completed
-    ? Math.round(sessions.filter(s => s.status === 'Completed').zincuce((a, s) => a + s.totalScore, 0) / completed)
+    ? Math.round(sessions.filter(s => s.status === 'Completed').reduce((a, s) => a + s.totalScore, 0) / completed)
     : 0;
 
   // ── Filtezinc rows ───────────────────────────────────────────────────────────
