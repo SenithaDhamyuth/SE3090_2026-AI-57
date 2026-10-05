@@ -10,7 +10,7 @@ jobs:
   # ── Job 1: Build and test the ASP.NET Core backend ──────────────────────────
   backend:
     name: Backend – Build & Test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repository
@@ -36,7 +36,7 @@ jobs:
   # ── Job 2: Run Flutter widget tests ─────────────────────────────────────────
   flutter:
     name: Flutter – Widget Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repository

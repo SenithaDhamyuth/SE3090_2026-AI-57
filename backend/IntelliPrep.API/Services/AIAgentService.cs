@@ -15,7 +15,7 @@ namespace IntelliPrep.API.Services
     ///
     /// Architecture summary:
     ///   • Uses the existing named "GroqClient" HttpClient registered in Program.cs.
-    ///   • All LLM calls use temperature 0.1 to maximise JSON determinism.
+    ///   • All LLM calls use temperature 0 to maximise determinism.
     ///   • JSON validation is <b>deterministic</b>: every required field is checked;
     ///     hallucinated or missing fields cause the run to fail gracefully.
     ///   • All public methods are "never-throw" — exceptions are caught, logged,
@@ -172,15 +172,22 @@ namespace IntelliPrep.API.Services
                 }
 
                 // ── 5. Map & persist to PastPaperAnalytics table ───────────────
+                var sourceQuestionCount = request.SourceQuestionCount
+                    ?? await _db.Questions.CountAsync(cancellationToken);
                 var entities = probabilities.Select(p => new PastPaperAnalytic
                 {
                     TopicName             = p.TopicName.Trim(),
                     ProbabilityPercentage = Math.Round(p.ProbabilityPercentage, 2),
                     Year                  = request.Year,
+                    SourceQuestionCount   = sourceQuestionCount,
                     GeneratedByAgent      = true,
                     CreatedAt             = DateTime.UtcNow
                 }).ToList();
 
+                var previousAnalytics = await _db.PastPaperAnalytics
+                    .Where(a => a.GeneratedByAgent)
+                    .ToListAsync(cancellationToken);
+                _db.PastPaperAnalytics.RemoveRange(previousAnalytics);
                 await _db.PastPaperAnalytics.AddRangeAsync(entities, cancellationToken);
                 await _db.SaveChangesAsync(cancellationToken);
 
@@ -827,8 +834,7 @@ namespace IntelliPrep.API.Services
                     systemPrompt,
                     userMessage,
                     cancellationToken,
-                    maxTokens: 5000,
-                    temperature: 0.2f);
+                    maxTokens: 5000);
 
                 if (string.IsNullOrWhiteSpace(rawLlmOutput))
                 {
@@ -957,8 +963,7 @@ namespace IntelliPrep.API.Services
                     systemPrompt,
                     userMessage,
                     cancellationToken,
-                    maxTokens: 2048,
-                    temperature: 0.4f);  // slightly higher temp → more varied scenarios
+                    maxTokens: 2048);
 
                 if (string.IsNullOrWhiteSpace(raw))
                 {
@@ -1488,8 +1493,7 @@ namespace IntelliPrep.API.Services
             string systemPrompt,
             string userMessage,
             CancellationToken cancellationToken,
-            int maxTokens = 4096,
-            float temperature = 0.1f)
+            int maxTokens = 4096)
         {
             // ── 🔍 PRODUCTION TRACE: Log the exact prompts sent to Groq ────────
             _logger.LogInformation(
@@ -1505,7 +1509,7 @@ namespace IntelliPrep.API.Services
                 var requestBody = new GroqChatRequest
                 {
                     Model       = _modelName,
-                    Temperature = temperature,
+                    Temperature = 0f,
                     MaxTokens   = maxTokens,
                     Messages    =
                     [

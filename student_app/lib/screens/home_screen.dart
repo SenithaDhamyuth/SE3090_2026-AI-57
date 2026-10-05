@@ -8,6 +8,7 @@ import '../services/database_helper.dart';
 import 'qr_scanner_screen.dart';
 import 'login_screen.dart';
 import 'exam_review_screen.dart';
+import 'profile_screen.dart';
 
 /// HomeScreen — main shell of the IntelliPrep Student App.
 ///
@@ -65,6 +66,14 @@ class _HomeScreenState extends State<HomeScreen> {
           builder: (_) => const QRScannerScreen(),
         ))
         .then((_) => _loadCachedExams());
+  }
+
+  void _openProfile() {
+    Navigator.of(context)
+        .push(MaterialPageRoute<void>(
+          builder: (_) => const ProfileScreen(),
+        ))
+        .then((_) => _loadStudentInfo());
   }
 
   Future<void> _logout() async {
@@ -209,6 +218,11 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       actions: [
+        IconButton(
+          icon: const Icon(Icons.account_circle_outlined),
+          tooltip: 'My Profile',
+          onPressed: _openProfile,
+        ),
         IconButton(
           icon: const Icon(Icons.logout_rounded),
           tooltip: 'Sign out',

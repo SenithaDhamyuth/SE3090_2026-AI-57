@@ -122,11 +122,8 @@ var app = builder.Build();
 app.UseDeveloperExceptionPage();
 
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+app.UseSwagger();
+app.UseSwaggerUI();
 
 app.UseHttpsRedirection();
 
@@ -144,7 +141,7 @@ var migrationLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
 
 try
 {
-    await dbContext.Database.MigrateAsync();
+   // await dbContext.Database.MigrateAsync();
     migrationLogger.LogInformation("Database migrations applied successfully.");
 }
 catch (Exception ex)
@@ -178,5 +175,7 @@ var seederEnv    = scope.ServiceProvider.GetRequiredService<IWebHostEnvironment>
 var seederLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
                        .CreateLogger("DatabaseSeeder");
 await IntelliPrep.API.Data.DatabaseSeeder.SeedQuestionsAsync(dbContext, seederEnv, seederLogger);
+
+app.MapGet("/health", () => Results.Ok(new { status = "Healthy" }));
 
 app.Run();
