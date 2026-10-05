@@ -20,15 +20,15 @@ const authFetch = (url, options = {}) => {
 
 // ── Score badge ────────────────────────────────────────────────────────────────
 function ScoreBadge({ score, total }) {
-  if (total === 0) return <span className="text-zinc-400 text-[12px]">N/A</span>;
+  if (total === 0) return <span className="text-gray-400 text-[12px] font-semibold">N/A</span>;
   const pct = Math.round((score / total) * 100);
   const color =
-    pct >= 75 ? 'bg-green-50 text-green-700 border-green-200' :
-    pct >= 50 ? 'bg-orange-50 text-orange-700 border-orange-200' :
-                'bg-red-50 text-red-700 border-red-200';
+    pct >= 75 ? 'bg-green-50 text-green-600' :
+    pct >= 50 ? 'bg-orange-50 text-orange-600' :
+                'bg-red-50 text-red-600';
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-bold ${color}`}>
-      <Trophy size={10} />
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-bold ${color}`}>
+      <Trophy size={12} strokeWidth={2.5} />
       {score}/{total} ({pct}%)
     </span>
   );
@@ -91,7 +91,7 @@ export default function StudentMarks() {
   };
 
   const SortIcon = ({ field }) => {
-    if (sortField !== field) return <ChevronUp size={12} className="text-zinc-300" />;
+    if (sortField !== field) return <ChevronUp size={12} className="text-gray-300" />;
     return sortDir === 'asc'
       ? <ChevronUp size={12} className="text-orange-500" />
       : <ChevronDown size={12} className="text-orange-500" />;
@@ -125,7 +125,7 @@ export default function StudentMarks() {
   const passCount = sessions.filter(s => s.totalQuestions > 0 && s.totalScore / s.totalQuestions >= 0.5).length;
 
   const stats = [
-    { label: 'Total Submissions', value: sessions.length, icon: ClipboardList, color: 'text-zinc-700',  bg: 'bg-zinc-100',   border: 'border-zinc-200' },
+    { label: 'Total Submissions', value: sessions.length, icon: ClipboardList, color: 'text-gray-700',  bg: 'bg-gray-100',   border: 'border-gray-200' },
     { label: 'Unique Students',   value: new Set(sessions.map(s => s.studentId)).size, icon: Users, color: 'text-orange-700', bg: 'bg-orange-50',  border: 'border-orange-200' },
     { label: 'Avg Score',         value: avgScore,         icon: Trophy,      color: 'text-green-700',  bg: 'bg-green-50',   border: 'border-green-200' },
     { label: 'Pass Rate (≥50%)',  value: `${sessions.length ? Math.round((passCount / sessions.length) * 100) : 0}%`, icon: CheckCircle2, color: 'text-green-700', bg: 'bg-green-50', border: 'border-green-200' },
@@ -134,9 +134,9 @@ export default function StudentMarks() {
   const ColHeader = ({ label, field }) => (
     <th
       onClick={() => toggleSort(field)}
-      className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-400 cursor-pointer select-none hover:text-zinc-600 transition-colors whitespace-nowrap"
+      className="px-4 py-3 text-[10px] tracking-wider text-gray-400 uppercase font-semibold border-b border-gray-100 cursor-pointer select-none whitespace-nowrap"
     >
-      <span className="inline-flex items-center gap-1">
+      <span className="flex items-center gap-1.5">
         {label}
         <SortIcon field={field} />
       </span>
@@ -144,50 +144,49 @@ export default function StudentMarks() {
   );
 
   return (
-    <div className="max-w-[1400px] mx-auto px-6 py-6 space-y-5">
-
+    <div className="max-w-[1200px] mx-auto p-6 md:p-8 space-y-8 bg-gray-50/50 min-h-[calc(100vh-3.5rem)]">
       {/* ── Page header ── */}
       <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-[22px] font-bold text-zinc-900 tracking-tight leading-none">
-            Student Marks
-            <span className="text-xs text-zinc-400 block font-normal mt-1">
-              All completed exam submissions · Results Dashboard
-            </span>
-          </h1>
-          <p className="text-[13px] text-zinc-400 mt-2">
+        <div className="flex flex-col">
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Student Marks</h1>
+          <p className="text-[13px] text-gray-500 mt-1">
+            All completed exam submissions · Results Dashboard<br/>
             View scores for every student who has submitted an AI-generated exam.
           </p>
         </div>
         <button
           onClick={fetchMarks}
           disabled={loading}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-zinc-200 bg-white hover:border-zinc-300 text-zinc-600 text-[13px] font-semibold transition-all disabled:opacity-50"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 shadow-sm text-gray-700 text-[13px] font-semibold transition-all disabled:opacity-50"
         >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           Refresh
         </button>
       </div>
 
       {/* ── Error ── */}
       {error && (
-        <div className="flex items-center gap-3 p-3.5 rounded-lg border bg-red-50 border-red-200 text-red-800 text-sm">
-          <AlertCircle size={16} className="shrink-0" />
+        <div className="flex items-center gap-3 p-4 rounded-xl border bg-red-50 border-red-100 text-red-800 text-sm shadow-sm">
+          <AlertCircle size={18} className="shrink-0" />
           <p className="font-medium">{error}</p>
         </div>
       )}
 
       {/* ── Stat ribbon ── */}
       {!loading && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
           {stats.map((s, i) => (
-            <div key={i} className={`flex items-center gap-3 px-4 py-3.5 rounded-xl bg-white border shadow-[0_1px_3px_rgba(0,0,0,0.04)] ${s.border}`}>
-              <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${s.bg} ${s.color} shrink-0`}>
-                <s.icon size={16} strokeWidth={2} />
+            <div key={i} className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm flex justify-between items-start">
+              <div className="flex flex-col">
+                <span className="text-[10px] tracking-wider text-gray-400 font-semibold uppercase">{s.label}</span>
+                <span className="text-4xl font-bold text-gray-900 mt-2">{s.value}</span>
               </div>
-              <div>
-                <p className="text-[20px] font-bold text-zinc-900 leading-none">{s.value}</p>
-                <p className="text-[11px] text-zinc-400 mt-0.5">{s.label}</p>
+              <div className={`rounded-full p-2.5 ${
+                i === 0 ? 'bg-gray-50 text-gray-600' :
+                i === 1 ? 'bg-orange-50 text-orange-600' :
+                'bg-green-50 text-green-600'
+              }`}>
+                <s.icon size={20} />
               </div>
             </div>
           ))}
@@ -195,39 +194,40 @@ export default function StudentMarks() {
       )}
 
       {/* ── Table card ── */}
-      <div className="bg-white rounded-xl border border-zinc-200 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
-
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden pb-4">
         {/* Toolbar */}
-        <div className="px-5 py-3.5 border-b border-zinc-100 flex items-center gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[200px] max-w-sm">
-            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+        <div className="px-8 py-6 border-b border-gray-100 flex items-center gap-4 flex-wrap">
+          <div className="relative flex-1 min-w-[240px] max-w-sm">
+            <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               type="text"
-              placeholder="Search student name, subject…"
+              placeholder="Search student name, subject..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-zinc-200 text-[12px] outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-colors"
+              className="w-full pl-11 pr-4 py-3 rounded-xl border border-gray-200 text-[13px] outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-500/20 transition-all bg-gray-50/50"
             />
           </div>
-          <span className="ml-auto text-[11px] text-zinc-400">
-            <span className="font-semibold text-zinc-600">{filtered.length}</span> of {sessions.length} sessions
+          <span className="ml-auto text-[13px] text-gray-500">
+            <span className="font-bold text-gray-900">{filtered.length}</span> of {sessions.length} sessions
           </span>
         </div>
 
         {/* Loading */}
         {loading && (
-          <div className="flex items-center justify-center gap-2 py-16 text-zinc-400">
-            <Loader2 size={18} className="animate-spin" />
-            <span className="text-sm">Loading marks…</span>
+          <div className="flex flex-col items-center justify-center py-20 text-gray-400 gap-4">
+            <Loader2 size={24} className="animate-spin text-orange-500" />
+            <span className="text-[14px] font-medium">Loading marks...</span>
           </div>
         )}
 
         {/* Empty */}
         {!loading && filtered.length === 0 && (
-          <div className="py-16 text-center">
-            <Trophy size={36} className="mx-auto text-zinc-200 mb-3" />
-            <p className="text-[14px] font-semibold text-zinc-400">No completed exams found</p>
-            <p className="text-[12px] text-zinc-300 mt-1">
+          <div className="py-20 flex flex-col items-center justify-center text-center">
+            <div className="bg-orange-50 text-orange-500 rounded-2xl p-4 mb-4">
+               <Trophy size={28} strokeWidth={1.5} />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900">No completed exams found</h3>
+            <p className="text-[13px] text-gray-500 mt-1 max-w-xs">
               {search ? 'Try a different search term.' : 'Students have not submitted any exams yet.'}
             </p>
           </div>
@@ -235,54 +235,67 @@ export default function StudentMarks() {
 
         {/* Table */}
         {!loading && filtered.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
+          <div className="overflow-x-auto px-8 pt-4">
+            <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-zinc-100 bg-zinc-50/50">
-                  <ColHeader label="#" field="sessionId" />
-                  <ColHeader label="Student" field="studentName" />
-                  <ColHeader label="Exam Title" field="title" />
-                  <ColHeader label="Subject" field="subject" />
-                  <ColHeader label="Score" field="totalScore" />
-                  <ColHeader label="Duration" field="durationMinutes" />
-                  <ColHeader label="Submitted" field="endTime" />
+                <tr>
+                  <th onClick={() => toggleSort('sessionId')} className="py-3 pr-4 text-[10px] tracking-wider text-gray-400 uppercase font-semibold border-b border-gray-100 cursor-pointer select-none whitespace-nowrap">
+                    <span className="flex items-center gap-1.5"># <SortIcon field="sessionId" /></span>
+                  </th>
+                  <th onClick={() => toggleSort('studentName')} className="px-4 py-3 text-[10px] tracking-wider text-gray-400 uppercase font-semibold border-b border-gray-100 cursor-pointer select-none whitespace-nowrap">
+                    <span className="flex items-center gap-1.5">Student <SortIcon field="studentName" /></span>
+                  </th>
+                  <th onClick={() => toggleSort('title')} className="px-4 py-3 text-[10px] tracking-wider text-gray-400 uppercase font-semibold border-b border-gray-100 cursor-pointer select-none whitespace-nowrap">
+                    <span className="flex items-center gap-1.5">Exam Title <SortIcon field="title" /></span>
+                  </th>
+                  <th onClick={() => toggleSort('subject')} className="px-4 py-3 text-[10px] tracking-wider text-gray-400 uppercase font-semibold border-b border-gray-100 cursor-pointer select-none whitespace-nowrap">
+                    <span className="flex items-center gap-1.5">Subject <SortIcon field="subject" /></span>
+                  </th>
+                  <th onClick={() => toggleSort('totalScore')} className="px-4 py-3 text-[10px] tracking-wider text-gray-400 uppercase font-semibold border-b border-gray-100 cursor-pointer select-none whitespace-nowrap">
+                    <span className="flex items-center gap-1.5">Score <SortIcon field="totalScore" /></span>
+                  </th>
+                  <th onClick={() => toggleSort('durationMinutes')} className="px-4 py-3 text-[10px] tracking-wider text-gray-400 uppercase font-semibold border-b border-gray-100 cursor-pointer select-none whitespace-nowrap">
+                    <span className="flex items-center gap-1.5">Duration <SortIcon field="durationMinutes" /></span>
+                  </th>
+                  <th onClick={() => toggleSort('endTime')} className="pl-4 py-3 text-[10px] tracking-wider text-gray-400 uppercase font-semibold border-b border-gray-100 cursor-pointer select-none whitespace-nowrap">
+                    <span className="flex items-center gap-1.5">Submitted <SortIcon field="endTime" /></span>
+                  </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-50">
+              <tbody className="divide-y divide-gray-50">
                 {filtered.map((s, index) => (
-                  <tr key={s.sessionId ?? index} className="hover:bg-zinc-50/60 transition-colors">
-                    <td className="px-4 py-3">
-                      <span className="font-mono text-[11px] text-zinc-500 bg-zinc-100 rounded px-1.5 py-0.5">
+                  <tr key={s.sessionId ?? index} className="hover:bg-gray-50/50 transition-colors group">
+                    <td className="py-5 pr-4">
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-gray-50 text-[11px] font-mono font-semibold text-gray-500 border border-gray-100">
                         #{s.sessionId}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white text-[9px] font-bold shrink-0">
+                    <td className="px-4 py-5">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center text-white text-[11px] font-bold shrink-0 shadow-sm">
                           {(s.studentName || 'Unknown Student').slice(0, 2).toUpperCase()}
                         </div>
-                        <div>
-                          <p className="text-[12px] text-zinc-700 font-semibold leading-none">{s.studentName || 'Unknown Student'}</p>
-                          {s.studentEmail && <p className="text-[10px] text-zinc-400 mt-0.5">{s.studentEmail}</p>}
+                        <div className="flex flex-col">
+                          <span className="text-[13px] font-bold text-gray-900 leading-none">{s.studentName || 'Unknown Student'}</span>
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="text-[12px] font-semibold text-zinc-800">
+                    <td className="px-4 py-5">
+                      <span className="text-[13px] font-bold text-gray-900">
                         {s.title || s.subject || '—'}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="text-[11px] text-zinc-500">{s.subject || '—'}</span>
+                    <td className="px-4 py-5">
+                      <span className="text-[13px] text-gray-500">{s.subject || '—'}</span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-5">
                       <ScoreBadge score={s.totalScore ?? 0} total={s.totalQuestions ?? 0} />
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="text-[12px] text-zinc-500">{s.durationMinutes ? `${s.durationMinutes} min` : '—'}</span>
+                    <td className="px-4 py-5">
+                      <span className="text-[13px] text-gray-500">{s.durationMinutes ? `${s.durationMinutes} min` : '—'}</span>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="text-[11px] text-zinc-400 whitespace-nowrap">{s.endTime || '—'}</span>
+                    <td className="pl-4 py-5">
+                      <span className="text-[12px] text-gray-400 whitespace-nowrap">{s.endTime || '—'}</span>
                     </td>
                   </tr>
                 ))}
@@ -293,10 +306,10 @@ export default function StudentMarks() {
 
         {/* Footer */}
         {!loading && sessions.length > 0 && (
-          <div className="px-5 py-3 border-t border-zinc-100 bg-zinc-50/30">
-            <p className="text-[11px] text-zinc-400">
-              Showing <span className="font-semibold text-zinc-600">{filtered.length}</span> of{' '}
-              <span className="font-semibold text-zinc-600">{sessions.length}</span> completed submissions
+          <div className="px-8 mt-2 pt-4">
+            <p className="text-[12px] text-gray-400">
+              Showing <span className="font-bold text-gray-900">{filtered.length}</span> of{' '}
+              <span className="font-bold text-gray-900">{sessions.length}</span> completed submissions
             </p>
           </div>
         )}

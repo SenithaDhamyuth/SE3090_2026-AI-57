@@ -573,100 +573,102 @@ export default function PendingApprovals() {
   const planCount    = items.filter(i => i.type === 'Study Plan').length;
 
   return (
-    <div className="max-w-[1200px] mx-auto px-6 py-6 space-y-5">
+    <div className="max-w-[1200px] mx-auto p-6 md:p-8 space-y-8 bg-gray-50/50 min-h-[calc(100vh-3.5rem)]">
       <Toast toasts={toasts} onDismiss={dismissToast} />
 
       {/* ── Header ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-[22px] font-bold text-zinc-900 tracking-tight leading-none flex items-center gap-2">
-            <ShieldCheck className="text-orange-500" size={24} />
+      <div className="flex items-start justify-between">
+        <div className="flex flex-col">
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-3">
+            <div className="bg-orange-50 text-orange-500 rounded-2xl p-2.5">
+               <ShieldCheck size={24} strokeWidth={1.8} />
+            </div>
             Pending Approvals
           </h1>
-          <p className="text-[13px] text-zinc-400 mt-1.5">
+          <p className="text-[13px] text-gray-500 mt-1">
             Expand any card to review, edit and approve AI-generated content.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-4">
           <button
             onClick={fetchData}
-            className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-zinc-200 bg-white text-zinc-600 text-[12px] font-medium hover:border-zinc-300 hover:bg-zinc-50 transition-all"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 shadow-sm text-gray-700 text-[13px] font-semibold transition-all"
           >
-            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> Refresh
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> Refresh
           </button>
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-50 border border-orange-200/60">
-            <span className="relative flex h-1.5 w-1.5">
+          <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-50 border border-orange-100">
+            <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-orange-500" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500" />
             </span>
-            <span className="text-[11px] font-bold text-orange-700">{pendingCount} Awaiting Review</span>
+            <span className="text-[12px] font-bold text-orange-700">{pendingCount} Awaiting Review</span>
           </div>
         </div>
       </div>
 
       {/* ── Stats ── */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid gap-6 md:grid-cols-3">
         {[
           { label: 'Total Pending', count: pendingCount, accent: true },
           { label: 'Exam Sessions', count: examCount,    accent: false },
           { label: 'Study Plans',   count: planCount,    accent: true  },
         ].map(({ label, count, accent }) => (
-          <div key={label} className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${
-            accent ? 'border-orange-200 bg-orange-50' : 'border-zinc-200 bg-zinc-50'
-          }`}>
-            <div className={`w-2 h-2 rounded-full ${accent ? 'bg-orange-500' : 'bg-zinc-400'}`} />
-            <div>
-              <p className="text-[10px] text-zinc-500 font-medium">{label}</p>
-              <p className={`text-2xl font-bold ${accent ? 'text-orange-700' : 'text-zinc-700'}`}>{count}</p>
-            </div>
+          <div key={label} className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm flex flex-col justify-between items-start">
+             <div className="flex items-center gap-2 mb-2">
+                <div className={`w-2 h-2 rounded-full ${accent ? 'bg-orange-500' : 'bg-gray-400'}`} />
+                <span className="text-[10px] tracking-wider text-gray-400 font-semibold uppercase">{label}</span>
+             </div>
+             <span className="text-4xl font-bold text-gray-900 mt-2">{count}</span>
           </div>
         ))}
       </div>
 
       {/* ── Filter Bar ── */}
-      <div className="flex flex-wrap items-center gap-3 bg-white border border-zinc-200/80 rounded-xl px-4 py-3 shadow-sm">
-        <div className="flex items-center gap-2 h-8 px-3 rounded-lg border border-zinc-200 bg-zinc-50 focus-within:border-orange-400 focus-within:ring-2 focus-within:ring-orange-500/15 w-64">
-          <Search size={13} className="text-zinc-400" />
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 focus-within:border-orange-400 focus-within:ring-2 focus-within:ring-orange-500/20 w-72 transition-all">
+          <Search size={16} className="text-gray-400" />
           <input
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search by ID, subject, or student…"
-            className="bg-transparent outline-none text-[12px] text-zinc-700 w-full placeholder-zinc-300"
+            placeholder="Search by ID, subject, or student..."
+            className="bg-transparent outline-none text-[13px] text-gray-900 w-full placeholder-gray-400"
           />
         </div>
-        <div className="flex items-center gap-1 border-l border-zinc-100 pl-3">
+        <div className="flex items-center gap-2 border-l border-gray-100 pl-4">
           {['All', 'Exam Session', 'Study Plan'].map(s => (
             <button
               key={s}
               onClick={() => setFilter(s)}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
-                filter === s ? 'bg-orange-500 text-white shadow-sm' : 'text-zinc-500 hover:bg-zinc-100'
+              className={`px-4 py-2 rounded-xl text-[12px] font-bold transition-all ${
+                filter === s ? 'bg-orange-500 text-white shadow-sm' : 'text-gray-500 hover:bg-gray-50'
               }`}
             >
               {s}s
             </button>
           ))}
         </div>
-        <p className="ml-auto text-[11px] text-zinc-400">
-          Showing <span className="font-semibold text-zinc-600">{visibleItems.length}</span> items
+        <p className="ml-auto text-[13px] text-gray-500 pr-2">
+          Showing <span className="font-bold text-gray-900">{visibleItems.length}</span> items
         </p>
       </div>
 
       {/* ── Cards ── */}
-      <div className="space-y-4">
+      <div className="space-y-6">
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 text-zinc-400 gap-3">
-            <Loader2 size={28} className="animate-spin text-orange-500" />
-            <span className="text-[13px]">Loading pending approvals…</span>
+          <div className="flex flex-col items-center justify-center py-24 gap-4 bg-white rounded-2xl border border-gray-100 shadow-sm">
+            <Loader2 size={32} className="animate-spin text-orange-500" />
+            <span className="text-[14px] font-bold text-gray-500">Loading pending approvals...</span>
           </div>
         ) : visibleItems.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-20 bg-white border border-zinc-200 rounded-xl">
-            <div className="w-14 h-14 rounded-2xl bg-orange-50 border border-orange-100 flex items-center justify-center text-orange-500">
-              <ShieldCheck size={26} strokeWidth={1.8} />
+          <div className="py-24 flex flex-col items-center justify-center bg-white rounded-2xl border border-gray-100 shadow-sm text-center">
+            <div className="w-16 h-16 rounded-2xl bg-orange-50 text-orange-500 flex items-center justify-center mb-5">
+              <ShieldCheck size={32} strokeWidth={1.5} />
             </div>
-            <p className="text-[14px] font-semibold text-zinc-700">All clear — no pending items!</p>
-            <p className="text-[12px] text-zinc-400">There are no items matching your current filters.</p>
+            <h3 className="text-xl font-bold text-gray-900">All clear — no pending items!</h3>
+            <p className="text-[14px] text-gray-500 mt-2 max-w-sm">
+              There are no items matching your current filters.
+            </p>
           </div>
         ) : (
           visibleItems.map(item => (
