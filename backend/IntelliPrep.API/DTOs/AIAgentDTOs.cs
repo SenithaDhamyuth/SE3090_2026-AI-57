@@ -19,6 +19,10 @@ namespace IntelliPrep.API.DTOs
         /// <summary>Optional: restrict analysis to a specific exam year.</summary>
         [JsonPropertyName("year")]
         public int Year { get; init; } = 0;
+
+        /// <summary>Question count captured with the topic list, when supplied by the caller.</summary>
+        [JsonIgnore]
+        public int? SourceQuestionCount { get; init; }
     }
 
     /// <summary>
