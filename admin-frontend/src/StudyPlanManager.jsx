@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Brain, CheckCircle2, Clock, AlertCircle,
-  RefreshCw, X, Sparkles, User, ShieldCheck,
+  RefreshCw, X, Sparkles, ShieldCheck,
   ClipboardList, Loader2, Eye, ListChecks,
   BookOpen, ChevronRight, ChevronLeft, Ban,
   Zap, Layers, Network, Database, Code2, Globe, Cpu,
@@ -10,7 +10,9 @@ import {
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
-const API_BASE = (import.meta.env.VITE_API_URL || 'https://intelliprep-rhx3.onrender.com') + '';
+const API_BASE = (import.meta.env.VITE_API_URL || 'https://intelliprep-rhx3.onrender.com')
+  .replace(/\/+$/, '')
+  .replace(/\/api$/i, '');
 
 // ── Authenticated fetch ────────────────────────────────────────────────────────
 const authFetch = (url, options = {}) => {
@@ -887,12 +889,20 @@ export default function StudyPlanManager() {
   const handlePublish = async (planId) => {
     setPageAlert(null);
     try {
-      const res = await authFetch(`${API_BASE}/api/aiagent/publish-plan/${planId}`, { method: 'PUT' });
+      const publishUrl = `${API_BASE}/api/aiagent/publish-plan/${planId}`;
+      const res = await authFetch(publishUrl, { method: 'PUT' });
       const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.message || `Server error ${res.status}`);
+      if (!res.ok) {
+        const message = data?.message || (
+          res.status === 404
+            ? `The API could not find study plan #${planId} or the publish route (PUT ${publishUrl}). Verify VITE_API_URL and deploy the current backend.`
+            : `Server error ${res.status}`
+        );
+        throw new Error(message);
+      }
       
       // Re-fetch to correctly update all plans (unpublishing others for the student)
-      fetchPlans();
+      await fetchPlans();
       setPageAlert({ type: 'success', text: `Plan #${planId} published successfully. It is now active on the student's mobile app.` });
     } catch (err) {
       setPageAlert({ type: 'error', text: err.message });

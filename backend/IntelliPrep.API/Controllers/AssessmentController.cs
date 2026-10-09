@@ -346,6 +346,68 @@ namespace IntelliPrep.API.Controllers
             return Ok(sessions);
         }
 
+        [HttpPut("sessions/{id:int}/duration")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> AddSessionTime(
+            int id,
+            [FromBody] AddExamTimeDto request,
+            CancellationToken cancellationToken)
+        {
+            if (request.AdditionalMinutes is < 1 or > 240)
+                return BadRequest(new { error = "Additional minutes must be between 1 and 240." });
+
+            var session = await _context.ExamSessions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
+
+            if (session == null)
+                return NotFound(new { error = $"ExamSession with ID {id} not found." });
+
+            if (session.Status is not ("Ready" or "InProgress"))
+                return BadRequest(new
+                {
+                    error = "Time can only be added to a ready or in-progress exam session.",
+                    status = session.Status
+                });
+
+            var updatedRows = await _context.ExamSessions
+                .Where(s => s.Id == id
+                    && (s.Status == "Ready" || s.Status == "InProgress")
+                    && (s.DurationMinutes > 0 ? s.DurationMinutes : 30) <= 600 - request.AdditionalMinutes)
+                .ExecuteUpdateAsync(
+                    updates => updates.SetProperty(
+                        s => s.DurationMinutes,
+                        s => (s.DurationMinutes > 0 ? s.DurationMinutes : 30) + request.AdditionalMinutes),
+                    cancellationToken);
+
+            if (updatedRows == 0)
+            {
+                var currentDuration = session.DurationMinutes > 0 ? session.DurationMinutes : 30;
+                if (currentDuration + request.AdditionalMinutes > 600)
+                    return BadRequest(new { error = "An exam session cannot exceed 600 total minutes." });
+
+                return Conflict(new { error = "The session changed while time was being added. Refresh and try again." });
+            }
+
+            var newDuration = await _context.ExamSessions
+                .AsNoTracking()
+                .Where(s => s.Id == id)
+                .Select(s => s.DurationMinutes)
+                .SingleAsync(cancellationToken);
+
+            _logger.LogInformation(
+                "[AssessmentController] Admin added {AddedMinutes} minutes to session {Id}; new duration is {DurationMinutes} minutes.",
+                request.AdditionalMinutes, id, newDuration);
+
+            return Ok(new
+            {
+                sessionId = session.Id,
+                durationMinutes = newDuration,
+                additionalMinutes = request.AdditionalMinutes,
+                status = session.Status
+            });
+        }
+
         [HttpDelete("sessions/{id:int}")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> DeleteSession(int id)

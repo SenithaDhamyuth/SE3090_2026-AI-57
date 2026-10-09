@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace IntelliPrep.API.DTOs
 {
     /// <summary>Request body for POST /api/assessment/request-exam</summary>
@@ -18,6 +20,14 @@ namespace IntelliPrep.API.DTOs
     {
         /// <summary>ID of the ExamSession to lock and start.</summary>
         public int SessionId { get; set; }
+    }
+
+    /// <summary>Request body for adding time to an existing exam session.</summary>
+    public class AddExamTimeDto
+    {
+        /// <summary>Additional minutes to add to this session's configured duration.</summary>
+        [Range(1, 240)]
+        public int AdditionalMinutes { get; set; }
     }
 
     /// <summary>Request body for POST /api/assessment/submit</summary>

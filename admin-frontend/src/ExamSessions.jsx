@@ -5,6 +5,7 @@ import {
   RefreshCw, Zap, BookOpen, Trophy, Loader2,
   X, Send, Sparkles, CheckCheck, Brain, Eye, Download, Trash2,
   QrCode, CalendarDays, Timer, UserRound, Target, Search, ShieldCheck,
+  Info, Plus,
 } from 'lucide-react';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -66,28 +67,6 @@ function StatusBadge({ status }) {
       <Icon size={13} strokeWidth={2.5} />
       {m.label}
     </span>
-  );
-}
-
-// ── Stat Card ─────────────────────────────────────────────────────────────────
-function StatCard({ icon: Icon, label, value, sub, accent }) {
-  const accentMap = {
-    orange: 'from-orange-500 to-orange-600',
-    zinc:   'from-slate-500 to-slate-700',
-    emerald: 'from-emerald-500 to-teal-600',
-    violet: 'from-violet-500 to-indigo-600',
-  };
-  return (
-    <div className="bg-white rounded-xl border border-zinc-200/80 p-4 flex items-center gap-3 shadow-sm hover:shadow-md transition-shadow">
-      <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${accentMap[accent]} flex items-center justify-center shrink-0`}>
-        <Icon size={18} className="text-white" strokeWidth={2} />
-      </div>
-      <div className="min-w-0">
-        <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">{label}</p>
-        <p className="text-2xl font-bold text-zinc-900 leading-none mt-1">{value}</p>
-        {sub && <p className="text-xs text-zinc-500 mt-1">{sub}</p>}
-      </div>
-    </div>
   );
 }
 
@@ -299,7 +278,7 @@ function SessionDetailsModal({ session, onClose }) {
             <SessionDetailItem icon={BookOpen} label="Questions" value={session.questionsReady ? 'Questions prepared' : 'Not prepared'} accent="text-orange-600" />
             <SessionDetailItem icon={CalendarDays} label="Started" value={fmtDate(session.startTime)} accent="text-blue-600" />
             <SessionDetailItem icon={CalendarDays} label="Ended" value={fmtDate(session.endTime)} accent="text-violet-600" />
-            <SessionDetailItem icon={Timer} label="Duration" value={session.durationMinutes ? `${session.durationMinutes} minutes` : 'Not set'} accent="text-cyan-700" />
+            <SessionDetailItem icon={Timer} label="Duration" value={`${session.durationMinutes > 0 ? session.durationMinutes : 30} minutes`} accent="text-cyan-700" />
             <SessionDetailItem icon={ShieldCheck} label="Timer security" value={session.isTimerLocked ? 'Timer locked' : 'Not locked'} accent="text-amber-600" />
           </div>
 
@@ -346,6 +325,76 @@ function SessionDetailsModal({ session, onClose }) {
         <div className="border-t border-slate-100 px-6 py-4">
           <button type="button" onClick={onClose} className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800">Done</button>
         </div>
+      </section>
+    </div>
+  );
+}
+
+function AddExamTimeModal({ session, loading, onClose, onAddTime }) {
+  const [minutes, setMinutes] = useState(10);
+  const [error, setError] = useState('');
+
+  const handleSubmit = event => {
+    event.preventDefault();
+    const amount = Number(minutes);
+    if (!Number.isInteger(amount) || amount < 1 || amount > 240) {
+      setError('Enter a whole number from 1 to 240 minutes.');
+      return;
+    }
+    setError('');
+    onAddTime(amount);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <button type="button" aria-label="Close add time dialog" className="absolute inset-0 cursor-default bg-slate-950/60 backdrop-blur-sm" onClick={onClose} />
+      <section role="dialog" aria-modal="true" aria-labelledby="add-time-title" className="relative w-full max-w-md overflow-hidden rounded-3xl border border-white/70 bg-white shadow-2xl">
+        <div className="bg-gradient-to-br from-amber-500 to-orange-600 px-6 py-5 text-white">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-white/75">Exam session · #{session.id}</p>
+              <h2 id="add-time-title" className="mt-1 text-xl font-bold">Add exam time</h2>
+              <p className="mt-1 text-sm text-white/85">{session.title || session.subject || 'Exam session'}</p>
+            </div>
+            <button type="button" onClick={onClose} aria-label="Close" className="rounded-xl p-2 text-white/90 transition hover:bg-white/15 hover:text-white"><X size={19} /></button>
+          </div>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-5 p-6">
+          <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
+            <p className="text-sm font-semibold text-amber-950">Current time allowance</p>
+            <p className="mt-1 text-2xl font-bold text-amber-800">{session.durationMinutes > 0 ? session.durationMinutes : 30} minutes</p>
+            <p className="mt-1 text-xs leading-relaxed text-amber-800/80">Added time updates the student's running countdown automatically.</p>
+          </div>
+          <div>
+            <label htmlFor="add-session-minutes" className="mb-2 block text-sm font-semibold text-slate-700">Additional minutes</label>
+            <div className="grid grid-cols-4 gap-2">
+              {[5, 10, 15, 30].map(value => (
+                <button key={value} type="button" onClick={() => setMinutes(value)} className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${Number(minutes) === value ? 'border-orange-400 bg-orange-50 text-orange-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                  +{value}
+                </button>
+              ))}
+            </div>
+            <input
+              id="add-session-minutes"
+              type="number"
+              min="1"
+              max="240"
+              step="1"
+              value={minutes}
+              onChange={event => setMinutes(event.target.value)}
+              className="mt-3 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
+            />
+            <p className="mt-2 text-xs text-slate-500">Choose from 1–240 minutes per change. Maximum total duration is 600 minutes.</p>
+            {error && <p role="alert" className="mt-2 text-sm font-medium text-red-600">{error}</p>}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <button type="button" onClick={onClose} disabled={loading} className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60">Cancel</button>
+            <button type="submit" disabled={loading} className="inline-flex items-center justify-center gap-2 rounded-xl bg-orange-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60">
+              {loading ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+              {loading ? 'Adding time…' : 'Add time'}
+            </button>
+          </div>
+        </form>
       </section>
     </div>
   );
@@ -726,6 +775,8 @@ export default function ExamSessions() {
   const [viewSession, setViewSession]         = useState(null); // session to show in ViewQuestionsModal
   const [qrSession, setQrSession]             = useState(null);
   const [detailsSession, setDetailsSession]   = useState(null);
+  const [timeSession, setTimeSession]         = useState(null);
+  const [addingTimeIds, setAddingTimeIds]     = useState(new Set());
   const [searchQuery, setSearchQuery]         = useState('');
 
   // ── Toast helpers ───────────────────────────────────────────────────────────
@@ -852,13 +903,33 @@ export default function ExamSessions() {
     }
   }, [addToast]);
 
-  // ── Derived stats ───────────────────────────────────────────────────────────
-  const total     = sessions.length;
-  const ready     = sessions.filter(s => s.status === 'Ready').length;
-  const completed = sessions.filter(s => s.status === 'Completed').length;
-  const avgScore  = completed
-    ? Math.round(sessions.filter(s => s.status === 'Completed').reduce((a, s) => a + s.totalScore, 0) / completed)
-    : 0;
+  const handleAddTime = useCallback(async (session, additionalMinutes) => {
+    setAddingTimeIds(prev => new Set([...prev, session.id]));
+    try {
+      const response = await fetch(`${API_BASE}/sessions/${session.id}/duration`, {
+        method: 'PUT',
+        headers: adminHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ additionalMinutes }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(data?.error || `Could not add time (${response.status}).`);
+      }
+      setSessions(prev => prev.map(item => item.id === session.id
+        ? { ...item, durationMinutes: data.durationMinutes }
+        : item));
+      setTimeSession(null);
+      addToast('success', 'Exam time updated', `Added ${additionalMinutes} minutes. New duration: ${data.durationMinutes} minutes.`);
+    } catch (error) {
+      addToast('error', 'Could not add time', error.message || 'Unable to update the exam duration.');
+    } finally {
+      setAddingTimeIds(prev => {
+        const next = new Set(prev);
+        next.delete(session.id);
+        return next;
+      });
+    }
+  }, [addToast]);
 
   // ── Filtezinc rows ───────────────────────────────────────────────────────────
   const filteredSessions = sessions
@@ -919,14 +990,6 @@ export default function ExamSessions() {
         </div>
       </div>
 
-      {/* ── Stats Row ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard icon={ClipboardList} label="Total Sessions" value={total}           accent="orange"  sub="all time" />
-        <StatCard icon={Brain}         label="Ready (Agent 2)" value={ready}           accent="orange"  sub="questions synthesized" />
-        <StatCard icon={CheckCircle2}  label="Completed"        value={completed}       accent="zinc" sub="submitted" />
-        <StatCard icon={Trophy}        label="Avg Score"         value={`${avgScore}pts`} accent="zinc"    sub="completed sessions" />
-      </div>
-
       {/* ── Filter Tabs ── */}
       <div className="flex w-full flex-wrap items-center gap-1.5 rounded-2xl border border-slate-200 bg-slate-100 p-1.5 sm:w-fit">
         {['All', 'Pending', 'PendingAdminApproval', 'Ready', 'InProgress', 'Completed', 'Abandoned'].map(tab => (
@@ -947,6 +1010,18 @@ export default function ExamSessions() {
             )}
           </button>
         ))}
+      </div>
+
+      <div className="flex items-start gap-3 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3.5 text-sm text-sky-950">
+        <Info size={18} className="mt-0.5 shrink-0 text-sky-700" />
+        <div className="grid gap-1 sm:grid-cols-2">
+          <p><strong>Ready:</strong> questions are prepared and approved; the student can start via the QR code.</p>
+          <p><strong>Completed:</strong> the student submitted the exam; the score and end time are available in details.</p>
+          <p><strong>In progress:</strong> the student's timer has started and the attempt is active.</p>
+          <p><strong>Pending:</strong> the exam session exists but question preparation has not finished.</p>
+          <p><strong>Pending approval:</strong> generated questions are waiting for admin review before they can be used.</p>
+          <p><strong>Abandoned:</strong> the session was rejected or closed without a submitted result.</p>
+        </div>
       </div>
 
       {/* ── Session cards ── */}
@@ -1040,7 +1115,9 @@ export default function ExamSessions() {
                     </div>
                     <div className="rounded-2xl bg-amber-50 p-3.5">
                       <div className="flex items-center gap-2 text-xs font-semibold text-amber-700"><Timer size={15} /> Timer</div>
-                      <p className="mt-2 text-base font-bold text-amber-950">{session.isTimerLocked ? 'Running' : 'Not started'}</p>
+                      <p className="mt-2 text-base font-bold text-amber-950">
+                        {session.durationMinutes > 0 ? `${session.durationMinutes} min` : '30 min'} · {session.isTimerLocked ? 'Running' : 'Not started'}
+                      </p>
                     </div>
                     <div className="rounded-2xl bg-emerald-50 p-3.5">
                       <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700"><Trophy size={15} /> Result</div>
@@ -1083,6 +1160,17 @@ export default function ExamSessions() {
                       <QrCode size={17} />
                       View QR
                     </button>
+                    {['Ready', 'InProgress'].includes(session.status) && (
+                      <button
+                        type="button"
+                        onClick={() => setTimeSession(session)}
+                        disabled={addingTimeIds.has(session.id)}
+                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-bold text-amber-800 transition hover:border-amber-300 hover:bg-amber-100 focus:outline-none focus:ring-4 focus:ring-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {addingTimeIds.has(session.id) ? <Loader2 size={17} className="animate-spin" /> : <Plus size={17} />}
+                        Add time
+                      </button>
+                    )}
                     <div className="ml-auto flex flex-wrap items-center gap-2">
                       {isSynthesizing ? (
                         <span className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-orange-50 px-3 text-sm font-semibold text-orange-700">
@@ -1162,6 +1250,15 @@ export default function ExamSessions() {
         <SessionDetailsModal
           session={detailsSession}
           onClose={() => setDetailsSession(null)}
+        />
+      )}
+
+      {timeSession && (
+        <AddExamTimeModal
+          session={timeSession}
+          loading={addingTimeIds.has(timeSession.id)}
+          onClose={() => setTimeSession(null)}
+          onAddTime={minutes => handleAddTime(timeSession, minutes)}
         />
       )}
 

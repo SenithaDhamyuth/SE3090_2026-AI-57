@@ -1,20 +1,24 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../models/cached_exam.dart';
 import '../services/database_helper.dart';
 import '../api_constants.dart';
 import 'exam_review_screen.dart';
 
-/// Fetches the MCQ questions for a session by calling the join endpoint.
-///
-/// The QR scanner already hit GET /api/student/papers/join/{accessCode};
-/// this call repeats it to obtain the questionsJson array for rendering.
-/// The endpoint is idempotent and safe to call multiple times.
-Future<List<Map<String, dynamic>>> fetchQuestions(String sessionId) async {
-  // Primary: use the join endpoint (returns questionsJson in the response body)
+class _JoinedExam {
+  final List<Map<String, dynamic>> questions;
+  final int durationMinutes;
+
+  const _JoinedExam({required this.questions, required this.durationMinutes});
+}
+
+/// Fetches the question set and server-configured timer for the scanned session.
+Future<_JoinedExam> _fetchExam(String sessionId) async {
   final uri = ApiConstants.endpoint(
     'api/student/papers/join/${Uri.encodeComponent(sessionId)}',
   );
@@ -28,7 +32,8 @@ Future<List<Map<String, dynamic>>> fetchQuestions(String sessionId) async {
           uri,
           headers: {
             'Accept': 'application/json',
-            if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+            if (token != null && token.isNotEmpty)
+              'Authorization': 'Bearer $token',
           },
         )
         .timeout(const Duration(seconds: 8));
@@ -46,12 +51,16 @@ Future<List<Map<String, dynamic>>> fetchQuestions(String sessionId) async {
       throw const FormatException('Backend response was not a JSON object.');
     }
 
+    final durationMinutes = int.tryParse('${decoded['durationMinutes']}') ?? 30;
     final rawQuestions = decoded['questionsJson'];
     if (rawQuestions == null ||
         rawQuestions.toString().trim().isEmpty ||
         rawQuestions == 'null' ||
         rawQuestions == '[]') {
-      return [];
+      return _JoinedExam(
+        questions: const [],
+        durationMinutes: durationMinutes > 0 ? durationMinutes : 30,
+      );
     }
 
     // questionsJson may already be a List (if serialized inline) or a JSON string
@@ -60,14 +69,22 @@ Future<List<Map<String, dynamic>>> fetchQuestions(String sessionId) async {
         : rawQuestions;
 
     if (parsed is! List) {
-      print('❌ JSON Error: parsed questionsJson is not a List. Type is ${parsed.runtimeType}');
-      return [];
+      print(
+        '❌ JSON Error: parsed questionsJson is not a List. Type is ${parsed.runtimeType}',
+      );
+      return _JoinedExam(
+        questions: const [],
+        durationMinutes: durationMinutes > 0 ? durationMinutes : 30,
+      );
     }
 
-    return parsed
-        .whereType<Map>()
-        .map((question) => Map<String, dynamic>.from(question))
-        .toList();
+    return _JoinedExam(
+      questions: parsed
+          .whereType<Map>()
+          .map((question) => Map<String, dynamic>.from(question))
+          .toList(),
+      durationMinutes: durationMinutes > 0 ? durationMinutes : 30,
+    );
   } on TimeoutException {
     print('❌ API Error: Connection timed out.');
     throw Exception('Connection failed. Check your internet connection.');
@@ -85,7 +102,6 @@ Future<List<Map<String, dynamic>>> fetchQuestions(String sessionId) async {
     throw Exception('Connection failed. Check your internet connection.');
   }
 }
-
 
 class _Question {
   final int id;
@@ -118,9 +134,11 @@ class ExamTimerScreen extends StatefulWidget {
 class _ExamTimerScreenState extends State<ExamTimerScreen>
     with WidgetsBindingObserver {
   // ── Timer state ─────────────────────────────────────────────────────
-  static const int _totalSeconds = 30 * 60; // 30 minutes
-  int _remainingSeconds = _totalSeconds;
+  int _configuredDurationMinutes = 30;
+  int _remainingSeconds = 30 * 60;
   Timer? _countdownTimer;
+  Timer? _serverSyncTimer;
+  bool _syncingTimer = false;
   bool _submitted = false;
 
   // ── Loaded question state ─────────────────────────────────────────────
@@ -141,13 +159,13 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadQuestions();
-    _startTimer();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _countdownTimer?.cancel();
+    _serverSyncTimer?.cancel();
     super.dispose();
   }
 
@@ -156,6 +174,8 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
     // Auto-save progress when app is backgrounded (UC2.5)
     if (state == AppLifecycleState.paused && !_submitted) {
       _saveProgressLocally(status: 'in_progress');
+    } else if (state == AppLifecycleState.resumed && !_submitted) {
+      _syncServerTimer();
     }
   }
 
@@ -182,56 +202,70 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
 
   Future<void> _loadQuestions() async {
     try {
-      final rawQuestions = await fetchQuestions(widget.qrPayload);
-      
+      final joinedExam = await _fetchExam(widget.qrPayload);
+      final rawQuestions = joinedExam.questions;
+
       int fallbackIdCounter = 1;
-      
-      final loadedQuestions = rawQuestions.map((entry) {
-        // Find question ID
-        final rawId = _getValueIgnoreCase(entry, ['questionNo', 'id', 'questionId']);
-        int id = int.tryParse('$rawId') ?? 0;
-        if (id == 0) {
-          id = fallbackIdCounter++;
-        }
 
-        // Find question text
-        final rawText = _getValueIgnoreCase(entry, ['questionText', 'text', 'question']);
-        final text = (rawText ?? 'Untitled question').toString();
+      final loadedQuestions = rawQuestions
+          .map((entry) {
+            // Find question ID
+            final rawId = _getValueIgnoreCase(entry, [
+              'questionNo',
+              'id',
+              'questionId',
+            ]);
+            int id = int.tryParse('$rawId') ?? 0;
+            if (id == 0) {
+              id = fallbackIdCounter++;
+            }
 
-        // Find options
-        final rawOptions = _getValueIgnoreCase(entry, ['options']);
-        final options = (rawOptions as List? ?? const [])
-            .map((option) => option.toString())
-            .toList();
+            // Find question text
+            final rawText = _getValueIgnoreCase(entry, [
+              'questionText',
+              'text',
+              'question',
+            ]);
+            final text = (rawText ?? 'Untitled question').toString();
 
-        // Find correct option index
-        final rawCorrect = _getValueIgnoreCase(entry, [
-          'correctOptionIndex',
-          'correctOption',
-          'correctIndex',
-          'answerIndex',
-          'answer'
-        ]);
-        
-        // Handle 1-based or 0-based index properly depending on data
-        int correctIdx = int.tryParse('$rawCorrect') ?? 0;
-        
-        return _Question(
-          id: id,
-          text: text,
-          options: options,
-          correctIndex: correctIdx,
-        );
-      }).where((question) {
-        // We only require text to not be empty now, since questionNo might be 0 or missing in some rogue JSONs.
-        if (question.text.isEmpty) {
-          print('⚠️ Warning: Dropped question because text was empty.');
-          return false;
-        }
-        return true;
-      }).toList();
+            // Find options
+            final rawOptions = _getValueIgnoreCase(entry, ['options']);
+            final options = (rawOptions as List? ?? const [])
+                .map((option) => option.toString())
+                .toList();
 
+            // Find correct option index
+            final rawCorrect = _getValueIgnoreCase(entry, [
+              'correctOptionIndex',
+              'correctOption',
+              'correctIndex',
+              'answerIndex',
+              'answer',
+            ]);
 
+            // Handle 1-based or 0-based index properly depending on data
+            int correctIdx = int.tryParse('$rawCorrect') ?? 0;
+
+            return _Question(
+              id: id,
+              text: text,
+              options: options,
+              correctIndex: correctIdx,
+            );
+          })
+          .where((question) {
+            // We only require text to not be empty now, since questionNo might be 0 or missing in some rogue JSONs.
+            if (question.text.isEmpty) {
+              print('⚠️ Warning: Dropped question because text was empty.');
+              return false;
+            }
+            return true;
+          })
+          .toList();
+
+      if (!mounted) return;
+
+      await _startExamTimer(joinedExam.durationMinutes);
       if (!mounted) return;
 
       setState(() {
@@ -250,8 +284,8 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
       final message = e.toString().contains('Unauthorized')
           ? 'Session unauthorized. Please log in again.'
           : e.toString().contains('Connection failed')
-              ? 'Connection failed. Check your internet connection.'
-              : 'Unable to load questions right now. Please try again.';
+          ? 'Connection failed. Check your internet connection.'
+          : 'Unable to load questions right now. Please try again.';
 
       setState(() {
         _questions.clear();
@@ -265,14 +299,10 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
     final exam = CachedExam(
       sessionId: widget.qrPayload,
       subject: 'A/L ICT',
-      durationMinutes: _totalSeconds ~/ 60,
+      durationMinutes: _configuredDurationMinutes,
       questionsJson: jsonEncode(
         _questions
-            .map((q) => {
-                  'id': q.id,
-                  'text': q.text,
-                  'options': q.options,
-                })
+            .map((q) => {'id': q.id, 'text': q.text, 'options': q.options})
             .toList(),
       ),
       answersJson: '{}',
@@ -285,7 +315,107 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
 
   // ── Timer logic ─────────────────────────────────────────────────────
 
+  Future<void> _startExamTimer(int durationMinutes) async {
+    final uri = ApiConstants.endpoint(
+      'api/student/papers/start/${Uri.encodeComponent(widget.qrPayload)}',
+    );
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('auth_token');
+    final response = await http
+        .post(
+          uri,
+          headers: {
+            'Accept': 'application/json',
+            if (token != null && token.isNotEmpty)
+              'Authorization': 'Bearer $token',
+          },
+        )
+        .timeout(const Duration(seconds: 8));
+
+    if (response.statusCode != 200) {
+      throw Exception('Unable to start exam timer (${response.statusCode}).');
+    }
+
+    final data = jsonDecode(response.body);
+    if (data is! Map<String, dynamic>) {
+      throw const FormatException('Timer response was not a JSON object.');
+    }
+
+    final serverDuration =
+        int.tryParse('${data['durationMinutes']}') ?? durationMinutes;
+    final remainingSeconds =
+        int.tryParse('${data['remainingSeconds']}') ?? serverDuration * 60;
+
+    if (!mounted) return;
+    setState(() {
+      _configuredDurationMinutes = serverDuration > 0
+          ? serverDuration
+          : durationMinutes;
+      _remainingSeconds = remainingSeconds.clamp(0, 600 * 60).toInt();
+    });
+    _startTimer();
+    _serverSyncTimer?.cancel();
+    _serverSyncTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => _syncServerTimer(),
+    );
+  }
+
+  Future<void> _syncServerTimer() async {
+    if (_syncingTimer || _submitted || !mounted) return;
+    _syncingTimer = true;
+    try {
+      final uri = ApiConstants.endpoint(
+        'api/student/papers/timer/${Uri.encodeComponent(widget.qrPayload)}',
+      );
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token');
+      final response = await http
+          .get(
+            uri,
+            headers: {
+              'Accept': 'application/json',
+              if (token != null && token.isNotEmpty)
+                'Authorization': 'Bearer $token',
+            },
+          )
+          .timeout(const Duration(seconds: 8));
+
+      if (response.statusCode != 200) {
+        throw Exception('Timer sync failed (${response.statusCode}).');
+      }
+
+      final data = jsonDecode(response.body);
+      if (data is! Map<String, dynamic>) {
+        throw const FormatException('Timer response was not a JSON object.');
+      }
+
+      final serverDuration =
+          int.tryParse('${data['durationMinutes']}') ??
+          _configuredDurationMinutes;
+      final remainingSeconds =
+          int.tryParse('${data['remainingSeconds']}') ?? _remainingSeconds;
+      if (!mounted) return;
+
+      setState(() {
+        _configuredDurationMinutes = serverDuration > 0
+            ? serverDuration
+            : _configuredDurationMinutes;
+        _remainingSeconds = remainingSeconds.clamp(0, 600 * 60).toInt();
+      });
+
+      if (remainingSeconds <= 0) {
+        _autoSubmit();
+      }
+    } catch (error) {
+      debugPrint('Unable to synchronize exam timer: $error');
+    } finally {
+      _syncingTimer = false;
+    }
+  }
+
   void _startTimer() {
+    _countdownTimer?.cancel();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_remainingSeconds <= 0) {
         timer.cancel();
@@ -313,9 +443,8 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
     _saveProgressLocally(status: 'in_progress');
   }
 
-  String _encodeAnswers() => jsonEncode(
-        _answers.map((key, value) => MapEntry(key.toString(), value)),
-      );
+  String _encodeAnswers() =>
+      jsonEncode(_answers.map((key, value) => MapEntry(key.toString(), value)));
 
   // ── SQLite persistence ───────────────────────────────────────────────
 
@@ -383,7 +512,9 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
 
       final body = jsonEncode(payload);
 
-      print('[ExamTimerScreen] → POST /api/student/submit | payload keys: ${payload.keys.toList()} | score=${payload['totalScore']}');
+      print(
+        '[ExamTimerScreen] → POST /api/student/submit | payload keys: ${payload.keys.toList()} | score=${payload['totalScore']}',
+      );
 
       final response = await http
           .post(
@@ -398,11 +529,15 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
           )
           .timeout(const Duration(seconds: 15));
 
-      print('[ExamTimerScreen] ← Backend submit response: HTTP ${response.statusCode} | body: ${response.body}');
+      print(
+        '[ExamTimerScreen] ← Backend submit response: HTTP ${response.statusCode} | body: ${response.body}',
+      );
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
         if (mounted) {
-          setState(() => _saveStatus = 'Server save failed — retry when online');
+          setState(
+            () => _saveStatus = 'Server save failed — retry when online',
+          );
         }
         return;
       }
@@ -436,7 +571,8 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
     } catch (e, stack) {
       debugPrint('[ExamTimerScreen] Local submit save failed: $e');
       debugPrint('[ExamTimerScreen] Stack: $stack');
-      if (mounted) setState(() => _saveStatus = 'Local save failed — syncing to server');
+      if (mounted)
+        setState(() => _saveStatus = 'Local save failed — syncing to server');
     }
 
     // 2. Sync to backend (best-effort — does not block the UI)
@@ -450,8 +586,10 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Submit Exam?',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Submit Exam?',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         content: Text(
           'You have answered '
           '${_answers.values.where((v) => v >= 0).length} of '
@@ -504,12 +642,16 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
                 totalQuestions: total,
                 date: DateTime.now().toIso8601String(),
                 questionsJson: jsonEncode(
-                  _questions.map((q) => {
-                    'id': q.id,
-                    'text': q.text,
-                    'options': q.options,
-                    'correctOptionIndex': q.correctIndex,
-                  }).toList()
+                  _questions
+                      .map(
+                        (q) => {
+                          'id': q.id,
+                          'text': q.text,
+                          'options': q.options,
+                          'correctOptionIndex': q.correctIndex,
+                        },
+                      )
+                      .toList(),
                 ),
                 answersJson: _encodeAnswers(),
               ),
@@ -519,7 +661,6 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
       ),
     );
   }
-
 
   // ── Timer display ────────────────────────────────────────────────────
 
@@ -563,40 +704,37 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
               ),
             )
           : _questions.isEmpty
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(
-                      _questionsError.isNotEmpty
-                          ? _questionsError
-                          : 'No questions are available for this session.',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        color: Colors.grey,
-                      ),
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  _questionsError.isNotEmpty
+                      ? _questionsError
+                      : 'No questions are available for this session.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 16, color: Colors.grey),
+                ),
+              ),
+            )
+          : Column(
+              children: [
+                _buildTimerBanner(),
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+                    itemCount: _questions.length,
+                    itemBuilder: (_, i) => _QuestionCard(
+                      question: _questions[i],
+                      selectedIndex: _answers[_questions[i].id] ?? -1,
+                      isSubmitted: _submitted,
+                      onSelected: _submitted
+                          ? null
+                          : (idx) => _selectAnswer(_questions[i].id, idx),
                     ),
                   ),
-                )
-              : Column(
-                  children: [
-                    _buildTimerBanner(),
-                    Expanded(
-                      child: ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
-                        itemCount: _questions.length,
-                        itemBuilder: (_, i) => _QuestionCard(
-                          question: _questions[i],
-                          selectedIndex: _answers[_questions[i].id] ?? -1,
-                          isSubmitted: _submitted,
-                          onSelected: _submitted
-                              ? null
-                              : (idx) => _selectAnswer(_questions[i].id, idx),
-                        ),
-                      ),
-                    ),
-                  ],
                 ),
+              ],
+            ),
       bottomNavigationBar: _isLoadingQuestions || _questions.isEmpty
           ? null
           : _buildBottomBar(),
@@ -642,8 +780,7 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
             child: Center(
               child: Text(
                 _saveStatus,
-                style:
-                    const TextStyle(fontSize: 10, color: Colors.white70),
+                style: const TextStyle(fontSize: 10, color: Colors.white70),
               ),
             ),
           ),
@@ -676,10 +813,7 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
           const SizedBox(width: 4),
           Text(
             _remainingSeconds <= 300 ? ' — Time running out!' : ' remaining',
-            style: TextStyle(
-              fontSize: 11,
-              color: _timerColor.withAlpha(180),
-            ),
+            style: TextStyle(fontSize: 11, color: _timerColor.withAlpha(180)),
           ),
           const Spacer(),
           // Progress chip
@@ -707,7 +841,11 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
   Widget _buildBottomBar() {
     return Container(
       padding: EdgeInsets.fromLTRB(
-          16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
+        16,
+        12,
+        16,
+        MediaQuery.of(context).padding.bottom + 12,
+      ),
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border(top: BorderSide(color: Colors.grey.shade200)),
@@ -726,10 +864,11 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
-              value: _questions.isEmpty ? 0 : _answeredCount / _questions.length,
+              value: _questions.isEmpty
+                  ? 0
+                  : _answeredCount / _questions.length,
               backgroundColor: Colors.grey.shade200,
-              valueColor:
-                  const AlwaysStoppedAnimation<Color>(Colors.orange),
+              valueColor: const AlwaysStoppedAnimation<Color>(Colors.orange),
               minHeight: 6,
             ),
           ),
@@ -740,14 +879,12 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
             height: 50,
             child: FilledButton.icon(
               style: FilledButton.styleFrom(
-                backgroundColor:
-                    _submitted ? Colors.grey : Colors.orange,
+                backgroundColor: _submitted ? Colors.grey : Colors.orange,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),
               ),
-              onPressed:
-                  _submitted ? null : () => _handleSubmit(),
+              onPressed: _submitted ? null : () => _handleSubmit(),
               icon: Icon(
                 _submitted ? Icons.check_circle : Icons.send_rounded,
                 size: 18,
@@ -757,7 +894,9 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
                     ? 'Exam Submitted'
                     : 'Submit Answers ($_answeredCount/${_questions.length})',
                 style: const TextStyle(
-                    fontSize: 15, fontWeight: FontWeight.bold),
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ),
@@ -841,7 +980,8 @@ class _QuestionCard extends StatelessWidget {
                 text: question.options[i],
                 isSelected: selectedIndex == i,
                 isCorrect: isSubmitted && question.correctIndex == i,
-                isWrong: isSubmitted &&
+                isWrong:
+                    isSubmitted &&
                     selectedIndex == i &&
                     question.correctIndex != i,
                 onTap: onSelected == null ? null : () => onSelected!(i),
@@ -940,8 +1080,7 @@ class _OptionTile extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   color: Colors.grey.shade800,
-                  fontWeight:
-                      isSelected ? FontWeight.w600 : FontWeight.normal,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                 ),
               ),
             ),
@@ -997,7 +1136,11 @@ class _ResultsSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: EdgeInsets.fromLTRB(
-          24, 24, 24, MediaQuery.of(context).padding.bottom + 24),
+        24,
+        24,
+        24,
+        MediaQuery.of(context).padding.bottom + 24,
+      ),
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
@@ -1046,9 +1189,10 @@ class _ResultsSheet extends StatelessWidget {
           Text(
             'Exam Complete!',
             style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade900),
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey.shade900,
+            ),
           ),
           const SizedBox(height: 4),
           Text(
@@ -1064,8 +1208,7 @@ class _ResultsSheet extends StatelessWidget {
           const SizedBox(height: 8),
           // Saved locally badge
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: Colors.green.shade50,
               borderRadius: BorderRadius.circular(20),
@@ -1074,8 +1217,11 @@ class _ResultsSheet extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.storage_rounded,
-                    color: Colors.green.shade600, size: 14),
+                Icon(
+                  Icons.storage_rounded,
+                  color: Colors.green.shade600,
+                  size: 14,
+                ),
                 const SizedBox(width: 6),
                 Text(
                   'Results saved offline (UC2.5)',
@@ -1096,7 +1242,8 @@ class _ResultsSheet extends StatelessWidget {
               style: FilledButton.styleFrom(
                 backgroundColor: Colors.orange,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14)),
+                  borderRadius: BorderRadius.circular(14),
+                ),
               ),
               onPressed: onViewResults,
               icon: const Icon(Icons.analytics_rounded, size: 20),
@@ -1111,4 +1258,3 @@ class _ResultsSheet extends StatelessWidget {
     );
   }
 }
-

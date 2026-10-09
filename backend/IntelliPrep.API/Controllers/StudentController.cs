@@ -221,8 +221,94 @@ public class StudentController : ControllerBase
             subject          = session.Subject,
             durationMinutes  = session.DurationMinutes > 0 ? session.DurationMinutes : 30,
             status           = session.Status,
+            startTime        = session.StartTime,
+            isTimerLocked    = session.IsTimerLocked,
             questionsJson    = session.QuestionsJson,  // raw JSON array of MCQs
             message          = "Exam session validated. You may begin.",
+        });
+    }
+
+    /// <summary>
+    /// Starts the timed attempt using its QR access code, or returns the
+    /// existing timer state when the attempt has already started.
+    /// </summary>
+    [HttpPost("papers/start/{accessCode}")]
+    public async Task<IActionResult> StartExamByAccessCode(
+        string accessCode,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(accessCode))
+            return BadRequest(new { message = "Access code is required." });
+
+        var normalizedAccessCode = accessCode.Trim();
+        var startedAt = DateTime.UtcNow;
+        await _db.ExamSessions
+            .Where(s => s.SessionId == normalizedAccessCode && s.Status == "Ready")
+            .ExecuteUpdateAsync(
+                updates => updates
+                    .SetProperty(s => s.DurationMinutes, s => s.DurationMinutes > 0 ? s.DurationMinutes : 30)
+                    .SetProperty(s => s.StartTime, startedAt)
+                    .SetProperty(s => s.Status, "InProgress")
+                    .SetProperty(s => s.IsTimerLocked, true),
+                cancellationToken);
+
+        var session = await _db.ExamSessions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.SessionId == normalizedAccessCode, cancellationToken);
+
+        if (session is null)
+            return NotFound(new { message = "No exam session was found for this access code." });
+
+        if (session.Status is "Completed" or "Abandoned")
+            return BadRequest(new { message = "This exam session is no longer available.", status = session.Status });
+
+        if (session.Status != "InProgress" || !session.IsTimerLocked)
+        {
+            return BadRequest(new { message = "This exam session is not ready to start.", status = session.Status });
+        }
+
+        var effectiveDurationMinutes = session.DurationMinutes > 0 ? session.DurationMinutes : 30;
+        var elapsedSeconds = Math.Max(0, (int)(DateTime.UtcNow - session.StartTime).TotalSeconds);
+        var remainingSeconds = Math.Max(0, effectiveDurationMinutes * 60 - elapsedSeconds);
+
+        return Ok(new
+        {
+            sessionGuid = session.SessionId,
+            status = session.Status,
+            durationMinutes = effectiveDurationMinutes,
+            remainingSeconds
+        });
+    }
+
+    /// <summary>Returns the authoritative remaining time for a QR-authorized exam.</summary>
+    [HttpGet("papers/timer/{accessCode}")]
+    public async Task<IActionResult> GetExamTimer(
+        string accessCode,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(accessCode))
+            return BadRequest(new { message = "Access code is required." });
+
+        var session = await _db.ExamSessions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.SessionId == accessCode.Trim(), cancellationToken);
+
+        if (session is null)
+            return NotFound(new { message = "No exam session was found for this access code." });
+
+        if (session.Status != "InProgress" || !session.IsTimerLocked)
+            return Conflict(new { message = "The exam timer is not running.", status = session.Status });
+
+        var effectiveDurationMinutes = session.DurationMinutes > 0 ? session.DurationMinutes : 30;
+        var elapsedSeconds = Math.Max(0, (int)(DateTime.UtcNow - session.StartTime).TotalSeconds);
+        var remainingSeconds = Math.Max(0, effectiveDurationMinutes * 60 - elapsedSeconds);
+
+        return Ok(new
+        {
+            sessionGuid = session.SessionId,
+            status = session.Status,
+            durationMinutes = effectiveDurationMinutes,
+            remainingSeconds
         });
     }
 
