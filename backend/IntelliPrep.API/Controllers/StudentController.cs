@@ -395,14 +395,16 @@ public class AdminMarksController : ControllerBase
     /// Returns all completed exam sessions with student info for the admin marks dashboard.
     /// </summary>
     [HttpGet("marks")]
-    public async Task<IActionResult> GetStudentMarks(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetStudentMarks(
+        [FromQuery] int? sessionId,
+        CancellationToken cancellationToken)
     {
         _logger.LogInformation("[AdminMarksController] Fetching all completed exam sessions.");
 
         // Load completed sessions with student info
         var rawSessions = await _db.ExamSessions
             .AsNoTracking()
-            .Where(s => s.Status == "Completed")
+            .Where(s => s.Status == "Completed" && (!sessionId.HasValue || s.Id == sessionId.Value))
             .OrderByDescending(s => s.EndTime)
             .Select(s => new
             {

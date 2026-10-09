@@ -2,6 +2,7 @@ using IntelliPrep.API.Data;
 using IntelliPrep.API.DTOs;
 using IntelliPrep.API.Models;
 using IntelliPrep.API.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Text.RegularExpressions;
@@ -48,6 +49,7 @@ namespace IntelliPrep.API.Controllers
         // an ExamSession record in "Pending" status.
         // ─────────────────────────────────────────────────────────────
         [HttpPost("request-exam")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> RequestExam([FromBody] RequestExamDto dto)
         {
             if (string.IsNullOrWhiteSpace(dto.Objective))
@@ -217,6 +219,7 @@ namespace IntelliPrep.API.Controllers
         // stores them in QuestionsJson, and flips Status → "Ready".
         // ─────────────────────────────────────────────────────────────
         [HttpPost("synthesize/{sessionId:int}")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> SynthesizeQuestions(
             int    sessionId,
             [FromQuery] string subject = "ICT")
@@ -312,6 +315,7 @@ namespace IntelliPrep.API.Controllers
         // Returns all exam sessions (for the admin ExamSessions frontend)
         // ─────────────────────────────────────────────────────────────
         [HttpGet("sessions")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetAllSessions(CancellationToken cancellationToken)
         {
             var sessions = await _context.ExamSessions
@@ -329,6 +333,7 @@ namespace IntelliPrep.API.Controllers
                     s.Status,
                     s.StartTime,
                     s.EndTime,
+                    s.DurationMinutes,
                     s.TotalScore,
                     s.IsTimerLocked,
                     // Full JSON string — parsed by ViewQuestionsModal in the React frontend
@@ -342,6 +347,7 @@ namespace IntelliPrep.API.Controllers
         }
 
         [HttpDelete("sessions/{id:int}")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> DeleteSession(int id)
         {
             var session = await _context.ExamSessions.FindAsync(id);
@@ -362,6 +368,7 @@ namespace IntelliPrep.API.Controllers
         // so the mobile app always receives the final admin-approved question set.
         // ─────────────────────────────────────────────────────────────────────
         [HttpPut("approve/{sessionId:int}")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> ApproveSession(
             int sessionId,
             [FromBody] ApproveSessionDto? dto = null)
@@ -467,6 +474,7 @@ namespace IntelliPrep.API.Controllers
         // Changes Status → "Abandoned" and clears the questions JSON.
         // ─────────────────────────────────────────────────────────────────────
         [HttpPut("reject/{sessionId:int}")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> RejectSession(int sessionId)
         {
             _logger.LogInformation(
