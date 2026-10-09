@@ -8,12 +8,45 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    throw new InvalidOperationException(
+        "ConnectionStrings:DefaultConnection must be configured with the hosted PostgreSQL connection string.");
+}
+
+if (!builder.Environment.IsDevelopment())
+{
+    var databaseHost = new Npgsql.NpgsqlConnectionStringBuilder(connectionString).Host;
+    if (string.IsNullOrWhiteSpace(databaseHost))
+    {
+        throw new InvalidOperationException(
+            "The hosted PostgreSQL connection string must specify a database host.");
+    }
+
+    var hosts = databaseHost.Split(
+        ',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    if (hosts.Any(host =>
+            string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase)
+            || (System.Net.IPAddress.TryParse(host, out var address)
+                && System.Net.IPAddress.IsLoopback(address))))
+    {
+        throw new InvalidOperationException(
+            "The hosted API cannot use a loopback PostgreSQL host. Configure the hosted database connection.");
+    }
+}
+
 // 1. Add PostgreSQL Database Context
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(connectionString));
 
 // 2. Add JWT Authentication
-var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key is not configured.");
+var jwtKey = builder.Configuration["Jwt:Key"];
+if (string.IsNullOrWhiteSpace(jwtKey) || Encoding.UTF8.GetByteCount(jwtKey) < 32)
+{
+    throw new InvalidOperationException(
+        "Jwt:Key must be configured using deployment secrets and contain at least 32 bytes.");
+}
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -145,7 +178,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-// Seed Default Admin
 using var scope = app.Services.CreateScope();
 var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 var migrationLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
@@ -162,25 +194,6 @@ catch (Exception ex)
     throw;
 }
 try { dbContext.Database.ExecuteSqlRaw("ALTER TABLE \"Users\" ADD COLUMN \"ProfileImageUrl\" character varying(255) NULL;"); } catch { }
-var adminUser = dbContext.Users.FirstOrDefault(u => u.Email == "admin@intelliprep.com");
-if (adminUser == null)
-{
-    dbContext.Users.Add(new IntelliPrep.API.Models.User
-    {
-        Email = "admin@intelliprep.com",
-        FullName = "Super Admin",
-        PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!"),
-        Role = "Admin",
-        CreatedAt = DateTime.UtcNow
-    });
-}
-else
-{
-    // Force reset the password to ensure it matches
-    adminUser.PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!");
-    dbContext.Users.Update(adminUser);
-}
-dbContext.SaveChanges();
 
 // ── Seed historical questions from Excel dataset ───────────────────────────
 var seederEnv    = scope.ServiceProvider.GetRequiredService<IWebHostEnvironment>();

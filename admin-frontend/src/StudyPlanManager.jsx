@@ -893,11 +893,9 @@ export default function StudyPlanManager() {
       const res = await authFetch(publishUrl, { method: 'PUT' });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        const message = data?.message || (
-          res.status === 404
-            ? `The API could not find study plan #${planId} or the publish route (PUT ${publishUrl}). Verify VITE_API_URL and deploy the current backend.`
-            : `Server error ${res.status}`
-        );
+        const message = res.status === 404
+          ? data?.message || `The API at ${new URL(publishUrl).origin} returned an empty 404 for PUT ${new URL(publishUrl).pathname}. The deployed backend does not expose this publish route. Deploy the current backend, then retry.`
+          : data?.message || `Server error ${res.status}`;
         throw new Error(message);
       }
       

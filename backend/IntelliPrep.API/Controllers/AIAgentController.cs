@@ -457,6 +457,7 @@ public class AIAgentController : ControllerBase
     [HttpPut("publish-plan/{planId:int}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> PublishPlan(
         [FromRoute] int planId,
         CancellationToken cancellationToken)
@@ -468,6 +469,14 @@ public class AIAgentController : ControllerBase
 
         if (plan is null)
             return NotFound(new { message = $"Study plan with Id = {planId} was not found." });
+
+        if (!plan.IsApproved)
+        {
+            return Conflict(new
+            {
+                message = $"Study plan {planId} must be approved before it can be published."
+            });
+        }
 
         // Unpublish ALL other plans for the same student first (one-published-at-a-time rule)
         var otherPublished = await _db.StudyPlans
