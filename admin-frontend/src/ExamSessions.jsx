@@ -961,9 +961,6 @@ export default function ExamSessions() {
               <h1 className="text-2xl font-bold text-zinc-900 tracking-tight leading-none sm:text-3xl">
                 Exam Sessions
               </h1>
-              <p className="text-sm text-zinc-500 mt-1">
-                විභාග සැසි · Member 1 &amp; 2 · UC3.1–3.3 · UC5.2
-              </p>
             </div>
           </div>
           <p className="text-sm text-zinc-600 mt-3 ml-0.5">

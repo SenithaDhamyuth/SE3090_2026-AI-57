@@ -3,7 +3,7 @@ import {
   BarChart2, Plus, Pencil, Trash2, CheckCircle2, AlertCircle,
   RefreshCw, X, BookOpen, Loader2, Bot, User as UserIcon,
   CalendarDays, TrendingUp, Hash, Save, XCircle, Sparkles,
-  Zap, FlaskConical, ChevronRight, Eye,
+  Zap, FlaskConical, Eye,
 } from 'lucide-react';
 
 const API_BASE = (import.meta.env.VITE_API_URL || 'https://intelliprep-rhx3.onrender.com') + '';
@@ -921,9 +921,6 @@ export default function PastPaperAnalytics() {
         <div>
           <h1 className="text-[22px] font-bold text-zinc-900 tracking-tight leading-none">
             Past Paper Analytics
-            <span className="text-xs text-zinc-400 block font-normal mt-1">
-              Probability weights used by the AI Study Planner (Agent 2 RAG context)
-            </span>
           </h1>
           <p className="text-[13px] text-zinc-400 mt-2">
             Manage and visualise topic probability data derived from historical A/L ICT past papers.

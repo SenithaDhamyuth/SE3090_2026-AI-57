@@ -948,9 +948,6 @@ export default function StudyPlanManager() {
         <div>
           <h1 className="text-[22px] font-bold text-zinc-900 tracking-tight leading-none">
             AI Study Plan Manager
-            <span className="text-xs text-zinc-400 block font-normal mt-1">
-              Human-in-the-loop approval workflow · UC6 Agentic AI
-            </span>
           </h1>
           <p className="text-[13px] text-zinc-400 mt-2">
             Generate AI-personalised study plans, review the schedule, and approve before students see them.

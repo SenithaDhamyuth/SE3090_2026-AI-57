@@ -42,13 +42,15 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final backendUrl = ApiConstants.endpoint('api/auth/login');
+      final normalizedEmail =
+          ApiConstants.normalizeEmail(_emailController.text);
 
       final response = await http
           .post(
         backendUrl,
             headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
             body: jsonEncode({
-              'email': _emailController.text.trim(),
+              'email': normalizedEmail,
               'password': _passwordController.text,
             }),
           )
@@ -63,9 +65,12 @@ class _LoginScreenState extends State<LoginScreen> {
         if (token == null || token.isEmpty) {
           throw Exception('Missing token in response');
         }
+        if (data['role']?.toString() != 'Student') {
+          throw Exception('This account is not registered as a student account.');
+        }
 
         await prefs.setString('auth_token', token);
-        await prefs.setString('student_email', _emailController.text.trim());
+        await prefs.setString('student_email', normalizedEmail);
 
         setState(() => _isLoading = false);
 
@@ -80,13 +85,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (response.statusCode == 401) {
         setState(() => _isLoading = false);
         if (!mounted) return;
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Invalid credentials.'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        await _showLoginDiagnostics(backendUrl);
         return;
       }
 
@@ -98,6 +97,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final message = e.toString().contains('socket') || e.toString().contains('Timeout')
           ? 'Unable to reach the server. Check your internet connection.'
+          : e.toString().contains('not registered as a student')
+              ? 'This login is for student accounts. Use a student account or contact your administrator.'
           : 'Login failed. Please try again.';
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -108,6 +109,114 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     }
   }
+
+  Future<void> _showLoginDiagnostics(Uri loginUrl) async {
+    String? healthCheckResult;
+    bool isChecking = false;
+    final healthUrl = ApiConstants.endpoint('health');
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          icon: const Icon(Icons.manage_search, color: Color(0xFFEF6C00)),
+          title: const Text('Login diagnosis'),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'The server responded, but did not authenticate this sign-in. '
+                  'For privacy, it does not reveal whether the email or password was incorrect.',
+                ),
+                const SizedBox(height: 16),
+                _diagnosticLine('API host', loginUrl.origin),
+                _diagnosticLine('Login endpoint', loginUrl.path),
+                _diagnosticLine(
+                  'Email handling',
+                  'Trimmed and converted to lowercase before sending',
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Check that the student exists in the admin panel, the admin '
+                  'and app use this same API, and the password is the current '
+                  'student password (not an admin password).',
+                ),
+                const SizedBox(height: 12),
+                if (healthCheckResult != null)
+                  Text(
+                    healthCheckResult!,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isChecking
+                  ? null
+                  : () async {
+                      setDialogState(() {
+                        isChecking = true;
+                        healthCheckResult = null;
+                      });
+
+                      try {
+                        final response = await http
+                            .get(healthUrl)
+                            .timeout(const Duration(seconds: 8));
+                        final healthy = response.statusCode == 200;
+                        if (!dialogContext.mounted) return;
+                        setDialogState(() {
+                          healthCheckResult = healthy
+                              ? 'Connection check passed (HTTP 200). The API is reachable; '
+                                  'this does not verify the student account or database.'
+                              : 'Connection check returned HTTP ${response.statusCode}. '
+                                  'Confirm the API deployment is healthy.';
+                        });
+                      } catch (_) {
+                        if (!dialogContext.mounted) return;
+                        setDialogState(() {
+                          healthCheckResult =
+                              'Connection check failed. Check the internet connection '
+                              'or whether the API is available.';
+                        });
+                      } finally {
+                        if (dialogContext.mounted) {
+                          setDialogState(() => isChecking = false);
+                        }
+                      }
+                    },
+              child: Text(isChecking ? 'Checking…' : 'Check API connection'),
+            ),
+            FilledButton(
+              onPressed: isChecking
+                  ? null
+                  : () => Navigator.of(dialogContext).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _diagnosticLine(String label, String value) => Padding(
+        padding: const EdgeInsets.only(bottom: 5),
+        child: RichText(
+          text: TextSpan(
+            style: Theme.of(context).textTheme.bodySmall,
+            children: [
+              TextSpan(
+                text: '$label: ',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              TextSpan(text: value),
+            ],
+          ),
+        ),
+      );
 
   // ── Build ────────────────────────────────────────────────────────────
 
@@ -224,6 +333,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   controller: _passwordController,
                   obscureText: _obscurePassword,
                   textInputAction: TextInputAction.done,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  textCapitalization: TextCapitalization.none,
                   onFieldSubmitted: (_) => _handleLogin(),
                   decoration: InputDecoration(
                     labelText: 'Password',

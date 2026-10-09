@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   UserPlus, Mail, User, AlertCircle, CheckCircle2,
   Pencil, Trash2, Users, CalendarDays, LoaderCircle,
-  X, Phone, MapPin, School, Image
+  X, Phone, MapPin, School, Search, RefreshCw, Eye, EyeOff
 } from 'lucide-react';
 
 const API_BASE = (import.meta.env.VITE_API_URL || 'https://intelliprep-rhx3.onrender.com') + '';
@@ -54,6 +54,7 @@ function AddStudentModal({ onClose, onSuccess }) {
   const [message, setMessage] = useState(null);
   const [phoneError, setPhoneError] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [showInitialPassword, setShowInitialPassword] = useState(false);
 
   // Trap Escape key
   useEffect(() => {
@@ -225,6 +226,7 @@ function AddStudentModal({ onClose, onSuccess }) {
               </svg>
               <p className="text-[11px] text-orange-700 leading-relaxed">
                 A <strong>secure initial password</strong> must be at least 6 characters and include at least one special character. Share it with the student securely; the server stores only its hash.
+                {' '}This account is created on <strong>{new URL(API_BASE).host}</strong>; the student app must use the same API.
               </p>
             </div>
 
@@ -233,23 +235,33 @@ function AddStudentModal({ onClose, onSuccess }) {
               <label className="block text-[10px] tracking-wider font-semibold text-gray-400 mb-1.5 uppercase" htmlFor="modal-initialPassword">
                 Initial Password <span className="text-red-400">*</span>
               </label>
-              <input
-                type="password"
-                id="modal-initialPassword"
-                name="initialPassword"
-                required
-                minLength={6}
-                maxLength={72}
-                autoComplete="new-password"
-                value={formData.initialPassword}
-                onChange={handleChange}
-                className={`block w-full px-4 py-2.5 border rounded-xl text-[13px] text-gray-900 placeholder-gray-400 outline-none focus:ring-2 transition-all bg-gray-50/50 ${
-                  passwordError
-                    ? 'border-red-300 focus:ring-red-500/20 focus:border-red-500'
-                    : 'border-gray-200 focus:ring-orange-500/20 focus:border-orange-500'
-                }`}
-                placeholder="At least 6 chars + special char"
-              />
+              <div className="relative">
+                <input
+                  type={showInitialPassword ? 'text' : 'password'}
+                  id="modal-initialPassword"
+                  name="initialPassword"
+                  required
+                  minLength={6}
+                  maxLength={72}
+                  autoComplete="new-password"
+                  value={formData.initialPassword}
+                  onChange={handleChange}
+                  className={`block w-full rounded-xl border bg-gray-50/50 px-4 py-2.5 pr-11 text-[13px] text-gray-900 outline-none transition-all placeholder-gray-400 focus:ring-2 ${
+                    passwordError
+                      ? 'border-red-300 focus:border-red-500 focus:ring-red-500/20'
+                      : 'border-gray-200 focus:border-orange-500 focus:ring-orange-500/20'
+                  }`}
+                  placeholder="At least 6 chars + special char"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowInitialPassword(value => !value)}
+                  aria-label={showInitialPassword ? 'Hide initial password' : 'Show initial password'}
+                  className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-400 transition hover:text-gray-700"
+                >
+                  {showInitialPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                </button>
+              </div>
               {passwordError && (
                 <p className="mt-1 text-[11px] text-red-500 flex items-center gap-1">
                   <AlertCircle size={11} /> {passwordError}
@@ -361,8 +373,9 @@ export default function StudentManagement() {
   const [loadingStudents, setLoadingStudents] = useState(true);
   const [message, setMessage] = useState(null);
   const [editingStudentId, setEditingStudentId] = useState(null);
-  const [editForm, setEditForm] = useState({ fullName: '', email: '' });
+  const [editForm, setEditForm] = useState({ fullName: '', phoneNumber: '', address: '', college: '' });
   const [showAddModal, setShowAddModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const getToken = () => localStorage.getItem('admin_token') || '';
 
@@ -388,27 +401,41 @@ export default function StudentManagement() {
 
   const startEditing = (student) => {
     setEditingStudentId(student.id);
-    setEditForm({ fullName: student.fullName, email: student.email });
+    setEditForm({
+      fullName: student.fullName || '',
+      phoneNumber: student.phoneNumber || '',
+      address: student.address || '',
+      college: student.college || '',
+    });
   };
 
   const cancelEditing = () => {
     setEditingStudentId(null);
-    setEditForm({ fullName: '', email: '' });
+    setEditForm({ fullName: '', phoneNumber: '', address: '', college: '' });
   };
 
   const handleEditSave = async (id) => {
     const token = getToken();
+    if (editForm.phoneNumber.trim() && !PHONE_REGEX.test(editForm.phoneNumber.trim())) {
+      setMessage({ type: 'error', text: 'Enter a valid phone number (7–20 digits, spaces, +, hyphens, or parentheses).' });
+      return;
+    }
     try {
       const response = await fetch(`${API_BASE}/api/admin/students/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ fullName: editForm.fullName, email: editForm.email }),
+        body: JSON.stringify({
+          fullName: editForm.fullName,
+          phoneNumber: editForm.phoneNumber,
+          address: editForm.address,
+          college: editForm.college,
+        }),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.message || 'Failed to update student.');
       setMessage({ type: 'success', text: data?.message || 'Student updated successfully.' });
       setEditingStudentId(null);
-      setEditForm({ fullName: '', email: '' });
+      setEditForm({ fullName: '', phoneNumber: '', address: '', college: '' });
       await fetchStudents();
     } catch (err) {
       setMessage({ type: 'error', text: err.message });
@@ -434,6 +461,14 @@ export default function StudentManagement() {
   };
 
   const newestStudent = students.length > 0 ? students[0] : null;
+  const filteredStudents = students.filter(student => [
+    student.fullName,
+    student.email,
+    student.phoneNumber,
+    student.address,
+    student.college,
+    student.id,
+  ].some(value => String(value ?? '').toLowerCase().includes(searchQuery.trim().toLowerCase())));
 
   return (
     <div className="max-w-[1200px] mx-auto p-6 md:p-8 space-y-8 bg-gray-50/50 min-h-[calc(100vh-3.5rem)]">
@@ -522,153 +557,146 @@ export default function StudentManagement() {
         </div>
       </div>
 
-      {/* ── Student Directory Table ── */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden pb-4">
-        <div className="px-8 py-6 flex items-center justify-between">
+      {/* ── Student Directory ── */}
+      <section className="space-y-5">
+        <div className="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-base font-bold text-gray-900">Student Directory</h2>
-            <p className="text-[13px] text-gray-500 mt-1">{students.length} registered students</p>
+            <h2 className="text-lg font-bold text-gray-900">Student Directory</h2>
+            <p className="mt-1 text-sm text-gray-500">{filteredStudents.length} of {students.length} registered students</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="relative block w-full sm:w-80">
+              <Search size={17} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={event => setSearchQuery(event.target.value)}
+                placeholder="Search name, email, phone, address…"
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 py-3 pl-10 pr-4 text-sm text-gray-800 outline-none transition placeholder:text-gray-400 focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-100"
+              />
+            </label>
+            <button type="button" onClick={fetchStudents} disabled={loadingStudents} aria-label="Refresh students" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 transition hover:bg-gray-50 disabled:opacity-50">
+              <RefreshCw size={16} className={loadingStudents ? 'animate-spin' : ''} />
+            </button>
           </div>
         </div>
 
-        <div className="overflow-x-auto px-8">
-          {loadingStudents ? (
-            <div className="flex items-center justify-center py-12 text-gray-400 gap-3">
-              <LoaderCircle className="h-6 w-6 animate-spin text-orange-500" />
-              <span className="text-sm font-medium">Loading students...</span>
+        {loadingStudents ? (
+          <div className="flex min-h-56 items-center justify-center gap-3 rounded-3xl border border-gray-200 bg-white text-gray-500">
+            <LoaderCircle className="h-6 w-6 animate-spin text-orange-500" />
+            <span className="text-sm font-medium">Loading students…</span>
+          </div>
+        ) : filteredStudents.length === 0 ? (
+          <div className="flex min-h-64 flex-col items-center justify-center rounded-3xl border border-dashed border-gray-300 bg-white px-6 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-50 text-orange-500">
+              <Users size={24} />
             </div>
-          ) : students.length === 0 ? (
-            <div className="py-16 flex flex-col items-center justify-center border-t border-gray-100">
-              <div className="w-14 h-14 rounded-2xl bg-orange-50 text-orange-500 flex items-center justify-center mb-4">
-                <Users size={24} />
-              </div>
-              <h3 className="text-lg font-bold text-gray-900">No students found</h3>
-              <p className="text-[13px] text-gray-500 mt-1">Click "Add Student" to create your first student account.</p>
-            </div>
-          ) : (
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr>
-                  <th className="py-3 pr-4 text-[10px] tracking-wider text-gray-400 uppercase font-semibold border-b border-gray-100">Student ID</th>
-                  <th className="px-4 py-3 text-[10px] tracking-wider text-gray-400 uppercase font-semibold border-b border-gray-100">Full Name</th>
-                  <th className="px-4 py-3 text-[10px] tracking-wider text-gray-400 uppercase font-semibold border-b border-gray-100">Email</th>
-                  <th className="px-4 py-3 text-[10px] tracking-wider text-gray-400 uppercase font-semibold border-b border-gray-100">Phone</th>
-                  <th className="px-4 py-3 text-[10px] tracking-wider text-gray-400 uppercase font-semibold border-b border-gray-100">Address</th>
-                  <th className="px-4 py-3 text-[10px] tracking-wider text-gray-400 uppercase font-semibold border-b border-gray-100">College</th>
-                  <th className="px-4 py-3 text-[10px] tracking-wider text-gray-400 uppercase font-semibold border-b border-gray-100">Created At</th>
-                  <th className="pl-4 py-3 text-right text-[10px] tracking-wider text-gray-400 uppercase font-semibold border-b border-gray-100">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {students.map((student) => (
-                  <tr key={student.id} className="hover:bg-gray-50/50 transition-colors group">
-                    {/* ID */}
-                    <td className="py-5 pr-4">
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-gray-50 text-[11px] font-mono font-semibold text-gray-500 border border-gray-100">
-                        #{student.id}
-                      </span>
-                    </td>
-
-                    {/* Full Name — with avatar */}
-                    <td className="px-4 py-5">
-                      {editingStudentId === student.id ? (
-                        <input
-                          type="text"
-                          value={editForm.fullName}
-                          onChange={(e) => setEditForm(prev => ({ ...prev, fullName: e.target.value }))}
-                          className="w-full rounded-xl border border-gray-200 px-4 py-2 text-[13px] text-gray-900 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 bg-white"
-                        />
-                      ) : (
-                        <div className="flex items-center gap-3">
-                          <StudentAvatar student={student} size={8} />
-                          <span className="text-[13px] font-semibold text-gray-900 whitespace-nowrap">
-                            {student.fullName}
-                          </span>
+            <h3 className="mt-4 text-lg font-bold text-gray-900">{students.length ? 'No matching students' : 'No students yet'}</h3>
+            <p className="mt-1 max-w-md text-sm text-gray-500">
+              {students.length ? 'Try a different name, email, phone number, address, or college.' : 'Add a student to start building your directory.'}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            {filteredStudents.map(student => {
+              const isEditing = editingStudentId === student.id;
+              return (
+                <article key={student.id} className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
+                  <div className="flex items-start gap-4 bg-gradient-to-r from-orange-50/80 via-white to-amber-50/60 p-5">
+                    <StudentAvatar student={student} size={12} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              aria-label="Student name"
+                              value={editForm.fullName}
+                              onChange={event => setEditForm(prev => ({ ...prev, fullName: event.target.value }))}
+                              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-900 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
+                            />
+                          ) : (
+                            <h3 className="truncate text-lg font-bold text-gray-900">{student.fullName || 'Unnamed student'}</h3>
+                          )}
+                          <p className="mt-1 font-mono text-xs font-semibold text-orange-700">Student #{student.id}</p>
                         </div>
-                      )}
-                    </td>
-
-                    {/* Email */}
-                    <td className="px-4 py-5">
-                      {editingStudentId === student.id ? (
-                        <input
-                          type="email"
-                          value={editForm.email}
-                          onChange={(e) => setEditForm(prev => ({ ...prev, email: e.target.value }))}
-                          className="w-full rounded-xl border border-gray-200 px-4 py-2 text-[13px] text-gray-900 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400 bg-white"
-                        />
-                      ) : (
-                        <span className="text-[13px] text-gray-500">{student.email}</span>
-                      )}
-                    </td>
-
-                    {/* Phone */}
-                    <td className="px-4 py-5">
-                      <span className="text-[13px] text-gray-500">{student.phoneNumber || '—'}</span>
-                    </td>
-
-                    {/* Address */}
-                    <td className="px-4 py-5 max-w-[150px] truncate">
-                      <span className="text-[13px] text-gray-500" title={student.address}>{student.address || '—'}</span>
-                    </td>
-
-                    {/* College */}
-                    <td className="px-4 py-5 max-w-[150px] truncate">
-                      <span className="text-[13px] text-gray-500" title={student.college}>{student.college || '—'}</span>
-                    </td>
-
-                    {/* Created At */}
-                    <td className="px-4 py-5">
-                      <span className="text-[12px] text-gray-400 whitespace-nowrap">
-                        {new Date(student.createdAt).toLocaleDateString()}
-                      </span>
-                    </td>
-
-                    {/* Actions */}
-                    <td className="pl-4 py-5 text-right">
-                      {editingStudentId === student.id ? (
-                        <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleEditSave(student.id)}
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3.5 py-2 text-[12px] font-semibold text-white hover:bg-green-700 transition-all shadow-sm"
-                          >
-                            Save
-                          </button>
-                          <button
-                            type="button"
-                            onClick={cancelEditing}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3.5 py-2 text-[12px] font-medium text-gray-600 hover:bg-gray-50 transition-all"
-                          >
-                            Cancel
-                          </button>
+                        <div className="flex shrink-0 items-center gap-2">
+                          {isEditing ? (
+                            <>
+                              <button type="button" onClick={() => handleEditSave(student.id)} className="rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700">Save</button>
+                              <button type="button" onClick={cancelEditing} className="rounded-xl border border-gray-200 bg-white px-3.5 py-2 text-xs font-semibold text-gray-600 transition hover:bg-gray-50">Cancel</button>
+                            </>
+                          ) : (
+                            <>
+                              <button type="button" onClick={() => startEditing(student)} aria-label={`Edit ${student.fullName}`} className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-700">
+                                <Pencil size={15} />
+                              </button>
+                              <button type="button" onClick={() => handleDelete(student.id)} aria-label={`Delete ${student.fullName}`} className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600">
+                                <Trash2 size={15} />
+                              </button>
+                            </>
+                          )}
                         </div>
-                      ) : (
-                        <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            type="button"
-                            onClick={() => startEditing(student)}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-100 bg-white shadow-sm px-3 py-1.5 text-[12px] font-medium text-gray-600 hover:text-orange-600 hover:border-orange-200 hover:bg-orange-50 transition-all"
-                          >
-                            <Pencil size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(student.id)}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-100 bg-white shadow-sm px-3 py-1.5 text-[12px] font-medium text-red-500 hover:bg-red-50 hover:border-red-200 transition-all"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 p-5 sm:grid-cols-2">
+                    <div className="flex min-w-0 items-start gap-3 rounded-2xl bg-sky-50/80 p-3.5">
+                      <Mail size={17} className="mt-0.5 shrink-0 text-sky-700" />
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-700">Email address</p>
+                        <p className="mt-1 break-all text-sm font-medium text-slate-800">{student.email || 'Not provided'}</p>
+                      </div>
+                    </div>
+                    <div className="flex min-w-0 items-start gap-3 rounded-2xl bg-emerald-50/80 p-3.5">
+                      <Phone size={17} className="mt-0.5 shrink-0 text-emerald-700" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Phone number</p>
+                        {isEditing ? (
+                          <input type="tel" aria-label="Phone number" value={editForm.phoneNumber} onChange={event => setEditForm(prev => ({ ...prev, phoneNumber: event.target.value }))} className="mt-1 w-full rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-emerald-200" />
+                        ) : (
+                          student.phoneNumber
+                            ? <a href={`tel:${student.phoneNumber}`} className="mt-1 block break-words text-sm font-medium text-slate-800 hover:text-emerald-700">{student.phoneNumber}</a>
+                            : <p className="mt-1 text-sm text-slate-400">Not provided</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex min-w-0 items-start gap-3 rounded-2xl bg-violet-50/80 p-3.5">
+                      <MapPin size={17} className="mt-0.5 shrink-0 text-violet-700" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-700">Address</p>
+                        {isEditing ? (
+                          <textarea aria-label="Address" rows={2} value={editForm.address} onChange={event => setEditForm(prev => ({ ...prev, address: event.target.value }))} className="mt-1 w-full resize-y rounded-lg border border-violet-200 bg-white px-2.5 py-1.5 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-violet-200" />
+                        ) : (
+                          <p className="mt-1 whitespace-pre-wrap break-words text-sm font-medium text-slate-800">{student.address || <span className="font-normal text-slate-400">Not provided</span>}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex min-w-0 items-start gap-3 rounded-2xl bg-amber-50/80 p-3.5">
+                      <School size={17} className="mt-0.5 shrink-0 text-amber-700" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">College</p>
+                        {isEditing ? (
+                          <input type="text" aria-label="College" value={editForm.college} onChange={event => setEditForm(prev => ({ ...prev, college: event.target.value }))} className="mt-1 w-full rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-amber-200" />
+                        ) : (
+                          <p className="mt-1 break-words text-sm font-medium text-slate-800">{student.college || <span className="font-normal text-slate-400">Not provided</span>}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 border-t border-gray-100 px-5 py-3 text-xs text-gray-500">
+                    <CalendarDays size={14} className="text-gray-400" />
+                    <span>Registered</span>
+                    <span className="font-semibold text-gray-700">{student.createdAt ? new Date(student.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'Date unavailable'}</span>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
