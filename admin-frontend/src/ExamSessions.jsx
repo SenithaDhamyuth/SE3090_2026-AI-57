@@ -25,7 +25,7 @@ function adminHeaders(extra = {}) {
 const STATUS_META = {
   Pending:    { color: 'text-orange-600',   bg: 'bg-orange-50',    border: 'border-orange-200',   icon: Clock,         label: 'Pending'     },
   PendingAdminApproval: { color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200', icon: Clock, label: 'Pending Approval' },
-  Ready:      { color: 'text-emerald-700',  bg: 'bg-emerald-50',   border: 'border-emerald-200',  icon: CheckCheck,    label: 'Available'   },
+  Ready:      { color: 'text-orange-800',   bg: 'bg-orange-50',    border: 'border-orange-200',   icon: CheckCheck,    label: 'Available'   },
   InProgress: { color: 'text-blue-700',     bg: 'bg-blue-50',      border: 'border-blue-200',     icon: Play,          label: 'In Progress' },
   Abandoned:  { color: 'text-rose-700',     bg: 'bg-rose-50',      border: 'border-rose-200',     icon: AlertTriangle, label: 'Abandoned'   },
 };
@@ -563,16 +563,16 @@ function SynthesizeButton({ session, onSynthesize, onView }) {
     return (
       <button
         onClick={() => onView(session)}
-        className="inline-flex items-center gap-1.5 h-6 px-2.5 rounded-md bg-orange-600 text-white text-[10px] font-bold hover:bg-orange-700 active:scale-95 transition-all"
+        className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-orange-600 px-2.5 text-xs font-bold text-white transition-all hover:bg-orange-700 active:scale-95"
       >
-        <Eye size={10} strokeWidth={2.5} />
-        View Questions
+        <Eye size={14} strokeWidth={2.5} />
+        Questions
       </button>
     );
   }
 
   if (session.status !== 'Pending') {
-    return <span className="text-[10px] text-zinc-300">—</span>;
+    return <span className="inline-flex h-9 items-center rounded-lg bg-slate-100 px-2.5 text-xs font-medium text-slate-400">Unavailable</span>;
   }
 
   return (
@@ -581,17 +581,17 @@ function SynthesizeButton({ session, onSynthesize, onView }) {
         {/* Subject picker toggle */}
         <button
           onClick={() => setOpen(v => !v)}
-          className="h-6 px-2 rounded-l-md border border-r-0 border-orange-200 bg-orange-50 text-orange-700 text-[10px] font-medium hover:bg-orange-100 transition-colors"
+          className="h-9 rounded-l-lg border border-r-0 border-orange-200 bg-orange-50 px-2 text-xs font-semibold text-orange-800 transition-colors hover:bg-orange-100"
         >
           {subject.length > 8 ? subject.slice(0, 8) + '…' : subject} ▾
         </button>
         {/* Synthesize trigger */}
         <button
           onClick={() => { setOpen(false); onSynthesize(session.id, subject); }}
-          className="h-6 px-2.5 rounded-r-md bg-orange-600 text-white text-[10px] font-bold hover:bg-orange-700 active:scale-95 transition-all flex items-center gap-1"
+          className="flex h-9 items-center gap-1 rounded-r-lg bg-orange-600 px-2.5 text-xs font-bold text-white transition-all hover:bg-orange-700 active:scale-95"
         >
-          <Sparkles size={9} strokeWidth={2.5} />
-          Run Synthesizer
+          <Sparkles size={14} strokeWidth={2.5} />
+          Prepare
         </button>
       </div>
 
@@ -995,7 +995,7 @@ export default function ExamSessions() {
       </div>
 
       {/* ── Filter Tabs ── */}
-      <div className="flex w-full flex-wrap items-center gap-1.5 rounded-2xl border border-slate-200 bg-slate-100 p-1.5 sm:w-fit">
+      <div className="flex w-full flex-wrap items-center gap-1.5 rounded-2xl border border-orange-200 bg-orange-50 p-1.5 sm:w-fit">
         {['All', 'Pending', 'PendingAdminApproval', 'Ready', 'InProgress', 'Abandoned'].map(tab => (
           <button
             key={tab}
@@ -1003,7 +1003,7 @@ export default function ExamSessions() {
             className={`rounded-xl px-3.5 py-2 text-sm font-semibold transition-all ${
               filter === tab
                 ? 'bg-white text-orange-700 shadow-sm ring-1 ring-orange-200'
-                : 'text-slate-600 hover:bg-white/70 hover:text-slate-900'
+                : 'text-orange-900/70 hover:bg-white/80 hover:text-orange-950'
             }`}
           >
             {tab === 'InProgress' ? 'In Progress' : tab === 'PendingAdminApproval' ? 'Pending Approval' : tab === 'Ready' ? 'Available' : tab}
@@ -1016,8 +1016,8 @@ export default function ExamSessions() {
         ))}
       </div>
 
-      <div className="flex items-start gap-3 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3.5 text-sm text-sky-950">
-        <Info size={18} className="mt-0.5 shrink-0 text-sky-700" />
+      <div className="flex items-start gap-3 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3.5 text-sm text-orange-950">
+        <Info size={18} className="mt-0.5 shrink-0 text-orange-700" />
         <div className="grid gap-1 sm:grid-cols-2">
           <p><strong>Available:</strong> questions are approved. Students can scan the same QR to start or retake the exam.</p>
           <p><strong>In progress:</strong> a student's timed attempt is active.</p>
@@ -1030,7 +1030,7 @@ export default function ExamSessions() {
 
       {/* ── Session cards ── */}
       <section className="space-y-5">
-        <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-4 rounded-2xl border border-orange-100 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-lg font-bold text-slate-900">Assessment sessions</h2>
             <p className="mt-1 text-sm text-slate-500">
@@ -1063,7 +1063,7 @@ export default function ExamSessions() {
             </button>
           </div>
         ) : filteredSessions.length === 0 ? (
-          <div className="flex min-h-64 flex-col items-center justify-center rounded-3xl border border-dashed border-slate-300 bg-white px-6 text-center">
+          <div className="flex min-h-64 flex-col items-center justify-center rounded-3xl border border-dashed border-orange-200 bg-white px-6 text-center">
             <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-100 text-orange-600">
               <BookOpen size={26} />
             </span>
@@ -1075,129 +1075,162 @@ export default function ExamSessions() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-            {filteredSessions.map(session => {
-              const isSynthesizing = synthesizingIds.has(session.id);
-              const canViewQr = ['Ready', 'InProgress'].includes(session.status)
-                && session.questionsReady
-                && Boolean(session.sessionId);
-              const scoreExists = Boolean(session.endTime);
-              return (
-                <article
-                  key={session.id}
-                  className={`group overflow-visible rounded-3xl border bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-xl ${
-                    isSynthesizing ? 'border-orange-300 ring-4 ring-orange-100' : 'border-slate-200'
-                  }`}
-                >
-                  <div className="rounded-t-3xl bg-gradient-to-r from-slate-50 via-white to-orange-50/70 p-5 sm:p-6">
-                    <div className="flex items-start gap-4">
-                      <span className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl shadow-sm ${
-                        session.status === 'Ready' ? 'bg-gradient-to-br from-emerald-400 to-teal-500 text-white' :
-                        'bg-gradient-to-br from-indigo-400 to-violet-500 text-white'
-                      }`}>
-                        {session.status === 'Ready' ? <CheckCheck size={25} /> : <ClipboardList size={25} />}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="min-w-0 flex-1 truncate text-lg font-bold text-slate-900 sm:text-xl">
-                            {session.title || session.subject || 'Exam session'}
-                          </h3>
-                          <StatusBadge status={session.status} />
-                        </div>
-                        <p className="mt-1 truncate text-sm font-medium text-slate-600">
-                          {session.subject || 'Subject not specified'}
-                          <span className="mx-2 text-slate-300">·</span>
-                          <span className="font-mono text-xs text-slate-500">Session #{session.id}</span>
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 px-5 pt-5 sm:grid-cols-4 sm:px-6">
-                    <div className="rounded-2xl bg-sky-50 p-3.5">
-                      <div className="flex items-center gap-2 text-xs font-semibold text-sky-700"><BookOpen size={15} /> Questions</div>
-                      <p className="mt-2 text-base font-bold text-sky-950">{session.questionsReady ? 'Ready' : 'Preparing'}</p>
-                    </div>
-                    <div className="rounded-2xl bg-amber-50 p-3.5">
-                      <div className="flex items-center gap-2 text-xs font-semibold text-amber-700"><Timer size={15} /> Timer</div>
-                      <p className="mt-2 text-base font-bold text-amber-950">
-                        {session.durationMinutes > 0 ? `${session.durationMinutes} min` : '30 min'} · {session.isTimerLocked ? 'Running' : 'Not started'}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl bg-emerald-50 p-3.5">
-                      <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700"><Trophy size={15} /> Result</div>
-                      <p className="mt-2 text-base font-bold text-emerald-950">{scoreExists ? `${session.totalScore} pts · latest` : 'Pending'}</p>
-                    </div>
-                    <div className="rounded-2xl bg-violet-50 p-3.5">
-                      <div className="flex items-center gap-2 text-xs font-semibold text-violet-700"><CalendarDays size={15} /> Started</div>
-                      <p className="mt-2 truncate text-sm font-bold text-violet-950">{fmtDate(session.startTime)}</p>
-                    </div>
-                  </div>
-
-                  <div className="mx-5 mt-4 flex items-center gap-2 rounded-xl bg-slate-50 px-3.5 py-2.5 text-xs text-slate-600 sm:mx-6">
-                    <CalendarDays size={15} className="shrink-0 text-slate-400" />
-                    <span className="font-semibold text-slate-700">Ended</span>
-                    <span className="truncate">{fmtDate(session.endTime)}</span>
-                    {session.durationMinutes > 0 && (
-                      <>
-                        <span className="ml-auto text-slate-300">·</span>
-                        <span className="shrink-0">{session.durationMinutes} min</span>
-                      </>
-                    )}
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 p-5 sm:p-6">
-                    <button
-                      type="button"
-                      onClick={() => setDetailsSession(session)}
-                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:from-indigo-700 hover:to-violet-700 focus:outline-none focus:ring-4 focus:ring-violet-100"
-                    >
-                      <Eye size={17} />
-                      View details
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setQrSession(session)}
-                      disabled={!canViewQr}
-                      title={canViewQr ? 'Open exam access QR' : 'QR is available after questions are ready'}
-                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-orange-200 bg-orange-50 px-4 py-2.5 text-sm font-bold text-orange-800 transition hover:border-orange-300 hover:bg-orange-100 focus:outline-none focus:ring-4 focus:ring-orange-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
-                    >
-                      <QrCode size={17} />
-                      View QR
-                    </button>
-                    {['Ready', 'InProgress'].includes(session.status) && (
-                      <button
-                        type="button"
-                        onClick={() => setTimeSession(session)}
-                        disabled={addingTimeIds.has(session.id)}
-                        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-bold text-amber-800 transition hover:border-amber-300 hover:bg-amber-100 focus:outline-none focus:ring-4 focus:ring-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+          <div className="overflow-hidden rounded-2xl border border-orange-200 bg-white shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-orange-100 bg-gradient-to-r from-orange-50 via-white to-amber-50 px-5 py-4">
+              <div>
+                <p className="text-sm font-bold text-slate-900">Exam session records</p>
+                <p className="mt-0.5 text-xs text-slate-600">Status, attempts, timing and management actions</p>
+              </div>
+              <span className="inline-flex items-center gap-2 rounded-full border border-orange-200 bg-white px-3 py-1.5 text-xs font-bold text-orange-800">
+                <ClipboardList size={14} />
+                {filteredSessions.length} {filteredSessions.length === 1 ? 'session' : 'sessions'}
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1420px] table-fixed border-collapse text-left">
+                <colgroup>
+                  <col className="w-[20%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[11%]" />
+                  <col className="w-[14%]" />
+                  <col className="w-[13%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[18%]" />
+                </colgroup>
+                <thead>
+                  <tr className="bg-gradient-to-r from-orange-600 to-orange-700 text-[11px] uppercase tracking-wider text-white">
+                    <th scope="col" className="px-4 py-3.5 font-bold">Exam</th>
+                    <th scope="col" className="px-4 py-3.5 font-bold">Status</th>
+                    <th scope="col" className="px-4 py-3.5 font-bold">Questions</th>
+                    <th scope="col" className="px-4 py-3.5 font-bold">Timer</th>
+                    <th scope="col" className="px-4 py-3.5 font-bold">Latest result</th>
+                    <th scope="col" className="px-4 py-3.5 font-bold">Last submitted</th>
+                    <th scope="col" className="px-4 py-3.5 text-right font-bold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-orange-100">
+                  {filteredSessions.map((session, index) => {
+                    const isSynthesizing = synthesizingIds.has(session.id);
+                    const canViewQr = ['Ready', 'InProgress'].includes(session.status)
+                      && session.questionsReady
+                      && Boolean(session.sessionId);
+                    const scoreExists = Boolean(session.endTime);
+                    return (
+                      <tr
+                        key={session.id}
+                        className={`transition-colors hover:bg-orange-50/70 ${index % 2 ? 'bg-orange-50/30' : 'bg-white'} ${isSynthesizing ? 'ring-2 ring-inset ring-orange-300' : ''}`}
                       >
-                        {addingTimeIds.has(session.id) ? <Loader2 size={17} className="animate-spin" /> : <Plus size={17} />}
-                        Add time
-                      </button>
-                    )}
-                    <div className="ml-auto flex flex-wrap items-center gap-2">
-                      {isSynthesizing ? (
-                        <span className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-orange-50 px-3 text-sm font-semibold text-orange-700">
-                          <Loader2 size={16} className="animate-spin" /> Generating questions…
-                        </span>
-                      ) : (
-                        <SynthesizeButton session={session} onSynthesize={handleSynthesize} onView={setViewSession} />
-                      )}
-                      <button
-                        type="button"
-                        disabled={deletingIds.has(session.id)}
-                        onClick={() => handleDeleteSession(session.id)}
-                        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-rose-200 bg-white px-3.5 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        {deletingIds.has(session.id) ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
-                        {deletingIds.has(session.id) ? 'Deleting…' : 'Delete'}
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
+                        <td className="px-4 py-4 align-middle">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+                              session.status === 'Ready' ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'
+                            }`}>
+                              {session.status === 'Ready' ? <CheckCheck size={19} /> : <ClipboardList size={19} />}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-bold text-slate-900" title={session.title || session.subject}>
+                                {session.title || session.subject || 'Exam session'}
+                              </p>
+                              <p className="mt-1 truncate text-xs text-slate-600">
+                                {session.subject || 'Subject not specified'}
+                                <span className="mx-1.5 text-slate-300">·</span>
+                                <span className="font-mono">#{session.id}</span>
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 align-middle"><StatusBadge status={session.status} /></td>
+                        <td className="px-4 py-4 align-middle">
+                          <span className={`inline-flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-bold ${
+                            session.questionsReady ? 'bg-orange-100 text-orange-900' : 'bg-amber-50 text-amber-800'
+                          }`}>
+                            <BookOpen size={14} />
+                            {session.questionsReady ? 'Prepared' : 'Preparing'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 align-middle">
+                          <div className="flex items-center gap-2">
+                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700"><Timer size={15} /></span>
+                            <div>
+                              <p className="text-sm font-bold text-slate-800">{session.durationMinutes > 0 ? `${session.durationMinutes} min` : '30 min'}</p>
+                              <p className={`mt-0.5 text-[11px] font-semibold ${session.isTimerLocked ? 'text-blue-700' : 'text-slate-500'}`}>
+                                {session.isTimerLocked ? 'Running' : 'Not started'}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 align-middle">
+                          <div className="flex items-center gap-2">
+                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-orange-100 text-orange-700"><Trophy size={15} /></span>
+                            <div>
+                              <p className="text-sm font-bold text-slate-800">{scoreExists ? `${session.totalScore} pts` : 'No result yet'}</p>
+                              {scoreExists && <p className="mt-0.5 text-[11px] text-orange-700">Latest attempt</p>}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 align-middle">
+                          <div className="flex items-center gap-2 text-sm text-slate-700">
+                            <CalendarDays size={15} className="shrink-0 text-orange-600" />
+                            <span className="truncate" title={fmtDate(session.endTime)}>{fmtDate(session.endTime)}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 align-middle">
+                          <div className="flex min-w-0 flex-wrap justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setDetailsSession(session)}
+                              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-orange-600 px-2.5 text-xs font-bold text-white transition hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-300"
+                            >
+                              <Eye size={14} /> Details
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setQrSession(session)}
+                              disabled={!canViewQr}
+                              title={canViewQr ? 'Open exam access QR' : 'QR is available after questions are prepared and approved'}
+                              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-orange-200 bg-white px-2.5 text-xs font-bold text-orange-800 transition hover:bg-orange-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-400"
+                            >
+                              <QrCode size={14} /> QR
+                            </button>
+                            {['Ready', 'InProgress'].includes(session.status) && (
+                              <button
+                                type="button"
+                                onClick={() => setTimeSession(session)}
+                                disabled={addingTimeIds.has(session.id)}
+                                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 text-xs font-bold text-amber-800 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {addingTimeIds.has(session.id) ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Time
+                              </button>
+                            )}
+                            {isSynthesizing ? (
+                              <span className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-orange-100 px-2.5 text-xs font-bold text-orange-800">
+                                <Loader2 size={14} className="animate-spin" /> Working
+                              </span>
+                            ) : (
+                              <SynthesizeButton session={session} onSynthesize={handleSynthesize} onView={setViewSession} />
+                            )}
+                            <button
+                              type="button"
+                              disabled={deletingIds.has(session.id)}
+                              onClick={() => handleDeleteSession(session.id)}
+                              aria-label={`Delete ${session.title || session.subject || `session ${session.id}`}`}
+                              title="Delete session"
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-rose-200 bg-rose-50 text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {deletingIds.has(session.id) ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex items-center justify-between gap-3 border-t border-orange-100 bg-orange-50/60 px-5 py-3">
+              <p className="text-xs text-slate-600">Scroll horizontally to see all fields and actions.</p>
+              <p className="text-xs font-bold text-orange-800">{filteredSessions.length} shown</p>
+            </div>
           </div>
         )}
       </section>

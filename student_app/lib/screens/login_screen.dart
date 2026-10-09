@@ -84,10 +84,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (response.statusCode == 401) {
         String? diagnosticId;
+        var backendDiagnosticsAvailable = false;
         try {
           final responseBody = jsonDecode(response.body);
           if (responseBody is Map<String, dynamic>) {
             diagnosticId = responseBody['diagnosticId']?.toString();
+            backendDiagnosticsAvailable =
+                diagnosticId != null && diagnosticId.isNotEmpty;
           }
         } on FormatException {
           diagnosticId = null;
@@ -97,6 +100,7 @@ class _LoginScreenState extends State<LoginScreen> {
         await _showLoginDiagnostics(
           backendUrl,
           diagnosticId: diagnosticId,
+          backendDiagnosticsAvailable: backendDiagnosticsAvailable,
         );
         return;
       }
@@ -125,6 +129,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _showLoginDiagnostics(
     Uri loginUrl, {
     String? diagnosticId,
+    required bool backendDiagnosticsAvailable,
   }) async {
     String? healthCheckResult;
     bool isChecking = false;
@@ -157,6 +162,25 @@ class _LoginScreenState extends State<LoginScreen> {
                   _diagnosticLine('Support reference', diagnosticId),
                 ],
                 const SizedBox(height: 12),
+                if (!backendDiagnosticsAvailable) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF4E5),
+                      border: Border.all(color: const Color(0xFFFFD08A)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Text(
+                      'Backend update required: this API is using an older login response and cannot provide the new diagnostic reference. Deploy the latest backend before retrying.',
+                      style: TextStyle(
+                        color: Color(0xFF8A4B08),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 const Text(
                   'Check these in order:\n'
                   '1. Confirm the student appears in Student Directory in the admin panel.\n'

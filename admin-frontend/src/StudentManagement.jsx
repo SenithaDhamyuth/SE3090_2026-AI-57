@@ -609,29 +609,38 @@ export default function StudentManagement() {
               </span>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1180px] border-collapse text-left">
+              <table className="w-full min-w-[1240px] table-fixed border-collapse text-left">
+                <colgroup>
+                  <col className="w-[18%]" />
+                  <col className="w-[22%]" />
+                  <col className="w-[13%]" />
+                  <col className="w-[16%]" />
+                  <col className="w-[13%]" />
+                  <col className="w-[11%]" />
+                  <col className="w-[7%]" />
+                </colgroup>
                 <thead>
                   <tr className="bg-slate-800 text-[11px] uppercase tracking-wider text-white">
-                    <th scope="col" className="px-5 py-4 font-semibold">Student</th>
-                    <th scope="col" className="px-5 py-4 font-semibold">Email address</th>
-                    <th scope="col" className="px-5 py-4 font-semibold">Phone</th>
-                    <th scope="col" className="px-5 py-4 font-semibold">Address</th>
-                    <th scope="col" className="px-5 py-4 font-semibold">College</th>
-                    <th scope="col" className="px-5 py-4 font-semibold">Registered</th>
-                    <th scope="col" className="px-5 py-4 text-right font-semibold">Actions</th>
+                    <th scope="col" className="px-4 py-3.5 font-semibold">Student</th>
+                    <th scope="col" className="px-4 py-3.5 font-semibold">Email address</th>
+                    <th scope="col" className="px-4 py-3.5 font-semibold">Phone</th>
+                    <th scope="col" className="px-4 py-3.5 font-semibold">Address</th>
+                    <th scope="col" className="px-4 py-3.5 font-semibold">College</th>
+                    <th scope="col" className="px-4 py-3.5 font-semibold">Registered</th>
+                    <th scope="col" className="px-4 py-3.5 text-right font-semibold">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredStudents.map((student, index) => {
                     const isEditing = editingStudentId === student.id;
-                    const inputClass = 'w-full min-w-[120px] rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm text-slate-800 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100';
+                    const inputClass = 'block w-full min-w-0 rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm text-slate-800 outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100';
                     return (
                       <tr
                         key={student.id}
-                        className={`align-top transition-colors hover:bg-orange-50/60 ${index % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'}`}
+                        className={`h-[76px] transition-colors hover:bg-orange-50/60 ${index % 2 === 1 ? 'bg-slate-50/70' : 'bg-white'}`}
                       >
-                        <td className="px-5 py-4">
-                          <div className="flex min-w-[190px] items-center gap-3">
+                        <td className="px-4 py-3 align-middle">
+                          <div className="flex min-w-0 items-center gap-2.5">
                             <StudentAvatar student={student} size={10} />
                             <div className="min-w-0">
                               {isEditing ? (
@@ -643,7 +652,7 @@ export default function StudentManagement() {
                                   className={inputClass}
                                 />
                               ) : (
-                                <p className="truncate text-sm font-bold text-slate-900">{student.fullName || 'Unnamed student'}</p>
+                                <p className="truncate text-sm font-bold text-slate-900" title={student.fullName}>{student.fullName || 'Unnamed student'}</p>
                               )}
                               <span className="mt-1 inline-flex rounded-md bg-orange-100 px-2 py-0.5 font-mono text-[10px] font-bold text-orange-800">
                                 ID #{student.id}
@@ -651,70 +660,70 @@ export default function StudentManagement() {
                             </div>
                           </div>
                         </td>
-                        <td className="px-5 py-4">
-                          <div className="flex max-w-[230px] items-start gap-2.5">
-                            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-700">
+                        <td className="px-4 py-3 align-middle">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-700">
                               <Mail size={14} />
                             </span>
-                            <span className="break-all pt-1 text-sm font-medium text-slate-700">{student.email || 'Not provided'}</span>
+                            <a href={student.email ? `mailto:${student.email}` : undefined} title={student.email || 'Not provided'} className="block min-w-0 truncate text-sm font-medium text-sky-800 hover:text-sky-950 hover:underline">{student.email || 'Not provided'}</a>
                           </div>
                         </td>
-                        <td className="px-5 py-4">
-                          <div className="flex min-w-[150px] items-start gap-2.5">
-                            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
+                        <td className="px-4 py-3 align-middle">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
                               <Phone size={14} />
                             </span>
-                            <div className="min-w-0 flex-1 pt-1">
+                            <div className="min-w-0 flex-1">
                               {isEditing ? (
                                 <input type="tel" aria-label="Phone number" value={editForm.phoneNumber} onChange={event => setEditForm(prev => ({ ...prev, phoneNumber: event.target.value }))} className={inputClass} />
                               ) : student.phoneNumber ? (
-                                <a href={`tel:${student.phoneNumber}`} className="text-sm font-semibold text-emerald-800 hover:underline">{student.phoneNumber}</a>
+                                <a href={`tel:${student.phoneNumber}`} title={student.phoneNumber} className="block truncate text-sm font-semibold text-emerald-800 hover:underline">{student.phoneNumber}</a>
                               ) : (
-                                <span className="text-sm text-slate-400">Not provided</span>
+                                <span className="text-xs text-slate-400">Not provided</span>
                               )}
                             </div>
                           </div>
                         </td>
-                        <td className="px-5 py-4">
-                          <div className="flex min-w-[190px] items-start gap-2.5">
-                            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-700">
+                        <td className="px-4 py-3 align-middle">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-700">
                               <MapPin size={14} />
                             </span>
-                            <div className="min-w-0 flex-1 pt-1">
+                            <div className="min-w-0 flex-1">
                               {isEditing ? (
                                 <textarea aria-label="Address" rows={2} value={editForm.address} onChange={event => setEditForm(prev => ({ ...prev, address: event.target.value }))} className={`${inputClass} resize-y`} />
                               ) : (
-                                <span className="whitespace-pre-wrap break-words text-sm leading-5 text-slate-700">{student.address || <span className="text-slate-400">Not provided</span>}</span>
+                                <span title={student.address || 'Not provided'} className="line-clamp-2 break-words text-sm leading-5 text-slate-700">{student.address || <span className="text-slate-400">Not provided</span>}</span>
                               )}
                             </div>
                           </div>
                         </td>
-                        <td className="px-5 py-4">
-                          <div className="flex min-w-[150px] items-start gap-2.5">
-                            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+                        <td className="px-4 py-3 align-middle">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
                               <School size={14} />
                             </span>
-                            <div className="min-w-0 flex-1 pt-1">
+                            <div className="min-w-0 flex-1">
                               {isEditing ? (
                                 <input type="text" aria-label="College" value={editForm.college} onChange={event => setEditForm(prev => ({ ...prev, college: event.target.value }))} className={inputClass} />
                               ) : (
-                                <span className="break-words text-sm font-medium text-slate-700">{student.college || <span className="font-normal text-slate-400">Not provided</span>}</span>
+                                <span title={student.college || 'Not provided'} className="block truncate text-sm font-medium text-slate-700">{student.college || <span className="font-normal text-slate-400">Not provided</span>}</span>
                               )}
                             </div>
                           </div>
                         </td>
-                        <td className="px-5 py-4">
-                          <div className="flex min-w-[120px] items-start gap-2.5">
-                            <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700">
+                        <td className="px-4 py-3 align-middle">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700">
                               <CalendarDays size={14} />
                             </span>
-                            <span className="pt-1 text-sm font-medium text-slate-700">
+                            <span className="truncate text-sm font-medium text-slate-700">
                               {student.createdAt ? new Date(student.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'Date unavailable'}
                             </span>
                           </div>
                         </td>
-                        <td className="px-5 py-4">
-                          <div className="flex min-w-[130px] justify-end gap-2">
+                        <td className="px-3 py-3 align-middle">
+                          <div className="flex justify-end gap-1.5">
                             {isEditing ? (
                               <>
                                 <button type="button" onClick={() => handleEditSave(student.id)} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700">
@@ -743,7 +752,7 @@ export default function StudentManagement() {
               </table>
             </div>
             <div className="flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50 px-5 py-3">
-              <p className="text-xs text-slate-500">Scroll horizontally to view all student details.</p>
+              <p className="text-xs text-slate-500">Long details are neatly shortened; hover over text to see the full value. Scroll horizontally if needed.</p>
               <p className="text-xs font-semibold text-slate-600">{filteredStudents.length} shown</p>
             </div>
           </div>
