@@ -13,7 +13,6 @@ namespace IntelliPrep.API.DTOs
         [Required, MinLength(6)]
         public string Password { get; set; } = string.Empty;
 
-        public string Role { get; set; } = "Student"; // Default role
     }
 
     public class UserLoginDto
@@ -23,5 +22,32 @@ namespace IntelliPrep.API.DTOs
 
         [Required]
         public string Password { get; set; } = string.Empty;
+    }
+
+    public sealed class VerifyPasswordChangeDto
+    {
+        [Required, RegularExpression(@"^\d{6}$")]
+        public string Code { get; set; } = string.Empty;
+
+        [Required, MinLength(12), MaxLength(72)]
+        public string NewPassword { get; set; } = string.Empty;
+    }
+
+    public class ForgotPasswordRequestDto
+    {
+        [Required, EmailAddress]
+        public string Email { get; set; } = string.Empty;
+    }
+
+    public sealed class ForgotPasswordVerifyDto
+    {
+        [Required, EmailAddress]
+        public string Email { get; set; } = string.Empty;
+
+        [Required, RegularExpression(@"^\d{6}$")]
+        public string Code { get; set; } = string.Empty;
+
+        [Required, MinLength(6), MaxLength(72)]
+        public string NewPassword { get; set; } = string.Empty;
     }
 }

@@ -25,5 +25,17 @@ namespace IntelliPrep.API.Models
         public string Role { get; set; } = "Student";
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        [MaxLength(255)]
+        public string? ProfileImageUrl { get; set; }
+
+        [MaxLength(20)]
+        public string? PhoneNumber { get; set; }
+
+        [MaxLength(255)]
+        public string? Address { get; set; }
+
+        [MaxLength(150)]
+        public string? College { get; set; }
     }
 }

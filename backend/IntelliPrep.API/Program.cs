@@ -65,12 +65,14 @@ builder.Services.AddScoped<IAIAgentService, AIAgentService>();
 // Uses System.Net.Mail (SMTP). Configure EmailSettings in appsettings.json.
 builder.Services.AddScoped<IntelliPrep.API.Services.INotificationService,
                             IntelliPrep.API.Services.NotificationService>();
+builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
     });
+builder.Services.AddProblemDetails();
 
 builder.Services.AddEndpointsApiExplorer();
 
@@ -119,13 +121,23 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-app.UseDeveloperExceptionPage();
+if (app.Environment.IsDevelopment())
+{
+    app.UseDeveloperExceptionPage();
+}
+else
+{
+    app.UseExceptionHandler();
+    app.UseStatusCodePages();
+}
 
 // Configure the HTTP request pipeline.
 app.UseSwagger();
 app.UseSwaggerUI();
 
 app.UseHttpsRedirection();
+
+app.UseStaticFiles(); // Added to serve wwwroot/uploads
 
 app.UseRouting();
 app.UseCors("AllowAll");
@@ -149,7 +161,7 @@ catch (Exception ex)
     migrationLogger.LogError(ex, "Failed to apply database migrations during startup.");
     throw;
 }
-
+try { dbContext.Database.ExecuteSqlRaw("ALTER TABLE \"Users\" ADD COLUMN \"ProfileImageUrl\" character varying(255) NULL;"); } catch { }
 var adminUser = dbContext.Users.FirstOrDefault(u => u.Email == "admin@intelliprep.com");
 if (adminUser == null)
 {

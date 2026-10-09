@@ -1,10 +1,10 @@
 using System.ComponentModel.DataAnnotations;
 using IntelliPrep.API.Data;
 using IntelliPrep.API.Models;
-using IntelliPrep.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Text;
 
 namespace IntelliPrep.API.Controllers;
 
@@ -12,39 +12,49 @@ namespace IntelliPrep.API.Controllers;
 [Route("api/admin")]
 public class StudentManagementController : ControllerBase
 {
-    private readonly ApplicationDbContext  _context;
-    private readonly INotificationService  _notificationService;
+    private readonly ApplicationDbContext _context;
 
-    public StudentManagementController(
-        ApplicationDbContext context,
-        INotificationService notificationService)
+    public StudentManagementController(ApplicationDbContext context)
     {
-        _context             = context;
-        _notificationService = notificationService;
+        _context = context;
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // GET api/admin/students
+    // Returns all student accounts ordered by creation date (newest first).
+    // ═══════════════════════════════════════════════════════════════════════
     [HttpGet("students")]
     [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> GetStudents()
+    public async Task<IActionResult> GetStudents(CancellationToken cancellationToken)
     {
         var students = await _context.Users
             .Where(u => u.Role == "Student")
             .OrderByDescending(u => u.CreatedAt)
             .Select(u => new StudentListItemDto
             {
-                Id = u.Id,
-                FullName = u.FullName,
-                Email = u.Email,
-                CreatedAt = u.CreatedAt
+                Id              = u.Id,
+                FullName        = u.FullName,
+                Email           = u.Email,
+                CreatedAt       = u.CreatedAt,
+                PhoneNumber     = u.PhoneNumber,
+                Address         = u.Address,
+                College         = u.College,
+                ProfileImageUrl = u.ProfileImageUrl
             })
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         return Ok(students);
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // POST api/admin/students
+    // Creates a new student account.
+    // ═══════════════════════════════════════════════════════════════════════
     [HttpPost("students")]
     [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> CreateStudent([FromBody] CreateStudentRequest request)
+    public async Task<IActionResult> CreateStudent(
+        [FromBody] CreateStudentRequest request,
+        CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
         {
@@ -61,175 +71,194 @@ public class StudentManagementController : ControllerBase
             return BadRequest(new { message = "Email is required." });
         }
 
-        var normalizedEmail = request.Email.Trim();
+        if (Encoding.UTF8.GetByteCount(request.InitialPassword) > 72)
+        {
+            return BadRequest(new { message = "Initial password must be no longer than 72 UTF-8 bytes." });
+        }
 
-        if (await _context.Users.AnyAsync(u => u.Email.ToLower() == normalizedEmail.ToLower()))
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+
+        if (await _context.Users.AnyAsync(u => u.Email.ToLower() == normalizedEmail, cancellationToken))
         {
             return Conflict(new { message = "A student with this email already exists." });
         }
-
-        // Always auto-generate a secure 8-character temporary password.
-        // The admin never needs to set one — the student receives it via email.
-        var temporaryPassword = GenerateSecurePassword();
 
         var student = new User
         {
             FullName     = request.FullName.Trim(),
             Email        = normalizedEmail,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(temporaryPassword),
-            Role         = "Student"
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.InitialPassword),
+            Role         = "Student",
+            PhoneNumber  = request.PhoneNumber?.Trim(),
+            Address      = request.Address?.Trim(),
+            College      = request.College?.Trim()
         };
 
         _context.Users.Add(student);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(cancellationToken);
 
-        // Send welcome email with credentials (best-effort, non-blocking on failure).
-        await _notificationService.SendWelcomeEmailAsync(
-            toEmail:           student.Email,
-            toName:            student.FullName,
-            temporaryPassword: temporaryPassword);
-
-        return Ok(new
+        return Created("/api/admin/students", new
         {
-            message  = "Student account created and welcome email sent.",
+            message   = "Student account created successfully.",
             studentId = student.Id,
             fullName  = student.FullName,
             email     = student.Email
         });
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // PUT api/admin/students/{id}
+    // Updates an existing student account's details.
+    // ═══════════════════════════════════════════════════════════════════════
     [HttpPut("students/{id:int}")]
     [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> UpdateStudent(int id, [FromBody] UpdateStudentRequest request)
+    public async Task<IActionResult> UpdateStudent(
+        int id,
+        [FromBody] UpdateStudentRequest request,
+        CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
         {
             return ValidationProblem(ModelState);
         }
 
-        var student = await _context.Users.FirstOrDefaultAsync(u => u.Id == id && u.Role == "Student");
+        var student = await _context.Users
+            .FirstOrDefaultAsync(u => u.Id == id && u.Role == "Student", cancellationToken);
+
         if (student == null)
         {
-            return NotFound(new { message = "Student not found." });
+            return NotFound(new { message = $"Student with ID {id} was not found." });
         }
 
-        var fullName = request.FullName?.Trim();
-        if (string.IsNullOrWhiteSpace(fullName))
+        // Only update fields that were supplied in the request body
+        if (!string.IsNullOrWhiteSpace(request.FullName))
         {
-            return BadRequest(new { message = "Full name is required." });
+            student.FullName = request.FullName.Trim();
         }
 
-        var email = request.Email?.Trim();
-        if (string.IsNullOrWhiteSpace(email))
+        if (request.PhoneNumber != null)
         {
-            return BadRequest(new { message = "Email is required." });
+            student.PhoneNumber = request.PhoneNumber.Trim();
         }
 
-        var emailExists = await _context.Users.AnyAsync(u => u.Id != id && u.Email.ToLower() == email.ToLower());
-        if (emailExists)
+        if (request.Address != null)
         {
-            return Conflict(new { message = "A student with this email already exists." });
+            student.Address = request.Address.Trim();
         }
 
-        student.FullName = fullName;
-        student.Email = email;
+        if (request.College != null)
+        {
+            student.College = request.College.Trim();
+        }
 
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(cancellationToken);
 
         return Ok(new
         {
-            message = "Student updated successfully.",
-            student = new StudentListItemDto
-            {
-                Id = student.Id,
-                FullName = student.FullName,
-                Email = student.Email,
-                CreatedAt = student.CreatedAt
-            }
+            message     = "Student updated successfully.",
+            studentId   = student.Id,
+            fullName    = student.FullName,
+            email       = student.Email,
+            phoneNumber = student.PhoneNumber,
+            address     = student.Address,
+            college     = student.College
         });
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // DELETE api/admin/students/{id}
+    // Removes a student account (and cascade-deletes related data via EF).
+    // ═══════════════════════════════════════════════════════════════════════
     [HttpDelete("students/{id:int}")]
     [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> DeleteStudent(int id)
+    public async Task<IActionResult> DeleteStudent(int id, CancellationToken cancellationToken)
     {
-        var student = await _context.Users.FirstOrDefaultAsync(u => u.Id == id && u.Role == "Student");
+        var student = await _context.Users
+            .FirstOrDefaultAsync(u => u.Id == id && u.Role == "Student", cancellationToken);
+
         if (student == null)
         {
-            return NotFound(new { message = "Student not found." });
+            return NotFound(new { message = $"Student with ID {id} was not found." });
         }
 
         _context.Users.Remove(student);
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(cancellationToken);
 
-        return Ok(new { message = "Student deleted successfully." });
-    }
-
-    private static string GenerateSecurePassword()
-    {
-        // Cryptographically secure 8-character password guaranteed to contain
-        // at least one uppercase, one lowercase, one digit, and one special char.
-        const string upper   = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-        const string lower   = "abcdefghjkmnpqrstuvwxyz";
-        const string digits  = "23456789";
-        const string special = "@#!$&";
-        const string all     = upper + lower + digits + special;
-
-        Span<byte> buf = stackalloc byte[16];
-        System.Security.Cryptography.RandomNumberGenerator.Fill(buf);
-
-        // Ensure one char from each required class
-        char[] pw =
-        [
-            upper  [buf[0]  % upper.Length],
-            lower  [buf[1]  % lower.Length],
-            digits [buf[2]  % digits.Length],
-            special[buf[3]  % special.Length],
-            all    [buf[4]  % all.Length],
-            all    [buf[5]  % all.Length],
-            all    [buf[6]  % all.Length],
-            all    [buf[7]  % all.Length],
-        ];
-
-        // Fisher-Yates shuffle so the pattern chars don't cluster at the start
-        for (int i = pw.Length - 1; i > 0; i--)
-        {
-            int j = buf[8 + (i % 8)] % (i + 1);
-            (pw[i], pw[j]) = (pw[j], pw[i]);
-        }
-
-        return new string(pw);
+        return Ok(new { message = $"Student '{student.FullName}' (ID: {id}) deleted successfully." });
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// DTOs
+// ─────────────────────────────────────────────────────────────────────────
+
+/// <summary>Payload returned in the GET /api/admin/students list.</summary>
+public class StudentListItemDto
+{
+    public int      Id              { get; set; }
+    public string   FullName        { get; set; } = string.Empty;
+    public string   Email           { get; set; } = string.Empty;
+    public DateTime CreatedAt       { get; set; }
+    public string?  PhoneNumber     { get; set; }
+    public string?  Address         { get; set; }
+    public string?  College         { get; set; }
+    public string?  ProfileImageUrl { get; set; }
+}
+
+// Phone number pattern: optional leading +, then 7-20 chars of digits/spaces/hyphens/parens
+// Using a non-verbatim string so we can control the exact character class correctly.
+internal static class PhonePattern
+{
+    internal const string Regex = @"^[+]?[0-9\s\-()\]{7,20}$";
+    internal const string Error = "PhoneNumber must be 7\u201320 characters and may contain digits, spaces, +, -, (, and ).";
+}
+
+/// <summary>Request body for POST /api/admin/students.</summary>
 public class CreateStudentRequest
 {
     [Required]
     [MinLength(2)]
+    [MaxLength(100)]
     public string FullName { get; set; } = string.Empty;
 
     [Required]
     [EmailAddress]
+    [MaxLength(150)]
     public string Email { get; set; } = string.Empty;
-    // Password is intentionally omitted — the backend auto-generates it
-    // and emails it to the student.
+
+    [Required]
+    [MinLength(6)]
+    public string InitialPassword { get; set; } = string.Empty;
+
+    /// <summary>Optional. Validated only when provided.</summary>
+    [RegularExpression(@"^[+]?[\d\s\-()]{7,20}$",
+        ErrorMessage = "PhoneNumber must be 7-20 characters and may contain digits, spaces, +, -, (, and ).")]
+    [MaxLength(20)]
+    public string? PhoneNumber { get; set; }
+
+    [MaxLength(255)]
+    public string? Address { get; set; }
+
+    [MaxLength(150)]
+    public string? College { get; set; }
 }
 
+/// <summary>Request body for PUT /api/admin/students/{id}.</summary>
 public class UpdateStudentRequest
 {
-    [Required]
     [MinLength(2)]
-    public string FullName { get; set; } = string.Empty;
+    [MaxLength(100)]
+    public string? FullName { get; set; }
 
-    [Required]
-    [EmailAddress]
-    public string Email { get; set; } = string.Empty;
-}
+    /// <summary>Optional. Validated only when provided.</summary>
+    [RegularExpression(@"^[+]?[\d\s\-()]{7,20}$",
+        ErrorMessage = "PhoneNumber must be 7-20 characters and may contain digits, spaces, +, -, (, and ).")]
+    [MaxLength(20)]
+    public string? PhoneNumber { get; set; }
 
-public class StudentListItemDto
-{
-    public int Id { get; set; }
-    public string FullName { get; set; } = string.Empty;
-    public string Email { get; set; } = string.Empty;
-    public DateTime CreatedAt { get; set; }
+    [MaxLength(255)]
+    public string? Address { get; set; }
+
+    [MaxLength(150)]
+    public string? College { get; set; }
 }

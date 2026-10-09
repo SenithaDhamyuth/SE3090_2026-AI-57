@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../api_constants.dart';
 import 'home_screen.dart';
+import 'forgot_password_screen.dart';
 
 /// LoginScreen — entry point for authenticated students.
 ///
@@ -279,6 +280,28 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           )
                         : const Text('Login'),
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+                
+                // ── Forgot Password button ─────────────────────────────
+                Center(
+                  child: TextButton(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const ForgotPasswordScreen(),
+                        ),
+                      );
+                    },
+                    child: Text(
+                      'Forgot Password?',
+                      style: TextStyle(
+                        color: Colors.orange.shade700,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
 

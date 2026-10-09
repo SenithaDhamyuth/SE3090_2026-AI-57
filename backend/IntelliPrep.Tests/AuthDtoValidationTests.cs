@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using IntelliPrep.API.DTOs;
+using IntelliPrep.API.Controllers;
 
 namespace IntelliPrep.Tests;
 
@@ -112,5 +113,31 @@ public class AuthDtoValidationTests
 
         // Assert
         Assert.NotEmpty(errors);
+    }
+
+    [Fact]
+    public void CreateStudentRequest_InitialPasswordUnder12Characters_FailsValidation()
+    {
+        var dto = new CreateStudentRequest
+        {
+            FullName = "Amal Perera",
+            Email = "amal@school.lk",
+            InitialPassword = "Short123!"
+        };
+
+        Assert.NotEmpty(Validate(dto));
+    }
+
+    [Fact]
+    public void CreateStudentRequest_ValidInitialPassword_PassesValidation()
+    {
+        var dto = new CreateStudentRequest
+        {
+            FullName = "Amal Perera",
+            Email = "amal@school.lk",
+            InitialPassword = "LongAndUniquePassword1!"
+        };
+
+        Assert.Empty(Validate(dto));
     }
 }
