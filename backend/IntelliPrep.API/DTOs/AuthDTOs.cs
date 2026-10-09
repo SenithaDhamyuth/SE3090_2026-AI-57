@@ -29,7 +29,7 @@ namespace IntelliPrep.API.DTOs
         [Required, RegularExpression(@"^\d{6}$")]
         public string Code { get; set; } = string.Empty;
 
-        [Required, MinLength(12), MaxLength(72)]
+        [Required, MinLength(6), MaxLength(72)]
         public string NewPassword { get; set; } = string.Empty;
     }
 

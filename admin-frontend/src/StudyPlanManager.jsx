@@ -54,16 +54,27 @@ const GRADE_13_TOPICS = [
 // SHARED SMALL COMPONENTS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const StatusBadge = ({ approved }) =>
-  approved ? (
+const StatusBadge = ({ approved, published }) => {
+  if (!approved) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold bg-orange-50 text-orange-700 border-orange-200">
+        <Clock size={10} /> Pending Review
+      </span>
+    );
+  }
+  if (published) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold bg-green-50 text-green-700 border-green-200">
+        <Zap size={10} /> Active
+      </span>
+    );
+  }
+  return (
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold bg-zinc-50 text-zinc-700 border-zinc-200">
       <CheckCircle2 size={10} /> Approved
     </span>
-  ) : (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold bg-orange-50 text-orange-700 border-orange-200">
-      <Clock size={10} /> Pending Review
-    </span>
   );
+};
 
 const PriorityBadge = ({ priority }) => {
   const styles = {
@@ -838,7 +849,7 @@ export default function StudyPlanManager() {
       setPlans(prev =>
         prev.map(p =>
           p.id === planId
-            ? { ...p, isApproved: true, approvedBy: data.approvedBy, approvedAt: data.approvedAt }
+            ? { ...p, isApproved: true, approvedByEmail: data.approvedBy, approvedAt: data.approvedAt }
             : p
         )
       );
@@ -870,6 +881,21 @@ export default function StudyPlanManager() {
       setPageAlert({ type: 'error', text: err.message });
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handlePublish = async (planId) => {
+    setPageAlert(null);
+    try {
+      const res = await authFetch(`${API_BASE}/api/aiagent/publish-plan/${planId}`, { method: 'PUT' });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.message || `Server error ${res.status}`);
+      
+      // Re-fetch to correctly update all plans (unpublishing others for the student)
+      fetchPlans();
+      setPageAlert({ type: 'success', text: `Plan #${planId} published successfully. It is now active on the student's mobile app.` });
+    } catch (err) {
+      setPageAlert({ type: 'error', text: err.message });
     }
   };
 
@@ -1043,14 +1069,14 @@ export default function StudyPlanManager() {
                         <span className="text-[11px] text-zinc-400 font-medium">{plan.createdAt}</span>
                       </td>
                       <td className="px-5 py-3.5">
-                        <StatusBadge approved={plan.isApproved} />
+                        <StatusBadge approved={plan.isApproved} published={plan.isPublished} />
                       </td>
                       <td className="px-5 py-3.5">
                         {plan.isApproved ? (
                           <div>
                             <p className="text-[11px] font-semibold text-zinc-700 flex items-center gap-1">
                               <ShieldCheck size={11} className="text-zinc-600" />
-                              {plan.approvedBy ?? 'Admin'}
+                              {plan.approvedByEmail ?? 'Admin'}
                             </p>
                             {plan.approvedAt && (
                               <p className="text-[10px] text-zinc-400 mt-0.5">{plan.approvedAt}</p>
@@ -1069,6 +1095,17 @@ export default function StudyPlanManager() {
                           >
                             <Eye size={12} /> View
                           </button>
+                          
+                          {plan.isApproved && !plan.isPublished && (
+                            <button
+                              onClick={() => handlePublish(plan.id)}
+                              title="Make this plan active for the student"
+                              className="inline-flex items-center gap-1.5 rounded-md bg-green-600 px-3 py-1.5 text-[11px] font-bold text-white shadow-sm transition-all hover:bg-green-700"
+                            >
+                              <Zap size={12} /> Publish
+                            </button>
+                          )}
+
                           {!plan.isApproved && (
                             <>
                               <button

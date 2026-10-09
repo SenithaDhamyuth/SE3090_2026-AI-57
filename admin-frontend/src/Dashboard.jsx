@@ -121,12 +121,9 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [students, setStudents] = useState([]);
   const [sessions, setSessions] = useState([]);
+  const [studyPlans, setStudyPlans] = useState({ totalPlans: 0, pendingCount: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  // Mock counts for cards that don't have a dedicated endpoint yet
-  const mockStudyPlans = 24;
-  const mockPendingApprovals = 7;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -138,7 +135,7 @@ export default function Dashboard() {
 
         const token = localStorage.getItem('admin_token');
 
-        const [studentsRes, sessionsRes] = await Promise.all([
+        const [studentsRes, sessionsRes, plansRes] = await Promise.all([
           fetch(`${API_BASE}/api/admin/students`, {
             signal: controller.signal,
             headers: {
@@ -150,6 +147,13 @@ export default function Dashboard() {
             signal: controller.signal,
             headers: { 'Content-Type': 'application/json' },
           }),
+          fetch(`${API_BASE}/api/aiagent/plans`, {
+            signal: controller.signal,
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+          }),
         ]);
 
         if (!studentsRes.ok)
@@ -160,12 +164,18 @@ export default function Dashboard() {
           throw new Error(
             `Sessions API responded with ${sessionsRes.status} ${sessionsRes.statusText}`
           );
+        if (!plansRes.ok)
+          throw new Error(
+            `Plans API responded with ${plansRes.status} ${plansRes.statusText}`
+          );
 
         const studentData = await studentsRes.json();
         const sessionData = await sessionsRes.json();
+        const planData = await plansRes.json();
 
         setStudents(Array.isArray(studentData) ? studentData : []);
         setSessions(Array.isArray(sessionData) ? sessionData : []);
+        setStudyPlans(planData || { totalPlans: 0, pendingCount: 0 });
       } catch (err) {
         if (err.name !== 'AbortError') {
           setError(err.message || 'Failed to load dashboard data.');
@@ -183,6 +193,10 @@ export default function Dashboard() {
 
   const totalStudents = students.length;
   const totalSessions = sessions.length;
+  const pendingSessions = sessions.filter(s => s.status === 'PendingAdminApproval').length;
+  const totalStudyPlans = studyPlans.totalPlans || 0;
+  const pendingStudyPlans = studyPlans.pendingCount || 0;
+  const totalPendingApprovals = pendingSessions + pendingStudyPlans;
 
   /* ── Current date for greeting ── */
   const hour = new Date().getHours();
@@ -242,14 +256,14 @@ export default function Dashboard() {
           />
           <StatCard
             label="AI Study Plans"
-            value={mockStudyPlans}
+            value={totalStudyPlans}
             icon={Brain}
             iconBg="bg-violet-50"
             iconColor="text-violet-600"
           />
           <StatCard
             label="Pending Approvals"
-            value={mockPendingApprovals}
+            value={totalPendingApprovals}
             icon={ShieldAlert}
             iconBg="bg-orange-50"
             iconColor="text-orange-600"

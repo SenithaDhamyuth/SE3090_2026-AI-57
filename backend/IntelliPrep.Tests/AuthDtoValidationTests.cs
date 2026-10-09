@@ -116,20 +116,33 @@ public class AuthDtoValidationTests
     }
 
     [Fact]
-    public void CreateStudentRequest_InitialPasswordUnder12Characters_FailsValidation()
+    public void CreateStudentRequest_InitialPasswordUnder6Characters_FailsValidation()
     {
         var dto = new CreateStudentRequest
         {
             FullName = "Amal Perera",
             Email = "amal@school.lk",
-            InitialPassword = "Short123!"
+            InitialPassword = "abc!"
         };
 
         Assert.NotEmpty(Validate(dto));
     }
 
     [Fact]
-    public void CreateStudentRequest_ValidInitialPassword_PassesValidation()
+    public void CreateStudentRequest_InitialPasswordAtMinimumLength_PassesValidation()
+    {
+        var dto = new CreateStudentRequest
+        {
+            FullName = "Amal Perera",
+            Email = "amal@school.lk",
+            InitialPassword = "Abcd1!"
+        };
+
+        Assert.Empty(Validate(dto));
+    }
+
+    [Fact]
+    public void CreateStudentRequest_LongInitialPassword_PassesValidation()
     {
         var dto = new CreateStudentRequest
         {

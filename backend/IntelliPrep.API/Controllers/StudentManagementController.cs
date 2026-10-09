@@ -227,7 +227,7 @@ public class CreateStudentRequest
     public string Email { get; set; } = string.Empty;
 
     [Required]
-    [MinLength(6)]
+    [RegularExpression(@"^(?=.*[@!#$%^&*]).{6,72}$", ErrorMessage = "Password must be at least 6 characters and contain at least one special character (@, !, #, etc.).")]
     public string InitialPassword { get; set; } = string.Empty;
 
     /// <summary>Optional. Validated only when provided.</summary>

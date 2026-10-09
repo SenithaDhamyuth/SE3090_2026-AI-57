@@ -132,7 +132,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                   FilledButton.icon(
                     onPressed: _busy ? null : _requestCode,
                     icon: const Icon(Icons.email_outlined),
-                    label: Text(_busy ? 'Sending...' : 'Send Verification Code'),
+                    label: Text(
+                      _busy ? 'Sending...' : 'Send Verification Code',
+                    ),
                     style: FilledButton.styleFrom(
                       backgroundColor: Colors.orange,
                       minimumSize: const Size.fromHeight(50),
@@ -148,7 +150,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                       border: OutlineInputBorder(),
                     ),
                     validator: (value) {
-                      if (value == null || !RegExp(r'^\d{6}$').hasMatch(value)) {
+                      if (value == null ||
+                          !RegExp(r'^\d{6}$').hasMatch(value)) {
                         return 'Enter the six-digit code from your email.';
                       }
                       return null;
@@ -164,8 +167,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                       border: OutlineInputBorder(),
                     ),
                     validator: (value) {
-                      if (value == null || value.length < 12) {
-                        return 'Use at least 12 characters.';
+                      if (value == null || value.length < 6) {
+                        return 'Use at least 6 characters.';
                       }
                       return null;
                     },
@@ -193,7 +196,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                       backgroundColor: Colors.orange,
                       minimumSize: const Size.fromHeight(50),
                     ),
-                    child: Text(_busy ? 'Updating...' : 'Verify and Update Password'),
+                    child: Text(
+                      _busy ? 'Updating...' : 'Verify and Update Password',
+                    ),
                   ),
                   TextButton(
                     onPressed: _busy ? null : _requestCode,

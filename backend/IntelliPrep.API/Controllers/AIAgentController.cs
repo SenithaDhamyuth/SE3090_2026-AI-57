@@ -364,6 +364,7 @@ public class AIAgentController : ControllerBase
                 p.Id,
                 p.StudentId,
                 p.IsApproved,
+                p.IsPublished,
                 p.ApprovedByEmail,
                 approvedAt = p.ApprovedAt.HasValue
                     ? p.ApprovedAt.Value.ToString("yyyy-MM-dd HH:mm") + " UTC"

@@ -53,6 +53,7 @@ function AddStudentModal({ onClose, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
   const [phoneError, setPhoneError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
 
   // Trap Escape key
   useEffect(() => {
@@ -71,6 +72,14 @@ function AddStudentModal({ onClose, onSuccess }) {
         setPhoneError('');
       }
     }
+    if (name === 'initialPassword') {
+      const pwdRegex = /^(?=.*[@!#$%^&*]).{6,72}$/;
+      if (value && !pwdRegex.test(value)) {
+        setPasswordError('Password must be at least 6 characters and include at least one special character.');
+      } else {
+        setPasswordError('');
+      }
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -80,6 +89,12 @@ function AddStudentModal({ onClose, onSuccess }) {
       setPhoneError('Invalid phone format. Use digits, spaces, dashes or parentheses (7–20 chars).');
       return;
     }
+    const pwdRegex = /^(?=.*[@!#$%^&*]).{6,72}$/;
+    if (!pwdRegex.test(formData.initialPassword)) {
+      setPasswordError('Password must be at least 6 characters and include at least one special character.');
+      return;
+    }
+    
     setLoading(true);
     setMessage(null);
     try {
@@ -209,7 +224,7 @@ function AddStudentModal({ onClose, onSuccess }) {
                 <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
               </svg>
               <p className="text-[11px] text-orange-700 leading-relaxed">
-                A <strong>secure initial password</strong> is required (min 12 chars). Share it with the student securely; the server stores only its hash.
+                A <strong>secure initial password</strong> must be at least 6 characters and include at least one special character. Share it with the student securely; the server stores only its hash.
               </p>
             </div>
 
@@ -223,14 +238,23 @@ function AddStudentModal({ onClose, onSuccess }) {
                 id="modal-initialPassword"
                 name="initialPassword"
                 required
-                minLength={12}
+                minLength={6}
                 maxLength={72}
                 autoComplete="new-password"
                 value={formData.initialPassword}
                 onChange={handleChange}
-                className="block w-full px-4 py-2.5 border border-gray-200 rounded-xl text-[13px] text-gray-900 placeholder-gray-400 outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all bg-gray-50/50"
-                placeholder="At least 12 characters"
+                className={`block w-full px-4 py-2.5 border rounded-xl text-[13px] text-gray-900 placeholder-gray-400 outline-none focus:ring-2 transition-all bg-gray-50/50 ${
+                  passwordError
+                    ? 'border-red-300 focus:ring-red-500/20 focus:border-red-500'
+                    : 'border-gray-200 focus:ring-orange-500/20 focus:border-orange-500'
+                }`}
+                placeholder="At least 6 chars + special char"
               />
+              {passwordError && (
+                <p className="mt-1 text-[11px] text-red-500 flex items-center gap-1">
+                  <AlertCircle size={11} /> {passwordError}
+                </p>
+              )}
             </div>
 
             {/* Phone Number (optional) */}
@@ -528,6 +552,9 @@ export default function StudentManagement() {
                   <th className="py-3 pr-4 text-[10px] tracking-wider text-gray-400 uppercase font-semibold border-b border-gray-100">Student ID</th>
                   <th className="px-4 py-3 text-[10px] tracking-wider text-gray-400 uppercase font-semibold border-b border-gray-100">Full Name</th>
                   <th className="px-4 py-3 text-[10px] tracking-wider text-gray-400 uppercase font-semibold border-b border-gray-100">Email</th>
+                  <th className="px-4 py-3 text-[10px] tracking-wider text-gray-400 uppercase font-semibold border-b border-gray-100">Phone</th>
+                  <th className="px-4 py-3 text-[10px] tracking-wider text-gray-400 uppercase font-semibold border-b border-gray-100">Address</th>
+                  <th className="px-4 py-3 text-[10px] tracking-wider text-gray-400 uppercase font-semibold border-b border-gray-100">College</th>
                   <th className="px-4 py-3 text-[10px] tracking-wider text-gray-400 uppercase font-semibold border-b border-gray-100">Created At</th>
                   <th className="pl-4 py-3 text-right text-[10px] tracking-wider text-gray-400 uppercase font-semibold border-b border-gray-100">Actions</th>
                 </tr>
@@ -554,7 +581,7 @@ export default function StudentManagement() {
                       ) : (
                         <div className="flex items-center gap-3">
                           <StudentAvatar student={student} size={8} />
-                          <span className="text-[13px] font-semibold text-gray-900">
+                          <span className="text-[13px] font-semibold text-gray-900 whitespace-nowrap">
                             {student.fullName}
                           </span>
                         </div>
@@ -575,10 +602,25 @@ export default function StudentManagement() {
                       )}
                     </td>
 
+                    {/* Phone */}
+                    <td className="px-4 py-5">
+                      <span className="text-[13px] text-gray-500">{student.phoneNumber || '—'}</span>
+                    </td>
+
+                    {/* Address */}
+                    <td className="px-4 py-5 max-w-[150px] truncate">
+                      <span className="text-[13px] text-gray-500" title={student.address}>{student.address || '—'}</span>
+                    </td>
+
+                    {/* College */}
+                    <td className="px-4 py-5 max-w-[150px] truncate">
+                      <span className="text-[13px] text-gray-500" title={student.college}>{student.college || '—'}</span>
+                    </td>
+
                     {/* Created At */}
                     <td className="px-4 py-5">
-                      <span className="text-[12px] text-gray-400">
-                        {new Date(student.createdAt).toLocaleString()}
+                      <span className="text-[12px] text-gray-400 whitespace-nowrap">
+                        {new Date(student.createdAt).toLocaleDateString()}
                       </span>
                     </td>
 
