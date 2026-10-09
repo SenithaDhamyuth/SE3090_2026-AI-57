@@ -15,7 +15,7 @@ namespace IntelliPrep.API.Controllers
     /// Endpoints:
     ///   1. request-exam           → PlanningCoordinatorService  (Groq agentic plan)
     ///   2. start-timer            → DB transaction lock (idempotency guard)
-    ///   3. submit                 → persist answers + score → Completed
+    ///   3. submit                 → persist latest answers + score → Ready
     ///   4. synthesize/{sessionId} → ContentSynthesizerService  (Groq MCQ generation, UC5.2)
     ///   5. sessions               → list all sessions (admin frontend)
     /// </summary>
@@ -125,8 +125,8 @@ namespace IntelliPrep.API.Controllers
                     });
                 }
 
-                if (session.Status == "Completed")
-                    return BadRequest(new { error = "Cannot start timer on a completed session." });
+                if (session.Status == "Abandoned")
+                    return BadRequest(new { error = "Cannot start a closed exam session." });
 
                 // Apply transaction lock
                 session.IsTimerLocked = true;
@@ -162,7 +162,7 @@ namespace IntelliPrep.API.Controllers
         // ─────────────────────────────────────────────────────────────
         // POST /api/assessment/submit
         // Accepts the student's answers, persists them, updates the
-        // TotalScore on StudentProfile, and marks the session Completed.
+        // TotalScore on StudentProfile, and makes the session available again.
         // ─────────────────────────────────────────────────────────────
         [HttpPost("submit")]
         public async Task<IActionResult> SubmitExam([FromBody] SubmitExamDto dto)
@@ -175,15 +175,17 @@ namespace IntelliPrep.API.Controllers
             if (session == null)
                 return NotFound(new { error = $"ExamSession with ID {dto.SessionId} not found." });
 
-            if (session.Status == "Completed")
-                return BadRequest(new { error = "This session has already been submitted." });
+            if (session.Status != "InProgress" || !session.IsTimerLocked)
+                return BadRequest(new { error = "This exam session does not have an active attempt to submit." });
+
+            var previousSessionScore = session.EndTime.HasValue ? session.TotalScore : 0;
 
             // Persist answers and score
             session.AnswersJson   = dto.AnswersJson;
             session.TotalScore    = dto.TotalScore;
-            session.Status        = "Completed";
+            session.Status        = "Ready";
             session.EndTime       = DateTime.UtcNow;
-            session.IsTimerLocked = false; // Release lock on completion
+            session.IsTimerLocked = false;
 
             // Update TotalPoints on the owning StudentProfile (if linked)
             if (session.StudentProfileId > 0)
@@ -193,7 +195,7 @@ namespace IntelliPrep.API.Controllers
 
                 if (profile != null)
                 {
-                    profile.TotalPoints += dto.TotalScore;
+                    profile.TotalPoints += dto.TotalScore - previousSessionScore;
                     _logger.LogInformation(
                         "[AssessmentController] StudentProfile {ProfileId} TotalPoints updated to {Points}.",
                         profile.Id, profile.TotalPoints);
@@ -233,8 +235,8 @@ namespace IntelliPrep.API.Controllers
             if (session == null)
                 return NotFound(new { error = $"ExamSession {sessionId} not found." });
 
-            if (session.Status == "Completed")
-                return BadRequest(new { error = "Cannot synthesize questions for a completed session." });
+            if (session.Status == "Abandoned")
+                return BadRequest(new { error = "Cannot synthesize questions for a closed session." });
 
             if (session.Status == "Ready")
             {
@@ -330,7 +332,7 @@ namespace IntelliPrep.API.Controllers
                     s.Subject,
                     s.Title,
                     s.OriginalObjective,
-                    s.Status,
+                    Status = s.Status == "Completed" ? "Ready" : s.Status,
                     s.StartTime,
                     s.EndTime,
                     s.DurationMinutes,

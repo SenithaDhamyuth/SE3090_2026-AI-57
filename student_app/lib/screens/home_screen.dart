@@ -1368,7 +1368,7 @@ class _ProgressHeader extends StatelessWidget {
           const SizedBox(height: 16),
           Row(
             children: [
-              _ProgressStat(label: 'Completed', value: '$_totalSubmitted'),
+              _ProgressStat(label: 'Submitted', value: '$_totalSubmitted'),
               const SizedBox(width: 12),
               _ProgressStat(label: 'Avg Score', value: avgLabel),
               const SizedBox(width: 12),

@@ -68,10 +68,29 @@ namespace IntelliPrep.API.Controllers
             var normalizedEmail = request.Email.Trim().ToLowerInvariant();
             var user = await _context.Users.FirstOrDefaultAsync(
                 u => u.Email.ToLower() == normalizedEmail, cancellationToken);
-            
-            if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+
+            if (user is null)
             {
-                return Unauthorized(new { message = "Invalid email or password." });
+                _logger.LogWarning(
+                    "Login rejected: no account matched the normalized email. DiagnosticId={DiagnosticId}",
+                    HttpContext.TraceIdentifier);
+                return Unauthorized(new
+                {
+                    message = "Invalid email or password.",
+                    diagnosticId = HttpContext.TraceIdentifier
+                });
+            }
+
+            if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+            {
+                _logger.LogWarning(
+                    "Login rejected: password verification failed. DiagnosticId={DiagnosticId}",
+                    HttpContext.TraceIdentifier);
+                return Unauthorized(new
+                {
+                    message = "Invalid email or password.",
+                    diagnosticId = HttpContext.TraceIdentifier
+                });
             }
 
             var token = GenerateJwtToken(user);

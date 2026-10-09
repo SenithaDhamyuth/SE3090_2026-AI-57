@@ -25,9 +25,8 @@ function adminHeaders(extra = {}) {
 const STATUS_META = {
   Pending:    { color: 'text-orange-600',   bg: 'bg-orange-50',    border: 'border-orange-200',   icon: Clock,         label: 'Pending'     },
   PendingAdminApproval: { color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200', icon: Clock, label: 'Pending Approval' },
-  Ready:      { color: 'text-emerald-700',  bg: 'bg-emerald-50',   border: 'border-emerald-200',  icon: CheckCheck,    label: 'Ready'       },
+  Ready:      { color: 'text-emerald-700',  bg: 'bg-emerald-50',   border: 'border-emerald-200',  icon: CheckCheck,    label: 'Available'   },
   InProgress: { color: 'text-blue-700',     bg: 'bg-blue-50',      border: 'border-blue-200',     icon: Play,          label: 'In Progress' },
-  Completed:  { color: 'text-violet-700',   bg: 'bg-violet-50',    border: 'border-violet-200',   icon: CheckCircle2,  label: 'Completed'   },
   Abandoned:  { color: 'text-rose-700',     bg: 'bg-rose-50',      border: 'border-rose-200',     icon: AlertTriangle, label: 'Abandoned'   },
 };
 
@@ -211,11 +210,12 @@ function SessionDetailItem({ icon: Icon, label, value, accent = 'text-slate-500'
 
 function SessionDetailsModal({ session, onClose }) {
   const [mark, setMark] = useState(null);
-  const [loading, setLoading] = useState(session.status === 'Completed');
+  const hasSubmitted = Boolean(session.endTime);
+  const [loading, setLoading] = useState(hasSubmitted);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (session.status !== 'Completed') return undefined;
+    if (!hasSubmitted) return undefined;
     const controller = new AbortController();
 
     const fetchMark = async () => {
@@ -241,7 +241,7 @@ function SessionDetailsModal({ session, onClose }) {
 
     fetchMark();
     return () => controller.abort();
-  }, [session.id, session.status]);
+  }, [session.id, hasSubmitted]);
 
   useEffect(() => {
     const handleKeyDown = event => {
@@ -287,13 +287,13 @@ function SessionDetailsModal({ session, onClose }) {
               <div>
                 <p className="text-sm font-semibold text-emerald-950">Student result</p>
                 <p className="mt-1 text-xs text-emerald-800/75">
-                  {session.status === 'Completed' ? 'Submitted exam score and student details' : 'Marks appear here after the exam is submitted'}
+                  {hasSubmitted ? 'Latest submitted score and student details' : 'Marks appear here after the exam is submitted'}
                 </p>
               </div>
               {loading && <Loader2 size={20} className="animate-spin text-emerald-700" />}
             </div>
             {error && <div role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
-            {!loading && !error && session.status === 'Completed' && mark && (
+            {!loading && !error && hasSubmitted && mark && (
               <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <SessionDetailItem icon={UserRound} label="Student" value={mark.studentName || mark.StudentName} accent="text-emerald-700" />
                 <SessionDetailItem icon={Trophy} label="Score" value={total > 0 ? `${score} / ${total} · ${scorePercent}%` : `${score} points`} accent="text-amber-600" />
@@ -301,10 +301,10 @@ function SessionDetailsModal({ session, onClose }) {
                 <SessionDetailItem icon={CalendarDays} label="Submitted" value={fmtDate(mark.endTime || session.endTime)} accent="text-violet-600" />
               </div>
             )}
-            {!loading && !error && session.status === 'Completed' && !mark && (
-              <p className="mt-4 rounded-xl border border-white/80 bg-white/70 px-4 py-3 text-sm text-emerald-900">The exam is complete, but no student mark record is available for this session.</p>
+            {!loading && !error && hasSubmitted && !mark && (
+              <p className="mt-4 rounded-xl border border-white/80 bg-white/70 px-4 py-3 text-sm text-emerald-900">A submission timestamp exists, but no latest mark record is available for this session.</p>
             )}
-            {session.status !== 'Completed' && (
+            {!hasSubmitted && (
               <p className="mt-4 rounded-xl border border-white/80 bg-white/70 px-4 py-3 text-sm text-emerald-900">No marks have been submitted for this session yet.</p>
             )}
           </div>
@@ -797,7 +797,14 @@ export default function ExamSessions() {
       const res  = await fetch(`${API_BASE}/sessions`, { headers: adminHeaders() });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || 'Failed to load sessions');
-      setSessions(Array.isArray(data) ? data : []);
+      setSessions(
+        Array.isArray(data)
+          ? data.map(session => ({
+              ...session,
+              status: session.status === 'Completed' ? 'Ready' : session.status,
+            }))
+          : [],
+      );
     } catch (err) {
       setError(err.message);
       setSessions([]);
@@ -989,7 +996,7 @@ export default function ExamSessions() {
 
       {/* ── Filter Tabs ── */}
       <div className="flex w-full flex-wrap items-center gap-1.5 rounded-2xl border border-slate-200 bg-slate-100 p-1.5 sm:w-fit">
-        {['All', 'Pending', 'PendingAdminApproval', 'Ready', 'InProgress', 'Completed', 'Abandoned'].map(tab => (
+        {['All', 'Pending', 'PendingAdminApproval', 'Ready', 'InProgress', 'Abandoned'].map(tab => (
           <button
             key={tab}
             onClick={() => setFilter(tab)}
@@ -999,7 +1006,7 @@ export default function ExamSessions() {
                 : 'text-slate-600 hover:bg-white/70 hover:text-slate-900'
             }`}
           >
-            {tab === 'InProgress' ? 'In Progress' : tab === 'PendingAdminApproval' ? 'Pending Approval' : tab}
+            {tab === 'InProgress' ? 'In Progress' : tab === 'PendingAdminApproval' ? 'Pending Approval' : tab === 'Ready' ? 'Available' : tab}
             {tab !== 'All' && (
               <span className="ml-1.5 text-[10px] font-semibold opacity-70">
                 {sessions.filter(s => s.status === tab).length}
@@ -1012,9 +1019,9 @@ export default function ExamSessions() {
       <div className="flex items-start gap-3 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3.5 text-sm text-sky-950">
         <Info size={18} className="mt-0.5 shrink-0 text-sky-700" />
         <div className="grid gap-1 sm:grid-cols-2">
-          <p><strong>Ready:</strong> questions are prepared and approved; the student can start via the QR code.</p>
-          <p><strong>Completed:</strong> the student submitted the exam; the score and end time are available in details.</p>
-          <p><strong>In progress:</strong> the student's timer has started and the attempt is active.</p>
+          <p><strong>Available:</strong> questions are approved. Students can scan the same QR to start or retake the exam.</p>
+          <p><strong>In progress:</strong> a student's timed attempt is active.</p>
+          <p><strong>Latest result:</strong> the most recent submission and score are shown in details; another submission replaces that result.</p>
           <p><strong>Pending:</strong> the exam session exists but question preparation has not finished.</p>
           <p><strong>Pending approval:</strong> generated questions are waiting for admin review before they can be used.</p>
           <p><strong>Abandoned:</strong> the session was rejected or closed without a submitted result.</p>
@@ -1071,8 +1078,10 @@ export default function ExamSessions() {
           <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
             {filteredSessions.map(session => {
               const isSynthesizing = synthesizingIds.has(session.id);
-              const canViewQr = session.status === 'Ready' && session.questionsReady && Boolean(session.sessionId);
-              const scoreExists = session.status === 'Completed';
+              const canViewQr = ['Ready', 'InProgress'].includes(session.status)
+                && session.questionsReady
+                && Boolean(session.sessionId);
+              const scoreExists = Boolean(session.endTime);
               return (
                 <article
                   key={session.id}
@@ -1083,11 +1092,10 @@ export default function ExamSessions() {
                   <div className="rounded-t-3xl bg-gradient-to-r from-slate-50 via-white to-orange-50/70 p-5 sm:p-6">
                     <div className="flex items-start gap-4">
                       <span className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl shadow-sm ${
-                        session.status === 'Completed' ? 'bg-gradient-to-br from-emerald-400 to-teal-500 text-white' :
-                        session.status === 'Ready' ? 'bg-gradient-to-br from-orange-400 to-rose-500 text-white' :
+                        session.status === 'Ready' ? 'bg-gradient-to-br from-emerald-400 to-teal-500 text-white' :
                         'bg-gradient-to-br from-indigo-400 to-violet-500 text-white'
                       }`}>
-                        {session.status === 'Completed' ? <Trophy size={25} /> : session.status === 'Ready' ? <CheckCheck size={25} /> : <ClipboardList size={25} />}
+                        {session.status === 'Ready' ? <CheckCheck size={25} /> : <ClipboardList size={25} />}
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
@@ -1118,7 +1126,7 @@ export default function ExamSessions() {
                     </div>
                     <div className="rounded-2xl bg-emerald-50 p-3.5">
                       <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700"><Trophy size={15} /> Result</div>
-                      <p className="mt-2 text-base font-bold text-emerald-950">{scoreExists ? `${session.totalScore} pts` : 'Pending'}</p>
+                      <p className="mt-2 text-base font-bold text-emerald-950">{scoreExists ? `${session.totalScore} pts · latest` : 'Pending'}</p>
                     </div>
                     <div className="rounded-2xl bg-violet-50 p-3.5">
                       <div className="flex items-center gap-2 text-xs font-semibold text-violet-700"><CalendarDays size={15} /> Started</div>

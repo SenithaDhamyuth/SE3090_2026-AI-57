@@ -83,9 +83,21 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       if (response.statusCode == 401) {
+        String? diagnosticId;
+        try {
+          final responseBody = jsonDecode(response.body);
+          if (responseBody is Map<String, dynamic>) {
+            diagnosticId = responseBody['diagnosticId']?.toString();
+          }
+        } on FormatException {
+          diagnosticId = null;
+        }
         setState(() => _isLoading = false);
         if (!mounted) return;
-        await _showLoginDiagnostics(backendUrl);
+        await _showLoginDiagnostics(
+          backendUrl,
+          diagnosticId: diagnosticId,
+        );
         return;
       }
 
@@ -110,7 +122,10 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<void> _showLoginDiagnostics(Uri loginUrl) async {
+  Future<void> _showLoginDiagnostics(
+    Uri loginUrl, {
+    String? diagnosticId,
+  }) async {
     String? healthCheckResult;
     bool isChecking = false;
     final healthUrl = ApiConstants.endpoint('health');
@@ -137,11 +152,17 @@ class _LoginScreenState extends State<LoginScreen> {
                   'Email handling',
                   'Trimmed and converted to lowercase before sending',
                 ),
+                if (diagnosticId != null && diagnosticId.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  _diagnosticLine('Support reference', diagnosticId),
+                ],
                 const SizedBox(height: 12),
                 const Text(
-                  'Check that the student exists in the admin panel, the admin '
-                  'and app use this same API, and the password is the current '
-                  'student password (not an admin password).',
+                  'Check these in order:\n'
+                  '1. Confirm the student appears in Student Directory in the admin panel.\n'
+                  '2. Confirm that panel uses this same API host.\n'
+                  '3. Use the student password, not an admin password. If unsure, use Forgot Password and set a new one.\n'
+                  '4. If it still fails, give the support reference to the API administrator. Server logs can identify the rejection without logging the email or password.',
                 ),
                 const SizedBox(height: 12),
                 if (healthCheckResult != null)

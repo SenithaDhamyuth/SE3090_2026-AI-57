@@ -23,7 +23,7 @@ namespace IntelliPrep.API.Models
         public int DurationMinutes { get; set; }
 
         // ── Core assessment fields ──────────────────────────────────
-        /// <summary>"Pending" | "Ready" | "InProgress" | "Completed" | "Abandoned"</summary>
+        /// <summary>"Pending" | "PendingAdminApproval" | "Ready" | "InProgress" | "Abandoned". A submitted exam returns to Ready.</summary>
         [Required]
         public string Status { get; set; } = "Pending";
 

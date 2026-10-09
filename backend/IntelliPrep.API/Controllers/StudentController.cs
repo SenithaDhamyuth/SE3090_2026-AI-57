@@ -73,10 +73,10 @@ public class StudentController : ControllerBase
     // ─────────────────────────────────────────────────────────────────────────
     // GET /api/student/my-results
     //
-    // Called by Flutter "Progress" tab to fetch the student's completed exams.
+    // Called by Flutter "Progress" tab to fetch the student's submitted attempts.
     // Returns sessions where StudentId matches (from QR field) OR where the
-    // session GUID exists in the request.  Since Flutter submits anonymously,
-    // we return any Completed session associated with the student's JWT userId.
+    // session GUID exists in the request. The latest submitted attempt remains
+    // available even though the exam session returns to Ready for another try.
     // ─────────────────────────────────────────────────────────────────────────
     [HttpGet("my-results")]
     [Authorize(Roles = "Student")]
@@ -89,7 +89,7 @@ public class StudentController : ControllerBase
         // We match on StudentProfileId since that is stamped when session is created
         var sessions = await _db.ExamSessions
             .AsNoTracking()
-            .Where(s => s.Status == "Completed" && s.StudentProfileId == studentId)
+            .Where(s => s.EndTime != null && s.StudentProfileId == studentId)
             .OrderByDescending(s => s.EndTime)
             .Select(s => new
             {
@@ -123,7 +123,7 @@ public class StudentController : ControllerBase
             return new
             {
                 s.sessionGuid,
-                status = "Completed",
+                status = "Submitted",
                 s.subject,
                 s.title,
                 s.totalScore,
@@ -195,13 +195,6 @@ public class StudentController : ControllerBase
                 status  = session.Status
             });
 
-        if (session.Status == "Completed")
-            return BadRequest(new
-            {
-                message = "This exam session has already been completed.",
-                status  = session.Status
-            });
-
         if (session.Status == "Abandoned")
             return StatusCode(410, new
             {
@@ -243,7 +236,8 @@ public class StudentController : ControllerBase
         var normalizedAccessCode = accessCode.Trim();
         var startedAt = DateTime.UtcNow;
         await _db.ExamSessions
-            .Where(s => s.SessionId == normalizedAccessCode && s.Status == "Ready")
+            .Where(s => s.SessionId == normalizedAccessCode
+                && (s.Status == "Ready" || s.Status == "Completed"))
             .ExecuteUpdateAsync(
                 updates => updates
                     .SetProperty(s => s.DurationMinutes, s => s.DurationMinutes > 0 ? s.DurationMinutes : 30)
@@ -259,7 +253,7 @@ public class StudentController : ControllerBase
         if (session is null)
             return NotFound(new { message = "No exam session was found for this access code." });
 
-        if (session.Status is "Completed" or "Abandoned")
+        if (session.Status == "Abandoned")
             return BadRequest(new { message = "This exam session is no longer available.", status = session.Status });
 
         if (session.Status != "InProgress" || !session.IsTimerLocked)
@@ -336,24 +330,15 @@ public class StudentController : ControllerBase
         if (session == null)
             return NotFound(new { message = $"No exam session found for GUID '{dto.SessionGuid}'." });
 
-        if (session.Status == "Completed")
-        {
-            _logger.LogInformation(
-                "[StudentController] Session {Guid} already submitted — returning idempotent OK.",
-                dto.SessionGuid);
-            return Ok(new
-            {
-                message    = "Exam already submitted (idempotent).",
-                sessionId  = session.Id,
-                totalScore = session.TotalScore,
-                status     = session.Status
-            });
-        }
+        if (session.Status != "InProgress" || !session.IsTimerLocked)
+            return Conflict(new { message = "There is no active attempt to submit.", status = session.Status });
 
-        // Persist answers and mark as Completed
+        var previousSessionScore = session.EndTime.HasValue ? session.TotalScore : 0;
+
+        // Save this as the latest result and make the same QR available again.
         session.AnswersJson   = dto.AnswersJson ?? "[]";
         session.TotalScore    = dto.TotalScore;
-        session.Status        = "Completed";
+        session.Status        = "Ready";
         session.EndTime       = DateTime.UtcNow;
         session.IsTimerLocked = false;
 
@@ -365,7 +350,7 @@ public class StudentController : ControllerBase
 
             if (profile != null)
             {
-                profile.TotalPoints += dto.TotalScore;
+                profile.TotalPoints += dto.TotalScore - previousSessionScore;
                 _logger.LogInformation(
                     "[StudentController] StudentProfile {ProfileId} TotalPoints → {Points}.",
                     profile.Id, profile.TotalPoints);
@@ -487,10 +472,10 @@ public class AdminMarksController : ControllerBase
     {
         _logger.LogInformation("[AdminMarksController] Fetching all completed exam sessions.");
 
-        // Load completed sessions with student info
+        // Load the latest submitted result for each session.
         var rawSessions = await _db.ExamSessions
             .AsNoTracking()
-            .Where(s => s.Status == "Completed" && (!sessionId.HasValue || s.Id == sessionId.Value))
+            .Where(s => s.EndTime != null && (!sessionId.HasValue || s.Id == sessionId.Value))
             .OrderByDescending(s => s.EndTime)
             .Select(s => new
             {
