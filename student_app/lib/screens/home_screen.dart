@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../api_constants.dart';
 import '../models/cached_exam.dart';
@@ -571,135 +572,177 @@ class _StudyPlanTab extends StatefulWidget {
 }
 
 class _StudyPlanTabState extends State<_StudyPlanTab> {
-  late Future<Map<String, dynamic>> _planFuture;
+  bool _isLoading = true;
+  String? _errorMsg;
+  List<_StudyDay> _plan = [];
 
   @override
   void initState() {
     super.initState();
-    _planFuture = _fetchStudyPlan();
+    _loadPlan();
   }
 
-  Future<Map<String, dynamic>> _fetchStudyPlan() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('auth_token') ?? '';
-    final url = ApiConstants.endpoint('api/student/my-plan');
-    final response = await http.get(url, headers: {
-      'Authorization': 'Bearer $token',
+  Future<void> _loadPlan() async {
+    setState(() {
+      _isLoading = true;
+      _errorMsg = null;
     });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+      final url = ApiConstants.endpoint('api/student/my-plan');
+      final response = await http.get(url, headers: {
+        'Authorization': 'Bearer $token',
+      });
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      final scheduleList = data['schedule'] as List<dynamic>;
-      final days = scheduleList.map((e) => _StudyDay.fromJson(e)).toList();
-      return {
-        'days': days,
-      };
-    } else if (response.statusCode == 404) {
-      throw Exception('Waiting for admin approval.');
-    } else {
-      throw Exception('Failed to load study plan.');
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final scheduleList = data['schedule'] as List<dynamic>;
+        final days = scheduleList.map((e) => _StudyDay.fromJson(e)).toList();
+        setState(() {
+          _plan = days;
+        });
+      } else if (response.statusCode == 404) {
+        setState(() => _errorMsg = 'Waiting for admin to publish your plan.');
+      } else {
+        setState(() => _errorMsg = 'Failed to load study plan.');
+      }
+    } catch (_) {
+      if (mounted) setState(() => _errorMsg = 'Failed to load study plan.');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  /// Called by the [RefreshIndicator]; returns a Future so the spinner stays
+  /// until the load is complete.
+  Future<void> _refresh() async {
+    setState(() {
+      _isLoading = true;
+      _errorMsg = null;
+    });
+    await _loadPlan();
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<Map<String, dynamic>>(
-      future: _planFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator(color: Colors.orange));
-        }
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: Colors.orange),
+      );
+    }
 
-        if (snapshot.hasError) {
-          final isApproval = snapshot.error.toString().contains('approval');
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+    if (_errorMsg != null) {
+      final isWaiting = _errorMsg!.contains('publish') || _errorMsg!.contains('admin');
+      return RefreshIndicator(
+        onRefresh: _refresh,
+        color: Colors.orange,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            SizedBox(
+              height: MediaQuery.of(context).size.height * 0.7,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        isWaiting
+                            ? Icons.hourglass_empty_rounded
+                            : Icons.error_outline_rounded,
+                        size: 64,
+                        color: isWaiting ? Colors.orange : Colors.red,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        _errorMsg!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          color: Colors.black87,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        isWaiting
+                            ? 'Your AI-generated plan is waiting for a tutor to review and approve it.'
+                            : 'Please check your internet connection and try again.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.grey),
+                      ),
+                      const SizedBox(height: 24),
+                      FilledButton.icon(
+                        onPressed: _loadPlan,
+                        style: FilledButton.styleFrom(
+                            backgroundColor: Colors.orange),
+                        icon: const Icon(Icons.refresh_rounded, size: 18),
+                        label: const Text('Refresh'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _refresh,
+      color: Colors.orange,
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          // ── Header ────────────────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.orange, Color(0xFFE65100)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(isApproval ? Icons.hourglass_empty_rounded : Icons.error_outline_rounded,
-                      size: 64, color: isApproval ? Colors.orange : Colors.red),
-                  const SizedBox(height: 16),
-                  Text(
-                    snapshot.error.toString().replaceAll('Exception: ', ''),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 16, color: Colors.black87, fontWeight: FontWeight.bold),
+                  const Text(
+                    'AI-Generated Study Plan',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    isApproval 
-                      ? 'Your AI-generated plan is waiting for a tutor to review and approve it.'
-                      : 'Please check your internet connection and try again.',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-                  const SizedBox(height: 24),
-                  FilledButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        _planFuture = _fetchStudyPlan();
-                      });
-                    },
-                    style: FilledButton.styleFrom(backgroundColor: Colors.orange),
-                    icon: const Icon(Icons.refresh_rounded, size: 18),
-                    label: const Text('Refresh'),
-                  )
+                  const SizedBox(height: 4),
+                  const SizedBox(height: 14),
                 ],
               ),
             ),
-          );
-        }
-
-        final data = snapshot.data!;
-        final plan = data['days'] as List<_StudyDay>;
-
-        return CustomScrollView(
-          slivers: [
-            // ── Header ────────────────────────────────────────────────────
-            SliverToBoxAdapter(
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Colors.orange, Color(0xFFE65100)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'AI-Generated Study Plan',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const SizedBox(height: 14),
-                  ],
-                ),
-              ),
+          ),
+          // ── Timeline list ──────────────────────────────────────────────
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final day = _plan[index];
+                final isLast = index == _plan.length - 1;
+                return _StudyDayTile(
+                    day: day, dayNumber: index + 1, isLast: isLast);
+              },
+              childCount: _plan.length,
             ),
-            // ── Timeline list ──────────────────────────────────────────────
-            SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final day = plan[index];
-                  final isLast = index == plan.length - 1;
-                  return _StudyDayTile(day: day, dayNumber: index + 1, isLast: isLast);
-                },
-                childCount: plan.length,
-              ),
-            ),
-            // ── Footer ────────────────────────────────────────────────────
-            const SliverToBoxAdapter(child: SizedBox(height: 80)),
-          ],
-        );
-      },
+          ),
+          // ── Footer ────────────────────────────────────────────────────
+          const SliverToBoxAdapter(child: SizedBox(height: 80)),
+        ],
+      ),
     );
   }
 }
@@ -852,12 +895,22 @@ class _RemoteResult {
   });
 
   factory _RemoteResult.fromJson(Map<String, dynamic> json) {
-    final subject = (json['subject'] ?? json['Subject'] ?? 'A/L ICT').toString();
+    final subject = (json['subject'] ??
+            json['Subject'] ??
+            json['title'] ??
+            json['Title'] ??
+            'Exam')
+        .toString();
     return _RemoteResult(
       sessionGuid: (json['sessionGuid'] ?? json['SessionGuid'] ?? '').toString(),
-      status: (json['status'] ?? json['Status'] ?? 'Completed').toString(),
+      status: (json['status'] ?? json['Status'] ?? '').toString(),
       subject: subject,
-      title: (json['title'] ?? json['Title'] ?? subject).toString(),
+      title: (json['title'] ??
+              json['Title'] ??
+              json['subject'] ??
+              json['Subject'] ??
+              'Exam')
+          .toString(),
       totalScore: _readInt(json['totalScore'] ?? json['TotalScore']),
       totalQuestions: _readInt(json['totalQuestions'] ?? json['TotalQuestions']),
       endTime: (json['endTime'] ?? json['EndTime'])?.toString(),
@@ -890,6 +943,7 @@ class _ProgressTab extends StatefulWidget {
 class _ProgressTabState extends State<_ProgressTab> {
   List<_RemoteResult> _remoteResults = [];
   bool _loadingRemote = true;
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -912,8 +966,6 @@ class _ProgressTabState extends State<_ProgressTab> {
         'Accept': 'application/json',
       }).timeout(const Duration(seconds: 10));
 
-      print('[ProgressTab] GET /api/student/my-results → ${response.statusCode}');
-
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
         final dynamic rawResults = decoded is List
@@ -930,11 +982,9 @@ class _ProgressTabState extends State<_ProgressTab> {
           _loadingRemote = false;
         });
       } else {
-        print('[ProgressTab] Error response: ${response.body}');
         setState(() { _loadingRemote = false; });
       }
-    } catch (e, stack) {
-      print('[ProgressTab] fetchRemoteResults error: $e\n$stack');
+    } catch (e) {
       setState(() { _loadingRemote = false; });
     }
   }
@@ -947,6 +997,8 @@ class _ProgressTabState extends State<_ProgressTab> {
   @override
   Widget build(BuildContext context) {
     final isLoading = widget.isLoading || _loadingRemote;
+    final filteredResults = _remoteResults.where((r) => 
+        r.title.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
 
     return RefreshIndicator(
       color: Colors.orange,
@@ -961,21 +1013,44 @@ class _ProgressTabState extends State<_ProgressTab> {
             ),
           ),
 
-          // ── Section label ────────────────────────────────────────────
+          // ── Section label & Search ───────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-              child: Row(
+              child: Column(
                 children: [
-                  const _SectionHeader(
-                    icon: Icons.history_rounded,
-                    title: 'My Results',
-                    color: Colors.orange,
+                  Row(
+                    children: [
+                      const _SectionHeader(
+                        icon: Icons.history_rounded,
+                        title: 'My Results',
+                        color: Colors.orange,
+                      ),
+                      const Spacer(),
+                      Text(
+                        'Pull to refresh',
+                        style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
+                      ),
+                    ],
                   ),
-                  const Spacer(),
-                  Text(
-                    'Pull to refresh',
-                    style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
+                  const SizedBox(height: 12),
+                  TextField(
+                    onChanged: (val) => setState(() => _searchQuery = val),
+                    decoration: InputDecoration(
+                      hintText: 'Search exams by title...',
+                      prefixIcon: const Icon(Icons.search, color: Colors.orange),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                    ),
                   ),
                 ],
               ),
@@ -1016,8 +1091,8 @@ class _ProgressTabState extends State<_ProgressTab> {
             // Live backend results
             SliverList(
               delegate: SliverChildBuilderDelegate(
-                (_, i) => _RemoteResultTile(result: _remoteResults[i]),
-                childCount: _remoteResults.length,
+                (_, i) => _RemoteResultTile(result: filteredResults[i]),
+                childCount: filteredResults.length,
               ),
             )
           else
@@ -1041,14 +1116,37 @@ class _RemoteResultTile extends StatelessWidget {
   const _RemoteResultTile({required this.result});
   final _RemoteResult result;
 
+  bool get _isSubmitted =>
+      result.status.toLowerCase() == 'completed' ||
+      result.status.toLowerCase() == 'submitted';
+
   double get _pct => result.totalQuestions == 0
       ? 0
       : result.totalScore / result.totalQuestions;
 
   Color get _scoreColor {
-    if (_pct >= 0.75) return Colors.green;
-    if (_pct >= 0.50) return Colors.orange;
-    return Colors.red;
+    if (!_isSubmitted) return Colors.orange;
+    return _pct >= 0.5 ? Colors.green : Colors.red;
+  }
+  
+  String get _statusLabel {
+    if (!_isSubmitted) return 'In Progress';
+    return _pct >= 0.5 ? 'Passed' : 'Failed';
+  }
+
+  String get _formattedEndTime {
+    final rawDate = result.endTime;
+    if (rawDate == null || rawDate.trim().isEmpty) return 'Submitted';
+
+    var normalized = rawDate.trim();
+    final hasUtcSuffix = normalized.endsWith(' UTC');
+    if (hasUtcSuffix) normalized = normalized.substring(0, normalized.length - 4);
+    normalized = normalized.replaceFirst(' ', 'T');
+    if (hasUtcSuffix && !normalized.endsWith('Z')) normalized = '${normalized}Z';
+
+    final date = DateTime.tryParse(normalized);
+    if (date == null) return rawDate;
+    return DateFormat('MMM dd, yyyy • hh:mm a').format(date.toLocal());
   }
 
   @override
@@ -1068,122 +1166,129 @@ class _RemoteResultTile extends StatelessWidget {
               title: result.title,
               score: result.totalScore,
               totalQuestions: result.totalQuestions,
-              date: result.endTime ?? 'Unknown',
+              date: _formattedEndTime,
               questionsJson: result.questionsJson ?? '[]',
               answersJson: result.answersJson ?? '{}',
             ),
           ),
         );
       },
-        child: Container(
-          margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.grey.shade200),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withAlpha(6),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: Colors.orange.withAlpha(20),
-              borderRadius: BorderRadius.circular(12),
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.grey.shade100),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(8),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
             ),
-            child: const Icon(Icons.laptop_mac_rounded, color: Colors.orange, size: 22),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  result.title,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1A1A1A),
+          ],
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 54,
+              height: 54,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  CircularProgressIndicator(
+                    value: result.totalQuestions == 0 ? 0 : _pct,
+                    backgroundColor: _scoreColor.withAlpha(20),
+                    valueColor: AlwaysStoppedAnimation<Color>(_scoreColor),
+                    strokeWidth: 4.5,
+                    strokeCap: StrokeCap.round,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 3),
-                Row(
-                  children: [
-                    Text(
-                      result.subject,
+                  Center(
+                    child: Text(
+                      pctLabel,
                       style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.grey.shade500,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Container(width: 3, height: 3, decoration: BoxDecoration(color: Colors.grey.shade400, shape: BoxShape.circle)),
-                    const SizedBox(width: 6),
-                    Text(
-                      result.endTime ?? 'Submitted',
-                      style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: _scoreColor.withAlpha(25),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: _scoreColor.withAlpha(60)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.emoji_events_rounded, color: _scoreColor, size: 11),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${result.totalScore}/${result.totalQuestions}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
                         color: _scoreColor,
                       ),
                     ),
-                  ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    result.title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1A1A1A),
+                      letterSpacing: -0.2,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          result.subject,
+                          style: TextStyle(fontSize: 10, color: Colors.grey.shade600, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(Icons.calendar_today_rounded, size: 10, color: Colors.grey.shade400),
+                      const SizedBox(width: 4),
+                      Text(
+                        _formattedEndTime,
+                        style: TextStyle(fontSize: 11, color: Colors.grey.shade500, fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  '${result.totalScore}/${result.totalQuestions}',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.black87,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                pctLabel,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: _scoreColor,
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _scoreColor.withAlpha(20),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: _scoreColor.withAlpha(50)),
+                  ),
+                  child: Text(
+                    _statusLabel,
+                    style: TextStyle(fontSize: 10, color: _scoreColor, fontWeight: FontWeight.w800, letterSpacing: 0.3),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                result.status,
-                style: const TextStyle(fontSize: 9, color: Colors.green, fontWeight: FontWeight.w700),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
-    ));
+    );
   }
 }
 
@@ -1212,9 +1317,21 @@ class _ProgressHeader extends StatelessWidget {
     return scored.map((e) => e.totalScore.toDouble()).reduce((a, b) => a + b) / scored.length;
   }
 
-  int get _passCount => remoteResults.isNotEmpty
-      ? remoteResults.where((r) => r.totalQuestions > 0 && r.totalScore / r.totalQuestions >= 0.5).length
-      : cachedExams.where((e) => e.status == 'submitted').length;
+  int get _passCount {
+    if (remoteResults.isNotEmpty) {
+      return remoteResults.where((r) => r.totalQuestions > 0 && r.totalScore / r.totalQuestions >= 0.5).length;
+    }
+    // For cached exams, calculate actual pass rate based on score
+    return cachedExams.where((e) {
+      if (e.status != 'submitted') return false;
+      int qCount = 0;
+      try {
+        final questions = jsonDecode(e.questionsJson);
+        if (questions is List) qCount = questions.length;
+      } catch (_) {}
+      return qCount > 0 && e.totalScore / qCount >= 0.5;
+    }).length;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1319,40 +1436,29 @@ class _SessionTile extends StatelessWidget {
     }
   }
 
+  bool get _isPassed =>
+      _isCompleted &&
+      (_totalQuestions == 0 ? 0 : exam.totalScore / _totalQuestions) >= 0.5;
+
   Color get _statusColor {
-    switch (exam.status) {
-      case 'submitted':
-      case 'completed':
-        return Colors.green;
-      case 'in_progress':
-        return Colors.orange;
-      default:
-        return Colors.grey;
-    }
+    if (!_isCompleted) return Colors.orange;
+    return _isPassed ? Colors.green : Colors.red;
   }
 
   String get _statusLabel {
-    switch (exam.status) {
-      case 'submitted':
-      case 'completed':
-        return 'Completed';
-      case 'in_progress':
-        return 'In Progress';
-      default:
-        return 'Pending';
-    }
+    if (!_isCompleted) return 'In Progress';
+    return _isPassed ? 'Passed' : 'Failed';
   }
 
   IconData get _statusIcon {
-    switch (exam.status) {
-      case 'submitted':
-      case 'completed':
-        return Icons.check_circle_rounded;
-      case 'in_progress':
-        return Icons.timelapse_rounded;
-      default:
-        return Icons.pending_rounded;
-    }
+    if (!_isCompleted) return Icons.timelapse_rounded;
+    return _isPassed ? Icons.check_circle_rounded : Icons.cancel_rounded;
+  }
+
+  String get _formattedCreatedAt {
+    final date = DateTime.tryParse(exam.createdAt);
+    if (date == null) return exam.createdAt;
+    return DateFormat('MMM dd, yyyy • hh:mm a').format(date.toLocal());
   }
 
   @override
@@ -1370,7 +1476,7 @@ class _SessionTile extends StatelessWidget {
                     title: exam.subject,
                     score: exam.totalScore,
                     totalQuestions: _totalQuestions,
-                    date: exam.createdAt,
+                    date: _formattedCreatedAt,
                     questionsJson: exam.questionsJson,
                     answersJson: exam.answersJson,
                   ),
@@ -1421,7 +1527,7 @@ class _SessionTile extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  exam.createdAt,
+                  _formattedCreatedAt,
                   style: TextStyle(
                     fontSize: 10,
                     color: Colors.grey.shade400,

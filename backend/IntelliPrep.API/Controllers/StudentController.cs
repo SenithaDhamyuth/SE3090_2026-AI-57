@@ -39,16 +39,16 @@ public class StudentController : ControllerBase
             return Unauthorized(new { message = "Invalid student token." });
         }
 
-        // Fetch the latest approved study plan for this student
+        // Fetch the latest approved AND published study plan for this student
         var plan = await _db.StudyPlans
             .AsNoTracking()
-            .Where(p => p.IsApproved && (p.StudentId == studentId || p.StudentId == 0))
+            .Where(p => p.IsApproved && p.IsPublished && (p.StudentId == studentId || p.StudentId == 0))
             .OrderByDescending(p => p.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
 
         if (plan == null)
         {
-            return NotFound(new { message = "No approved study plan found. Waiting for admin approval." });
+            return NotFound(new { message = "No published study plan found. Please wait for your admin to publish a plan." });
         }
 
         try
@@ -305,9 +305,7 @@ public class StudentController : ControllerBase
     // ─────────────────────────────────────────────────────────────────────────
     // PUT /api/student/profile
     //
-    // Allows an authenticated student to update their FullName and Password.
-    // The new password is hashed with BCrypt before being persisted.
-    // No database schema changes required — updates the existing User row.
+    // Allows an authenticated student to update their display name.
     // ─────────────────────────────────────────────────────────────────────────
     [HttpPut("profile")]
     [Authorize(Roles = "Student")]
@@ -333,8 +331,7 @@ public class StudentController : ControllerBase
             return NotFound(new { message = "Student account not found." });
 
         // Update fields
-        user.FullName     = request.FullName.Trim();
-        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+        user.FullName = request.FullName.Trim();
 
         await _db.SaveChangesAsync(cancellationToken);
 
@@ -367,16 +364,12 @@ public class StudentSubmitDto
 /// <summary>Request body for PUT /api/student/profile.</summary>
 public class UpdateProfileRequest
 {
-    /// <summary>New display name for the student.</summary>
+    /// <summary>Updated display name for the student.</summary>
     [System.ComponentModel.DataAnnotations.Required]
     [System.ComponentModel.DataAnnotations.MinLength(2, ErrorMessage = "Full name must be at least 2 characters.")]
     [System.ComponentModel.DataAnnotations.MaxLength(100)]
     public string FullName { get; set; } = string.Empty;
 
-    /// <summary>New plain-text password. Must be at least 6 characters.</summary>
-    [System.ComponentModel.DataAnnotations.Required]
-    [System.ComponentModel.DataAnnotations.MinLength(6, ErrorMessage = "Password must be at least 6 characters.")]
-    public string NewPassword { get; set; } = string.Empty;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -500,4 +493,3 @@ public class AdminMarksController : ControllerBase
         });
     }
 }
-

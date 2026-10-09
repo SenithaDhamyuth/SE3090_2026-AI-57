@@ -40,6 +40,9 @@ namespace IntelliPrep.API.Models
         public DateTime? ApprovedAt { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        /// <summary>Set to true by admin to publish the plan to the student's mobile app. Only ONE plan per student can be published at a time.</summary>
+        public bool IsPublished { get; set; } = false;
     }
 }
 

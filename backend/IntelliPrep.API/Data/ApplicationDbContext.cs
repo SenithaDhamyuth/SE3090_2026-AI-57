@@ -10,6 +10,7 @@ namespace IntelliPrep.API.Data
         }
 
         public DbSet<User> Users { get; set; }
+        public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
         public DbSet<ExamSession> ExamSessions { get; set; }
         public DbSet<StudentProfile> StudentProfiles { get; set; }
         public DbSet<Question> Questions { get; set; }
@@ -22,6 +23,15 @@ namespace IntelliPrep.API.Data
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
+
+            modelBuilder.Entity<PasswordResetToken>()
+                .HasOne(token => token.User)
+                .WithMany()
+                .HasForeignKey(token => token.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<PasswordResetToken>()
+                .HasIndex(token => new { token.UserId, token.CreatedAt });
 
             // AI Syllabus Limits rigorously mapped to the A/L ICT (Grade 12 & 13) Teachers' Guide
             modelBuilder.Entity<SyllabusLimit>().HasData(

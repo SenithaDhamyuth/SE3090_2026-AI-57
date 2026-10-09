@@ -1,16 +1,17 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+
 import '../api_constants.dart';
 
-/// ProfileScreen — lets an authenticated student update their display name
-/// and password via PUT /api/student/profile.
-///
-/// Matches the app's orange-on-white design language:
-///   • Orange AppBar
-///   • White card form with rounded inputs
-///   • FilledButton in orange for the save action
+/// ProfileScreen — lets an authenticated student update their display name,
+/// phone number, address, college, and avatar.
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -19,17 +20,15 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final _formKey       = GlobalKey<FormState>();
-  final _nameCtrl      = TextEditingController();
-  final _passwordCtrl  = TextEditingController();
-  final _confirmCtrl   = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+  final _nameCtrl    = TextEditingController();
+  final _phoneCtrl   = TextEditingController();
+  final _addressCtrl = TextEditingController();
+  final _collegeCtrl = TextEditingController();
 
-  bool _obscurePassword = true;
-  bool _obscureConfirm  = true;
-  bool _isLoading       = false;
-
-  /// Cached email shown in the header (read-only — cannot be changed here).
-  String _email = '';
+  bool    _isLoading       = false;
+  String  _email           = '';
+  String? _profileImageUrl;
 
   @override
   void initState() {
@@ -40,114 +39,197 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void dispose() {
     _nameCtrl.dispose();
-    _passwordCtrl.dispose();
-    _confirmCtrl.dispose();
+    _phoneCtrl.dispose();
+    _addressCtrl.dispose();
+    _collegeCtrl.dispose();
     super.dispose();
   }
 
-  // ── Load stored student info ────────────────────────────────────────────
-
+  /// Loads locally-stored prefs first (fast), then fetches extended profile
+  /// details from the backend if a student_id is available.
   Future<void> _loadCurrentProfile() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
-      _email = prefs.getString('student_email') ?? '';
-      // Pre-fill name from stored value if available
-      final savedName = prefs.getString('student_name') ?? '';
-      _nameCtrl.text = savedName;
+      _email           = prefs.getString('student_email') ?? '';
+      _nameCtrl.text   = prefs.getString('student_name')  ?? '';
+      _profileImageUrl = prefs.getString('profileImageUrl');
     });
+
+    // Optionally fetch extra fields from the backend
+    final userId = prefs.getString('student_id');
+    if (userId == null || userId.isEmpty) return;
+
+    try {
+      final token = prefs.getString('auth_token') ?? '';
+      final response = await http.get(
+        ApiConstants.endpoint('api/studentprofile/$userId'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 15));
+
+      if (!mounted) return;
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        setState(() {
+          _phoneCtrl.text   = (data['phoneNumber'] as String?) ?? '';
+          _addressCtrl.text = (data['address']     as String?) ?? '';
+          _collegeCtrl.text = (data['college']     as String?) ?? '';
+        });
+      }
+    } on TimeoutException {
+      // Silently ignore — fields remain blank, user can fill them in
+    } catch (_) {
+      // Silently ignore
+    }
   }
 
-  // ── Submit handler ──────────────────────────────────────────────────────
-
-  Future<void> _handleSave() async {
-    if (!_formKey.currentState!.validate()) return;
-
+  /// Picks an image from the gallery, optionally compresses it, then uploads
+  /// it to the profile-picture endpoint. Kept exactly as-is from the original.
+  Future<void> _pickAndUploadImage() async {
+    if (_isLoading) return;
     setState(() => _isLoading = true);
 
     try {
+      final pickedFile = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+      );
+      if (pickedFile == null) return;
+
+      final file = File(pickedFile.path);
+      var imageToUpload = file;
+      if (await file.length() > 2 * 1024 * 1024) {
+        final targetPath = '${file.absolute.parent.path}/temp_compressed.jpg';
+        final compressed = await FlutterImageCompress.compressAndGetFile(
+          file.absolute.path,
+          targetPath,
+          quality: 70,
+        );
+        if (compressed != null) imageToUpload = File(compressed.path);
+      }
+
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('auth_token') ?? '';
+      if (token.isEmpty) throw StateError('Authentication is required.');
 
-      final response = await http
-          .put(
-            ApiConstants.endpoint('api/student/profile'),
-            headers: {
-              'Content-Type':  'application/json',
-              'Accept':        'application/json',
-              'Authorization': 'Bearer $token',
-            },
-            body: jsonEncode({
-              'fullName':    _nameCtrl.text.trim(),
-              'newPassword': _passwordCtrl.text,
-            }),
-          )
-          .timeout(const Duration(seconds: 15));
+      var request = http.MultipartRequest(
+        'POST',
+        ApiConstants.endpoint('api/studentprofile/upload-picture'),
+      );
+      request.headers['Authorization'] = 'Bearer $token';
+      request.files.add(
+        await http.MultipartFile.fromPath('file', imageToUpload.path),
+      );
 
-      if (!mounted) return;
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
-        // Persist updated name locally so the HomeScreen greets correctly
-        await prefs.setString('student_name', _nameCtrl.text.trim());
-
-        // Clear the password fields on success
-        _passwordCtrl.clear();
-        _confirmCtrl.clear();
-
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final url = data['profileImageUrl'] as String?;
+        if (url == null || url.isEmpty) {
+          throw const FormatException(
+            'Upload response did not include an image URL.',
+          );
+        }
+        final fullUrl = Uri.parse(url).hasScheme
+            ? url
+            : '${ApiConstants.baseUrl}$url';
+        await prefs.setString('profileImageUrl', fullUrl);
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Row(
-              children: [
-                Icon(Icons.check_circle_rounded, color: Colors.white, size: 18),
-                SizedBox(width: 10),
-                Text(
-                  'Profile updated successfully!',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-            backgroundColor: Colors.green.shade600,
-            behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            margin: const EdgeInsets.all(16),
-            duration: const Duration(seconds: 3),
-          ),
-        );
+        setState(() => _profileImageUrl = fullUrl);
+        _showSnack('Profile picture updated!', isError: false);
       } else {
-        final body = jsonDecode(response.body) as Map<String, dynamic>?;
-        final msg  = body?['message'] as String? ?? 'Update failed.';
-        _showError(msg);
+        _showSnack('Failed to upload picture. Please try again.');
       }
-    } catch (e) {
-      if (!mounted) return;
-      final isTimeout = e.toString().contains('TimeoutException');
-      _showError(
-        isTimeout
-            ? 'Request timed out. Check your connection and try again.'
-            : 'Could not update profile. Please try again.',
-      );
+    } catch (_) {
+      _showSnack('Could not upload picture. Please try again.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  void _showError(String message) {
+  /// Sends updated profile fields to the backend and persists the name locally.
+  Future<void> _handleSave() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isLoading = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+      if (token.isEmpty) throw StateError('Authentication is required.');
+
+      final response = await http.put(
+        ApiConstants.endpoint('api/studentprofile/update-details'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'fullName':    _nameCtrl.text.trim(),
+          'phoneNumber': _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
+          'address':     _addressCtrl.text.trim().isEmpty ? null : _addressCtrl.text.trim(),
+          'college':     _collegeCtrl.text.trim().isEmpty ? null : _collegeCtrl.text.trim(),
+        }),
+      ).timeout(const Duration(seconds: 15));
+
+      if (!mounted) return;
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        await prefs.setString('student_name', _nameCtrl.text.trim());
+        _showSnack('Profile updated successfully!', isError: false);
+      } else {
+        final decoded = jsonDecode(response.body);
+        final body = decoded is Map<String, dynamic> ? decoded : null;
+        _showSnack(body?['message'] as String? ?? 'Update failed.');
+      }
+    } on TimeoutException {
+      _showSnack('Request timed out. Please check your connection.');
+    } catch (e) {
+      _showSnack('Could not update profile. Please try again.');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _showSnack(String message, {bool isError = true}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.red.shade600,
+        backgroundColor: isError ? Colors.red.shade600 : Colors.green.shade600,
         behavior: SnackBarBehavior.floating,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.all(16),
       ),
     );
   }
 
-  // ── Build ───────────────────────────────────────────────────────────────
+  // ── Shared field decoration ─────────────────────────────────────────────
+  InputDecoration _fieldDecoration({
+    required String label,
+    required IconData icon,
+  }) {
+    return InputDecoration(
+      labelText: label,
+      prefixIcon: Icon(icon),
+      filled: true,
+      fillColor: const Color(0xFFFAFAFA),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(
+          color: Colors.orange,
+          width: 1.5,
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -156,14 +238,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       appBar: AppBar(
         backgroundColor: Colors.orange,
         foregroundColor: Colors.white,
-        elevation: 0,
         title: const Text(
           'My Profile',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
-          onPressed: () => Navigator.of(context).pop(),
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
       ),
       body: SafeArea(
@@ -174,133 +251,145 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // ── Avatar / email header ────────────────────────────────
-                _ProfileHeader(email: _email),
+                // ── Avatar / header ────────────────────────────────────────
+                _ProfileHeader(
+                  email: _email,
+                  imageUrl: _profileImageUrl,
+                  onTapAvatar: _pickAndUploadImage,
+                ),
                 const SizedBox(height: 28),
 
-                // ── Form card ─────────────────────────────────────────────
+                // ── Editable fields card ───────────────────────────────────
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.grey.shade100),
+                    border: Border.all(color: Colors.grey.shade200),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withAlpha(12),
-                        blurRadius: 16,
-                        offset: const Offset(0, 4),
+                        color: Colors.black.withAlpha(8),
+                        blurRadius: 18,
+                        offset: const Offset(0, 6),
                       ),
                     ],
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // ── Section: Account Details ────────────────────
-                        _SectionLabel(
-                          icon: Icons.person_outline_rounded,
-                          label: 'Account Details',
+                  padding: const EdgeInsets.all(22),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const _SectionLabel(
+                        icon: Icons.manage_accounts_outlined,
+                        label: 'Account Details',
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        'Update the personal information on your account.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade600,
                         ),
-                        const SizedBox(height: 16),
+                      ),
+                      const SizedBox(height: 22),
 
-                        // Full Name
-                        _buildInputField(
-                          controller: _nameCtrl,
+                      // Full Name ──────────────────────────────────────────
+                      TextFormField(
+                        controller: _nameCtrl,
+                        textCapitalization: TextCapitalization.words,
+                        decoration: _fieldDecoration(
                           label: 'Full Name',
-                          hint:  'e.g. Amal Perera',
-                          icon:  Icons.badge_outlined,
-                          textInputAction: TextInputAction.next,
-                          validator: (v) {
-                            if (v == null || v.trim().isEmpty) {
-                              return 'Full name is required.';
-                            }
-                            if (v.trim().length < 2) {
-                              return 'Full name must be at least 2 characters.';
-                            }
-                            return null;
-                          },
+                          icon: Icons.person_outline_rounded,
                         ),
-                        const SizedBox(height: 14),
+                        validator: (v) => (v == null || v.trim().isEmpty)
+                            ? 'Name is required'
+                            : null,
+                      ),
+                      const SizedBox(height: 16),
 
-                        // Email (read-only)
-                        _buildInputField(
-                          initialValue: _email,
-                          label:    'Email Address',
-                          hint:     'your@email.com',
-                          icon:     Icons.email_outlined,
-                          readOnly: true,
+                      // Email (read-only) ───────────────────────────────────
+                      TextFormField(
+                        initialValue: _email,
+                        readOnly: true,
+                        enableInteractiveSelection: false,
+                        style: TextStyle(color: Colors.grey.shade600),
+                        decoration: InputDecoration(
+                          labelText: 'Email Address',
+                          prefixIcon: Icon(
+                            Icons.mail_outline_rounded,
+                            color: Colors.grey.shade500,
+                          ),
+                          suffixIcon: Icon(
+                            Icons.lock_outline_rounded,
+                            size: 18,
+                            color: Colors.grey.shade500,
+                          ),
+                          filled: true,
+                          fillColor: const Color(0xFFF1F2F4),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: BorderSide(color: Colors.grey.shade200),
+                          ),
                         ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Your email address cannot be changed here.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade500,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
 
-                        const SizedBox(height: 28),
-                        _SectionLabel(
-                          icon: Icons.lock_outline_rounded,
-                          label: 'Change Password',
+                      // Phone Number ───────────────────────────────────────
+                      TextFormField(
+                        controller: _phoneCtrl,
+                        keyboardType: TextInputType.phone,
+                        decoration: _fieldDecoration(
+                          label: 'Phone Number',
+                          icon: Icons.phone_outlined,
                         ),
-                        const SizedBox(height: 16),
+                      ),
+                      const SizedBox(height: 16),
 
-                        // New Password
-                        _buildPasswordField(
-                          controller:   _passwordCtrl,
-                          label:        'New Password',
-                          obscure:      _obscurePassword,
-                          onToggle:     () => setState(
-                              () => _obscurePassword = !_obscurePassword),
-                          textInputAction: TextInputAction.next,
-                          validator: (v) {
-                            if (v == null || v.isEmpty) {
-                              return 'Password is required.';
-                            }
-                            if (v.length < 6) {
-                              return 'Password must be at least 6 characters.';
-                            }
-                            return null;
-                          },
+                      // Address ────────────────────────────────────────────
+                      TextFormField(
+                        controller: _addressCtrl,
+                        maxLines: 3,
+                        decoration: _fieldDecoration(
+                          label: 'Address',
+                          icon: Icons.home_outlined,
                         ),
-                        const SizedBox(height: 14),
+                      ),
+                      const SizedBox(height: 16),
 
-                        // Confirm Password
-                        _buildPasswordField(
-                          controller:   _confirmCtrl,
-                          label:        'Confirm Password',
-                          obscure:      _obscureConfirm,
-                          onToggle:     () => setState(
-                              () => _obscureConfirm = !_obscureConfirm),
-                          textInputAction: TextInputAction.done,
-                          onFieldSubmitted: (_) => _handleSave(),
-                          validator: (v) {
-                            if (v == null || v.isEmpty) {
-                              return 'Please confirm your password.';
-                            }
-                            if (v != _passwordCtrl.text) {
-                              return 'Passwords do not match.';
-                            }
-                            return null;
-                          },
+                      // College ────────────────────────────────────────────
+                      TextFormField(
+                        controller: _collegeCtrl,
+                        textCapitalization: TextCapitalization.words,
+                        decoration: _fieldDecoration(
+                          label: 'College',
+                          icon: Icons.school_outlined,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
-
                 const SizedBox(height: 28),
 
-                // ── Save button ──────────────────────────────────────────
+                // ── Save button ───────────────────────────────────────────
                 SizedBox(
                   height: 54,
                   child: FilledButton(
+                    onPressed: _isLoading ? null : _handleSave,
                     style: FilledButton.styleFrom(
                       backgroundColor: Colors.orange,
-                      foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),
-                      textStyle: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
                     ),
-                    onPressed: _isLoading ? null : _handleSave,
                     child: _isLoading
                         ? const SizedBox(
                             width: 22,
@@ -310,25 +399,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               strokeWidth: 2.5,
                             ),
                           )
-                        : const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.save_rounded, size: 20),
-                              SizedBox(width: 8),
-                              Text('Save Changes'),
-                            ],
+                        : const Text(
+                            'Save Changes',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                  ),
-                ),
-
-                const SizedBox(height: 12),
-                Center(
-                  child: Text(
-                    'Your email address cannot be changed here.',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey.shade400,
-                    ),
                   ),
                 ),
               ],
@@ -338,162 +415,127 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
-
-  // ── Input helpers ───────────────────────────────────────────────────────
-
-  Widget _buildInputField({
-    TextEditingController? controller,
-    String? initialValue,
-    required String label,
-    required String hint,
-    required IconData icon,
-    bool readOnly = false,
-    TextInputAction? textInputAction,
-    String? Function(String?)? validator,
-  }) {
-    return TextFormField(
-      controller:      controller,
-      initialValue:    controller == null ? initialValue : null,
-      readOnly:        readOnly,
-      textInputAction: textInputAction,
-      decoration: InputDecoration(
-        labelText:   label,
-        hintText:    hint,
-        prefixIcon:  Icon(icon),
-        filled:      true,
-        fillColor:   readOnly ? Colors.grey.shade50 : Colors.white,
-        border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey.shade200)),
-        enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey.shade200)),
-        focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide:
-                const BorderSide(color: Colors.orange, width: 1.5)),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        labelStyle: TextStyle(
-            color: readOnly ? Colors.grey.shade400 : null),
-      ),
-      style: TextStyle(
-          color: readOnly ? Colors.grey.shade500 : const Color(0xFF1A1A1A),
-          fontSize: 14),
-      validator: validator,
-    );
-  }
-
-  Widget _buildPasswordField({
-    required TextEditingController controller,
-    required String label,
-    required bool obscure,
-    required VoidCallback onToggle,
-    TextInputAction? textInputAction,
-    void Function(String)? onFieldSubmitted,
-    required String? Function(String?) validator,
-  }) {
-    return TextFormField(
-      controller:      controller,
-      obscureText:     obscure,
-      textInputAction: textInputAction,
-      onFieldSubmitted: onFieldSubmitted,
-      decoration: InputDecoration(
-        labelText:  label,
-        prefixIcon: const Icon(Icons.lock_outline_rounded),
-        suffixIcon: IconButton(
-          icon: Icon(
-            obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-          ),
-          onPressed: onToggle,
-        ),
-        filled:    true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey.shade200)),
-        enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey.shade200)),
-        focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide:
-                const BorderSide(color: Colors.orange, width: 1.5)),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      ),
-      validator: validator,
-    );
-  }
 }
 
-// ── Sub-widgets ─────────────────────────────────────────────────────────────
-
 class _ProfileHeader extends StatelessWidget {
-  const _ProfileHeader({required this.email});
+  const _ProfileHeader({
+    required this.email,
+    this.imageUrl,
+    required this.onTapAvatar,
+  });
 
   final String email;
-
-  String get _initials {
-    final local = email.split('@').first;
-    if (local.isEmpty) return '?';
-    return local[0].toUpperCase();
-  }
+  final String? imageUrl;
+  final VoidCallback onTapAvatar;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 24),
+      padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Colors.orange, Color(0xFFE65100)],
+          colors: [
+            Color(0xFFFF9800),
+            Color(0xFFF57C00),
+          ], // Richer orange gradient
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.orange.withAlpha(80),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
         children: [
-          Container(
-            width: 72,
-            height: 72,
-            decoration: BoxDecoration(
-              color: Colors.white.withAlpha(40),
-              shape: BoxShape.circle,
-              border: Border.all(
-                  color: Colors.white.withAlpha(80), width: 2),
-            ),
-            child: Center(
-              child: Text(
-                _initials,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
+          GestureDetector(
+            onTap: onTapAvatar,
+            child: Stack(
+              alignment: Alignment.bottomRight,
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.white.withAlpha(80),
+                      width: 4,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withAlpha(20),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: CircleAvatar(
+                    radius: 48,
+                    backgroundColor: Colors.white.withAlpha(40),
+                    backgroundImage: imageUrl != null
+                        ? NetworkImage(imageUrl!)
+                        : null,
+                    child: imageUrl == null
+                        ? Text(
+                            email.isNotEmpty ? email[0].toUpperCase() : '?',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 36,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          )
+                        : null,
+                  ),
                 ),
-              ),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withAlpha(30),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.camera_alt_rounded,
+                    size: 20,
+                    color: Colors.orange,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           Text(
-            email.isEmpty ? 'Your Account' : email,
+            email,
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
             ),
           ),
           const SizedBox(height: 4),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.white.withAlpha(30),
+              color: Colors.white.withAlpha(40),
               borderRadius: BorderRadius.circular(20),
             ),
             child: const Text(
               'Student Account',
-              style: TextStyle(color: Colors.white70, fontSize: 11),
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],
@@ -504,32 +546,16 @@ class _ProfileHeader extends StatelessWidget {
 
 class _SectionLabel extends StatelessWidget {
   const _SectionLabel({required this.icon, required this.label});
-
   final IconData icon;
-  final String   label;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: Colors.orange.withAlpha(30),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, color: Colors.orange, size: 18),
-        ),
-        const SizedBox(width: 10),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF1A1A1A),
-          ),
-        ),
+        Icon(icon, color: Colors.orange),
+        const SizedBox(width: 8),
+        Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
       ],
     );
   }

@@ -441,7 +441,62 @@ public class AIAgentController : ControllerBase
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // Endpoint — POST api/aiagent/synthesize-exam/{sessionId}
+    // Endpoint — PUT api/aiagent/publish-plan/{planId}
+    // Admin publishes a specific approved plan to the student's mobile app.
+    // Only ONE plan per student can be published at a time — all other plans
+    // for the same student are unpublished before the target plan is set.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Publishes an approved study plan so it becomes visible in the student's
+    /// mobile app. Enforces the one-published-plan-per-student invariant by
+    /// unpublishing all other plans for the same student first.
+    /// </summary>
+    /// <param name="planId">The ID of the study plan to publish.</param>
+    [HttpPut("publish-plan/{planId:int}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> PublishPlan(
+        [FromRoute] int planId,
+        CancellationToken cancellationToken)
+    {
+        if (planId <= 0)
+            return BadRequest(new { message = "planId must be a positive integer." });
+
+        var plan = await _db.StudyPlans.FindAsync([planId], cancellationToken);
+
+        if (plan is null)
+            return NotFound(new { message = $"Study plan with Id = {planId} was not found." });
+
+        // Unpublish ALL other plans for the same student first (one-published-at-a-time rule)
+        var otherPublished = await _db.StudyPlans
+            .Where(p => p.StudentId == plan.StudentId && p.Id != planId && p.IsPublished)
+            .ToListAsync(cancellationToken);
+
+        foreach (var other in otherPublished)
+        {
+            other.IsPublished = false;
+        }
+
+        // Publish the target plan
+        plan.IsPublished = true;
+
+        await _db.SaveChangesAsync(cancellationToken);
+
+        var adminEmail = User.FindFirstValue(ClaimTypes.Email) ?? "unknown-admin";
+        _logger.LogInformation(
+            "[AIAgentController] ✅ Study plan Id={PlanId} published by '{Admin}'. {Count} other plan(s) unpublished.",
+            planId, adminEmail, otherPublished.Count);
+
+        return Ok(new
+        {
+            message     = "Plan published successfully.",
+            planId      = plan.Id,
+            isPublished = true
+        });
+    }
+
+
     // Agent 3 (ExamSynthesizerAgent) → Agent 4 (ValidationAgentService)
     // ═══════════════════════════════════════════════════════════════════════
 

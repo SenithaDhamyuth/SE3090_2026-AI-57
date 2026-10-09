@@ -21,17 +21,5 @@ namespace IntelliPrep.API.Services
             string            itemType,
             CancellationToken cancellationToken = default);
 
-        /// <summary>
-        /// Sends a welcome email to a newly created student containing their login credentials.
-        /// </summary>
-        /// <param name="toEmail">Student's email address (also their login username).</param>
-        /// <param name="toName">Student's full name.</param>
-        /// <param name="temporaryPassword">Auto-generated temporary password to include in the email.</param>
-        /// <param name="cancellationToken">Optional cancellation token.</param>
-        Task SendWelcomeEmailAsync(
-            string            toEmail,
-            string            toName,
-            string            temporaryPassword,
-            CancellationToken cancellationToken = default);
     }
 }
