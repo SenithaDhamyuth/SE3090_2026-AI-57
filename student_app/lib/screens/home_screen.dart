@@ -1,8 +1,10 @@
 import 'dart:convert';
+
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../api_constants.dart';
 import '../models/cached_exam.dart';
 import '../services/database_helper.dart';
@@ -10,11 +12,12 @@ import 'qr_scanner_screen.dart';
 import 'login_screen.dart';
 import 'exam_review_screen.dart';
 import 'profile_screen.dart';
+import '../ui/prep_ui.dart';
 
 /// HomeScreen — main shell of the IntelliPrep Student App.
 ///
-/// Hosts a [BottomNavigationBar] with three tabs:
-///   • Tab 0 — Dashboard  : welcome card, next study task, QR FAB
+/// Hosts a [NavigationBar] with three tabs:
+///   • Tab 0 — Dashboard  : welcome, exam entry, progress, published study plan
 ///   • Tab 1 — Study Plan : AI-generated day-by-day topic timeline
 ///   • Tab 2 — Progress   : past exam marks and completed sessions
 class HomeScreen extends StatefulWidget {
@@ -28,7 +31,17 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
 
   // ── Student info (loaded from prefs) ──────────────────────────────────
-  String _studentEmail = 'student@school.lk';
+  String _studentEmail = '';
+  String _studentName = '';
+  String? _cacheError;
+  final _planKey = GlobalKey<_StudyPlanTabState>();
+  final _progressKey = GlobalKey<_ProgressTabState>();
+  List<_StudyDay> _dashboardPlan = [];
+  List<_RemoteResult> _dashboardResults = [];
+  bool _planLoading = true;
+  bool _resultsLoading = true;
+  String? _planError;
+  String? _resultsError;
 
   // ── Past sessions (loaded from SQLite) ────────────────────────────────
   List<CachedExam> _cachedExams = [];
@@ -45,15 +58,26 @@ class _HomeScreenState extends State<HomeScreen> {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
-      _studentEmail = prefs.getString('student_email') ?? 'student@school.lk';
+      _studentEmail = prefs.getString('student_email') ?? '';
+      _studentName = prefs.getString('student_name') ?? '';
     });
   }
 
   Future<void> _loadCachedExams() async {
-    setState(() => _loadingExams = true);
+    if (!mounted) return;
+    setState(() {
+      _loadingExams = true;
+      _cacheError = null;
+    });
     try {
       final exams = await DatabaseHelper.instance.getAllExams();
       if (mounted) setState(() => _cachedExams = exams);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _cacheError = 'Could not read saved exams on this device.',
+        );
+      }
     } finally {
       if (mounted) setState(() => _loadingExams = false);
     }
@@ -63,17 +87,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _openQRScanner() {
     Navigator.of(context)
-        .push(MaterialPageRoute<void>(
-          builder: (_) => const QRScannerScreen(),
-        ))
-        .then((_) => _loadCachedExams());
+        .push(MaterialPageRoute<void>(builder: (_) => const QRScannerScreen()))
+        .then((_) => _refreshHome());
   }
 
   void _openProfile() {
     Navigator.of(context)
-        .push(MaterialPageRoute<void>(
-          builder: (_) => const ProfileScreen(),
-        ))
+        .push(MaterialPageRoute<void>(builder: (_) => const ProfileScreen()))
         .then((_) => _loadStudentInfo());
   }
 
@@ -82,8 +102,10 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Sign out?',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Sign out?',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         content: const Text('You will be returned to the login screen.'),
         actions: [
           TextButton(
@@ -91,7 +113,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.orange),
+            style: FilledButton.styleFrom(backgroundColor: PrepColors.primary),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Sign out'),
           ),
@@ -112,123 +134,118 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ── Tabs ──────────────────────────────────────────────────────────────
 
-  List<Widget> get _tabs => [
-        _DashboardTab(
-          email: _studentEmail,
-          onScanQR: _openQRScanner,
-        ),
-        const _StudyPlanTab(),
-        _ProgressTab(
-          cachedExams: _cachedExams,
-          isLoading: _loadingExams,
-          onRefresh: _loadCachedExams,
-        ),
-      ];
-
-  // ── Build ─────────────────────────────────────────────────────────────
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFAFAFA),
-      appBar: _buildAppBar(),
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _tabs,
-      ),
-      floatingActionButton: _currentIndex == 0
-          ? FloatingActionButton.extended(
-              onPressed: _openQRScanner,
-              backgroundColor: Colors.orange,
-              foregroundColor: Colors.white,
-              icon: const Icon(Icons.qr_code_scanner_rounded),
-              label: const Text(
-                'Scan QR for Exam',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              elevation: 4,
-            )
-          : null,
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (i) => setState(() => _currentIndex = i),
-        selectedItemColor: Colors.orange,
-        unselectedItemColor: Colors.grey.shade500,
-        backgroundColor: Colors.white,
-        type: BottomNavigationBarType.fixed,
-        elevation: 8,
-        selectedLabelStyle:
-            const TextStyle(fontWeight: FontWeight.w600, fontSize: 11),
-        unselectedLabelStyle: const TextStyle(fontSize: 11),
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard_outlined),
-            activeIcon: Icon(Icons.dashboard_rounded),
-            label: 'Dashboard',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.menu_book_outlined),
-            activeIcon: Icon(Icons.menu_book_rounded),
-            label: 'Study Plan',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.bar_chart_outlined),
-            activeIcon: Icon(Icons.bar_chart_rounded),
-            label: 'Progress',
-          ),
-        ],
-      ),
-    );
+  void _receivePlan(List<_StudyDay> plan, bool loading, String? error) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _dashboardPlan = plan;
+        _planLoading = loading;
+        _planError = error;
+      });
+    });
   }
 
+  void _receiveResults(
+    List<_RemoteResult> results,
+    bool loading,
+    String? error,
+  ) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        _dashboardResults = results;
+        _resultsLoading = loading;
+        _resultsError = error;
+      });
+    });
+  }
+
+  Future<void> _refreshHome() async {
+    if (!mounted) return;
+    await Future.wait([
+      _loadStudentInfo(),
+      _loadCachedExams(),
+      if (_planKey.currentState != null) _planKey.currentState!._refresh(),
+      if (_progressKey.currentState != null)
+        _progressKey.currentState!._fetchRemoteResults(),
+    ]);
+  }
+
+  List<Widget> get _tabs => [
+    _DashboardTab(
+      name: _studentName,
+      email: _studentEmail,
+      onScanQR: _openQRScanner,
+      onProfile: _openProfile,
+      onStudyPlan: () => setState(() => _currentIndex = 1),
+      onProgress: () => setState(() => _currentIndex = 2),
+      onRefresh: _refreshHome,
+      cachedExams: _cachedExams,
+      results: _dashboardResults,
+      loading: _loadingExams || _resultsLoading,
+      error: _resultsError ?? _cacheError,
+      plan: _dashboardPlan,
+      planLoading: _planLoading,
+      planError: _planError,
+    ),
+    _StudyPlanTab(key: _planKey, onChanged: _receivePlan),
+    _ProgressTab(
+      key: _progressKey,
+      cachedExams: _cachedExams,
+      isLoading: _loadingExams,
+      onRefresh: _loadCachedExams,
+      onChanged: _receiveResults,
+      cacheError: _cacheError,
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: _buildAppBar(),
+    body: IndexedStack(index: _currentIndex, children: _tabs),
+    bottomNavigationBar: NavigationBar(
+      selectedIndex: _currentIndex,
+      onDestinationSelected: (i) => setState(() => _currentIndex = i),
+      destinations: const [
+        NavigationDestination(
+          icon: Icon(Icons.home_outlined),
+          selectedIcon: Icon(Icons.home_rounded),
+          label: 'Dashboard',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.auto_stories_outlined),
+          selectedIcon: Icon(Icons.auto_stories_rounded),
+          label: 'Study Plan',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.insights_outlined),
+          selectedIcon: Icon(Icons.insights_rounded),
+          label: 'Progress',
+        ),
+      ],
+    ),
+  );
+
   PreferredSizeWidget _buildAppBar() {
-    const tabTitles = ['Dashboard', 'Study Plan', 'Progress'];
+    const titles = ['IntelliPrep', 'Study Plan', 'Progress'];
     return AppBar(
-      backgroundColor: Colors.orange,
-      foregroundColor: Colors.white,
-      elevation: 0,
-      title: Row(
-        children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: Colors.white.withAlpha(40),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(Icons.school_rounded,
-                color: Colors.white, size: 18),
-          ),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'IntelliPrep · ${tabTitles[_currentIndex]}',
-                style: const TextStyle(
-                    fontSize: 15, fontWeight: FontWeight.bold),
-              ),
-              Text(
-                _studentEmail,
-                style: const TextStyle(
-                    fontSize: 10, color: Colors.white70),
-              ),
-            ],
-          ),
-        ],
+      title: Text(
+        titles[_currentIndex],
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
       actions: [
         IconButton(
-          icon: const Icon(Icons.account_circle_outlined),
-          tooltip: 'My Profile',
+          tooltip: 'My profile',
           onPressed: _openProfile,
+          icon: const Icon(Icons.account_circle_outlined),
         ),
         IconButton(
-          icon: const Icon(Icons.logout_rounded),
           tooltip: 'Sign out',
           onPressed: _logout,
+          icon: const Icon(Icons.logout_rounded),
         ),
+        const SizedBox(width: 8),
       ],
     );
   }
@@ -240,307 +257,230 @@ class _HomeScreenState extends State<HomeScreen> {
 
 class _DashboardTab extends StatelessWidget {
   const _DashboardTab({
+    required this.name,
     required this.email,
     required this.onScanQR,
+    required this.onProfile,
+    required this.onStudyPlan,
+    required this.onProgress,
+    required this.onRefresh,
+    required this.cachedExams,
+    required this.results,
+    required this.loading,
+    required this.error,
+    required this.plan,
+    required this.planLoading,
+    required this.planError,
   });
-
+  final String name;
   final String email;
   final VoidCallback onScanQR;
+  final VoidCallback onProfile;
+  final VoidCallback onStudyPlan;
+  final VoidCallback onProgress;
+  final Future<void> Function() onRefresh;
+  final List<CachedExam> cachedExams;
+  final List<_RemoteResult> results;
+  final bool loading;
+  final String? error;
+  final List<_StudyDay> plan;
+  final bool planLoading;
+  final String? planError;
 
-  /// Extract first name from email for a friendlier greeting.
-  String get _firstName {
-    final local = email.split('@').first;
-    if (local.isEmpty) return 'Student';
-    return '${local[0].toUpperCase()}${local.substring(1)}';
+  List<_RemoteResult> get _recentResults {
+    DateTime timeOf(_RemoteResult result) {
+      var value = (result.endTime ?? '').trim();
+      final utc = value.endsWith(' UTC');
+      if (utc) value = value.substring(0, value.length - 4);
+      value = value.replaceFirst(' ', 'T');
+      if (utc && !value.endsWith('Z')) value += 'Z';
+      return DateTime.tryParse(value) ?? DateTime.fromMillisecondsSinceEpoch(0);
+    }
+
+    return [...results]..sort((a, b) => timeOf(b).compareTo(timeOf(a)));
   }
 
   @override
-  Widget build(BuildContext context) {
-    return CustomScrollView(
-      slivers: [
-        // ── Welcome banner ─────────────────────────────────────────────
-        SliverToBoxAdapter(child: _WelcomeBanner(firstName: _firstName)),
-
-        // ── Next task card ─────────────────────────────────────────────
-        const SliverToBoxAdapter(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(16, 20, 16, 0),
-            child: _SectionHeader(
-              icon: Icons.bolt_rounded,
-              title: 'Next Study Task',
-              color: Colors.deepOrange,
+  Widget build(BuildContext context) => PrepPage(
+    onRefresh: onRefresh,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _WelcomeBanner(
+          firstName: name.trim().isNotEmpty ? name.trim() : email.trim(),
+        ),
+        const SizedBox(height: 24),
+        PrepCard(
+          color: PrepColors.navy,
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.qr_code_scanner_rounded,
+                color: Color(0xFFBDEBD8),
+                size: 36,
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Your next exam\nstarts here.',
+                style: Theme.of(context).textTheme.headlineMedium
+                    ?.copyWith(color: Colors.white),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'Scan the code from your tutor to join your exam.',
+                style: TextStyle(
+                  color: Color(0xFFDBEBEF),
+                  fontSize: 15,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: onScanQR,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFD7F2B8),
+                    foregroundColor: PrepColors.navy,
+                  ),
+                  icon: const Icon(Icons.qr_code_scanner_rounded),
+                  label: const Text('Scan to join exam'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        PrepSection(
+          title: 'Your learning snapshot',
+          action: 'View progress',
+          onAction: onProgress,
+        ),
+        if (loading)
+          const PrepState(title: 'Loading your progress', loading: true)
+        else ...[
+          if (error != null) ...[
+            PrepState(
+              title: 'Some results are unavailable',
+              message: error,
+              icon: Icons.cloud_off_outlined,
+              action: 'Try again',
+              onAction: onRefresh,
             ),
+            const SizedBox(height: 12),
+          ],
+          _ProgressHeader(remoteResults: results, cachedExams: cachedExams),
+        ],
+        const PrepSection(title: 'Continue learning'),
+        if (planLoading)
+          const PrepState(title: 'Checking your study plan', loading: true)
+        else if (plan.isNotEmpty && planError == null)
+          _NextTaskCard(day: plan.first, onTap: onStudyPlan)
+        else
+          PrepAction(
+            title: 'Study plan',
+            subtitle: planError == null
+                ? 'View your published study schedule.'
+                : 'Check your plan’s availability.',
+            icon: Icons.menu_book_outlined,
+            onTap: onStudyPlan,
           ),
+        PrepSection(
+          title: 'Recent exams',
+          action: 'See all',
+          onAction: onProgress,
         ),
-        const SliverToBoxAdapter(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(16, 10, 16, 0),
-            child: _NextTaskCard(),
-          ),
+        if (loading)
+          const PrepState(title: 'Loading exam history', loading: true)
+        else if (results.isEmpty && cachedExams.isEmpty)
+          const PrepState(
+            title: 'Your journey starts here',
+            message: 'After your first exam, your results will appear here.',
+            icon: Icons.assignment_outlined,
+          )
+        else if (results.isNotEmpty)
+          ..._recentResults
+              .take(3)
+              .map(
+                (r) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _RemoteResultTile(result: r),
+                ),
+              )
+        else
+          ...cachedExams
+              .take(3)
+              .map(
+                (e) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _SessionTile(exam: e),
+                ),
+              ),
+        const PrepSection(title: 'Your account'),
+        PrepAction(
+          title: 'My profile',
+          subtitle: 'Manage your details and profile photo.',
+          icon: Icons.person_outline_rounded,
+          onTap: onProfile,
         ),
-
-        // ── Quick actions ──────────────────────────────────────────────
-        const SliverToBoxAdapter(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(16, 24, 16, 0),
-            child: _SectionHeader(
-              icon: Icons.flash_on_rounded,
-              title: 'Quick Actions',
-              color: Colors.orange,
-            ),
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-            child: _QuickActionCard(
-              icon: Icons.qr_code_scanner_rounded,
-              title: 'Scan QR to Start Exam',
-              subtitle: 'UC2.2 · Scan the code shown by your tutor',
-              accentColor: Colors.orange,
-              onTap: onScanQR,
-            ),
-          ),
-        ),
-
-        // ── Bottom padding so FAB doesn't overlap ─────────────────────
-        const SliverToBoxAdapter(child: SizedBox(height: 96)),
       ],
-    );
-  }
+    ),
+  );
 }
 
 class _WelcomeBanner extends StatelessWidget {
   const _WelcomeBanner({required this.firstName});
-
   final String firstName;
-
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 22, 20, 22),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Colors.orange, Color(0xFFE65100)],
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Welcome back, $firstName! 👋',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              letterSpacing: -0.3,
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'A/L ICT — Sri Lanka National Curriculum',
-            style: TextStyle(color: Colors.white70, fontSize: 12),
-          ),
-          const SizedBox(height: 16),
-          // At-a-glance stats row
-          Row(
-            children: [
-              _StatChip(
-                  icon: Icons.calendar_today_rounded,
-                  label: 'Day 5 of 30'),
-              const SizedBox(width: 10),
-              _StatChip(
-                  icon: Icons.emoji_events_rounded,
-                  label: '68% avg score'),
-              const SizedBox(width: 10),
-              _StatChip(
-                  icon: Icons.check_circle_outline_rounded,
-                  label: '4 sessions done'),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatChip extends StatelessWidget {
-  const _StatChip({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: Colors.white.withAlpha(30),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withAlpha(60)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: Colors.white, size: 12),
-          const SizedBox(width: 5),
-          Text(label,
-              style: const TextStyle(color: Colors.white, fontSize: 10)),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => PrepHeading(
+    eyebrow: 'A/L ICT · INTELLIPREP',
+    title: firstName.isEmpty ? 'Welcome back' : 'Hello, $firstName',
+    subtitle: 'A little progress, every day.',
+  );
 }
 
 class _NextTaskCard extends StatelessWidget {
-  const _NextTaskCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.orange.withAlpha(60)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.orange.withAlpha(20),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: Colors.deepOrange.withAlpha(20),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: const Icon(Icons.lightbulb_outline_rounded,
-                color: Colors.deepOrange, size: 26),
-          ),
-          const SizedBox(width: 14),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Day 5 — Data Communication',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1A1A1A),
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  'AI-recommended: Review OSI model layers & protocols',
-                  style: TextStyle(fontSize: 11, color: Colors.grey),
-                ),
-                SizedBox(height: 8),
-                LinearProgressIndicator(
-                  value: 0.40,
-                  backgroundColor: Color(0xFFEEEEEE),
-                  valueColor:
-                      AlwaysStoppedAnimation<Color>(Colors.deepOrange),
-                  minHeight: 5,
-                  borderRadius: BorderRadius.all(Radius.circular(4)),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  '40% of day plan complete',
-                  style: TextStyle(fontSize: 10, color: Colors.grey),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _QuickActionCard extends StatelessWidget {
-  const _QuickActionCard({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.accentColor,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color accentColor;
+  const _NextTaskCard({required this.day, required this.onTap});
+  final _StudyDay day;
   final VoidCallback onTap;
-
   @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.grey.shade200),
-          boxShadow: [
-            BoxShadow(
-              color: accentColor.withAlpha(20),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Row(
+  Widget build(BuildContext context) => PrepCard(
+    onTap: onTap,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: accentColor.withAlpha(20),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(icon, color: accentColor, size: 24),
+            PrepPill('Day ${day.day}', icon: Icons.menu_book_outlined),
+            PrepPill(
+              '${day.priority} priority',
+              background: const Color(0xFFFFF2DE),
+              color: PrepColors.amber,
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1A1A1A))),
-                  const SizedBox(height: 2),
-                  Text(subtitle,
-                      style: TextStyle(
-                          fontSize: 11, color: Colors.grey.shade500)),
-                ],
-              ),
-            ),
-            Icon(Icons.arrow_forward_ios_rounded,
-                size: 14, color: Colors.grey.shade400),
           ],
         ),
-      ),
-    );
-  }
+        const SizedBox(height: 16),
+        Text(day.topic, style: Theme.of(context).textTheme.titleLarge),
+        if (day.subtopics.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(day.subtopics),
+        ],
+        const SizedBox(height: 16),
+        const Text(
+          'From your published plan · View plan →',
+          style: TextStyle(
+            color: PrepColors.primary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// TAB 1 — STUDY PLAN
-// ═══════════════════════════════════════════════════════════════════════════
-
-/// Mock AI-generated study plan data for A/L ICT.
 class _StudyDay {
   final int day;
   final String topic;
@@ -565,7 +505,8 @@ class _StudyDay {
 }
 
 class _StudyPlanTab extends StatefulWidget {
-  const _StudyPlanTab();
+  const _StudyPlanTab({super.key, required this.onChanged});
+  final void Function(List<_StudyDay>, bool, String?) onChanged;
 
   @override
   State<_StudyPlanTab> createState() => _StudyPlanTabState();
@@ -587,13 +528,15 @@ class _StudyPlanTabState extends State<_StudyPlanTab> {
       _isLoading = true;
       _errorMsg = null;
     });
+    widget.onChanged(_plan, true, null);
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('auth_token') ?? '';
       final url = ApiConstants.endpoint('api/student/my-plan');
-      final response = await http.get(url, headers: {
-        'Authorization': 'Bearer $token',
-      });
+      final response = await http.get(
+        url,
+        headers: {'Authorization': 'Bearer $token'},
+      );
 
       if (!mounted) return;
 
@@ -612,7 +555,10 @@ class _StudyPlanTabState extends State<_StudyPlanTab> {
     } catch (_) {
       if (mounted) setState(() => _errorMsg = 'Failed to load study plan.');
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+        widget.onChanged(_plan, _isLoading, _errorMsg);
+      }
     }
   }
 
@@ -627,247 +573,97 @@ class _StudyPlanTabState extends State<_StudyPlanTab> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: Colors.orange),
-      );
-    }
-
-    if (_errorMsg != null) {
-      final isWaiting = _errorMsg!.contains('publish') || _errorMsg!.contains('admin');
-      return RefreshIndicator(
-        onRefresh: _refresh,
-        color: Colors.orange,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          children: [
-            SizedBox(
-              height: MediaQuery.of(context).size.height * 0.7,
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        isWaiting
-                            ? Icons.hourglass_empty_rounded
-                            : Icons.error_outline_rounded,
-                        size: 64,
-                        color: isWaiting ? Colors.orange : Colors.red,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        _errorMsg!,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          color: Colors.black87,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        isWaiting
-                            ? 'Your AI-generated plan is waiting for a tutor to review and approve it.'
-                            : 'Please check your internet connection and try again.',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.grey),
-                      ),
-                      const SizedBox(height: 24),
-                      FilledButton.icon(
-                        onPressed: _loadPlan,
-                        style: FilledButton.styleFrom(
-                            backgroundColor: Colors.orange),
-                        icon: const Icon(Icons.refresh_rounded, size: 18),
-                        label: const Text('Refresh'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
+  Widget build(BuildContext context) => PrepPage(
+    onRefresh: _refresh,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const PrepHeading(
+          eyebrow: 'YOUR LEARNING PATH',
+          title: 'One topic at a time',
+          subtitle: 'Your published study schedule, ready when you are.',
         ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _refresh,
-      color: Colors.orange,
-      child: CustomScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          // ── Header ────────────────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.orange, Color(0xFFE65100)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'AI-Generated Study Plan',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const SizedBox(height: 14),
-                ],
-              ),
+        const SizedBox(height: 24),
+        if (_isLoading)
+          const PrepState(title: 'Loading your study plan', loading: true)
+        else if (_errorMsg != null)
+          PrepState(
+            title: _errorMsg!.contains('publish')
+                ? 'Your plan is on its way'
+                : 'Could not load your plan',
+            message: _errorMsg,
+            icon: _errorMsg!.contains('publish')
+                ? Icons.hourglass_empty_rounded
+                : Icons.cloud_off_outlined,
+            action: 'Refresh',
+            onAction: _refresh,
+          )
+        else if (_plan.isEmpty)
+          PrepState(
+            title: 'No study days yet',
+            message: 'Your study topics will appear here when available.',
+            action: 'Refresh',
+            onAction: _refresh,
+          )
+        else ...[
+          PrepPill(
+            '${_plan.length} study days',
+            icon: Icons.calendar_month_outlined,
+          ),
+          const SizedBox(height: 16),
+          ...List.generate(
+            _plan.length,
+            (i) => _StudyDayTile(
+              day: _plan[i],
+              dayNumber: i + 1,
+              isLast: i == _plan.length - 1,
             ),
           ),
-          // ── Timeline list ──────────────────────────────────────────────
-          SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                final day = _plan[index];
-                final isLast = index == _plan.length - 1;
-                return _StudyDayTile(
-                    day: day, dayNumber: index + 1, isLast: isLast);
-              },
-              childCount: _plan.length,
-            ),
-          ),
-          // ── Footer ────────────────────────────────────────────────────
-          const SliverToBoxAdapter(child: SizedBox(height: 80)),
         ],
-      ),
-    );
-  }
+      ],
+    ),
+  );
 }
 
 class _StudyDayTile extends StatelessWidget {
-  const _StudyDayTile({required this.day, required this.dayNumber, required this.isLast});
-
+  const _StudyDayTile({
+    required this.day,
+    required this.dayNumber,
+    required this.isLast,
+  });
   final _StudyDay day;
   final int dayNumber;
   final bool isLast;
-
-  Color get _priorityColor {
-    switch (day.priority) {
-      case 'High': return Colors.red;
-      case 'Medium': return Colors.orange;
-      case 'Low': return Colors.green;
-      default: return Colors.blue;
-    }
-  }
-
   @override
-  Widget build(BuildContext context) {
-    return IntrinsicHeight(
-      child: Row(
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.only(bottom: isLast ? 0 : 12),
+    child: PrepCard(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Timeline column ──────────────────────────────────────────
-          SizedBox(
-            width: 56,
-            child: Column(
-              children: [
-                const SizedBox(height: 20),
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade700,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Text(
-                      '$dayNumber',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-                if (!isLast)
-                  Expanded(
-                    child: Container(
-                      width: 2,
-                      color: Colors.grey.shade200,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          // ── Content ──────────────────────────────────────────────────
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(4, 12, 16, isLast ? 12 : 20),
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: Colors.grey.shade200,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: _priorityColor.withAlpha(30),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(Icons.menu_book_rounded, color: _priorityColor, size: 20),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  'Day $dayNumber: ${day.topic}',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF1A1A1A),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            day.subtopics,
-                            style: TextStyle(fontSize: 11, color: Colors.grey.shade500, height: 1.4),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              PrepPill('Day $dayNumber', icon: Icons.menu_book_outlined),
+              PrepPill(
+                '${day.priority} priority',
+                color: PrepColors.amber,
+                background: const Color(0xFFFFF2DE),
               ),
-            ),
+            ],
           ),
+          const SizedBox(height: 16),
+          Text(day.topic, style: Theme.of(context).textTheme.titleLarge),
+          if (day.subtopics.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(day.subtopics),
+          ],
         ],
       ),
-    );
-  }
+    ),
+  );
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// TAB 2 — PROGRESS (fetches live results from backend)
-// ═══════════════════════════════════════════════════════════════════════════
 
 class _RemoteResult {
   final String sessionGuid;
@@ -895,27 +691,36 @@ class _RemoteResult {
   });
 
   factory _RemoteResult.fromJson(Map<String, dynamic> json) {
-    final subject = (json['subject'] ??
-            json['Subject'] ??
-            json['title'] ??
-            json['Title'] ??
-            'Exam')
-        .toString();
+    final subject =
+        (json['subject'] ??
+                json['Subject'] ??
+                json['title'] ??
+                json['Title'] ??
+                'Exam')
+            .toString();
     return _RemoteResult(
-      sessionGuid: (json['sessionGuid'] ?? json['SessionGuid'] ?? '').toString(),
+      sessionGuid: (json['sessionGuid'] ?? json['SessionGuid'] ?? '')
+          .toString(),
       status: (json['status'] ?? json['Status'] ?? '').toString(),
       subject: subject,
-      title: (json['title'] ??
-              json['Title'] ??
-              json['subject'] ??
-              json['Subject'] ??
-              'Exam')
-          .toString(),
+      title:
+          (json['title'] ??
+                  json['Title'] ??
+                  json['subject'] ??
+                  json['Subject'] ??
+                  'Exam')
+              .toString(),
       totalScore: _readInt(json['totalScore'] ?? json['TotalScore']),
-      totalQuestions: _readInt(json['totalQuestions'] ?? json['TotalQuestions']),
+      totalQuestions: _readInt(
+        json['totalQuestions'] ?? json['TotalQuestions'],
+      ),
       endTime: (json['endTime'] ?? json['EndTime'])?.toString(),
-      durationMinutes: _readInt(json['durationMinutes'] ?? json['DurationMinutes'], 30),
-      questionsJson: (json['questionsJson'] ?? json['QuestionsJson'])?.toString(),
+      durationMinutes: _readInt(
+        json['durationMinutes'] ?? json['DurationMinutes'],
+        30,
+      ),
+      questionsJson: (json['questionsJson'] ?? json['QuestionsJson'])
+          ?.toString(),
       answersJson: (json['answersJson'] ?? json['AnswersJson'])?.toString(),
     );
   }
@@ -924,9 +729,11 @@ class _RemoteResult {
       value is num ? value.toInt() : int.tryParse('$value') ?? fallback;
 }
 
-
 class _ProgressTab extends StatefulWidget {
   const _ProgressTab({
+    super.key,
+    required this.onChanged,
+    this.cacheError,
     required this.cachedExams,
     required this.isLoading,
     required this.onRefresh,
@@ -935,6 +742,8 @@ class _ProgressTab extends StatefulWidget {
   final List<CachedExam> cachedExams;
   final bool isLoading;
   final Future<void> Function() onRefresh;
+  final String? cacheError;
+  final void Function(List<_RemoteResult>, bool, String?) onChanged;
 
   @override
   State<_ProgressTab> createState() => _ProgressTabState();
@@ -943,6 +752,7 @@ class _ProgressTab extends StatefulWidget {
 class _ProgressTabState extends State<_ProgressTab> {
   List<_RemoteResult> _remoteResults = [];
   bool _loadingRemote = true;
+  String? _remoteError;
   String _searchQuery = '';
 
   @override
@@ -952,27 +762,45 @@ class _ProgressTabState extends State<_ProgressTab> {
   }
 
   Future<void> _fetchRemoteResults() async {
-    setState(() { _loadingRemote = true; });
+    if (!mounted) return;
+    setState(() {
+      _loadingRemote = true;
+      _remoteError = null;
+    });
+    widget.onChanged(_remoteResults, true, null);
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('auth_token') ?? '';
+      if (!mounted) return;
       if (token.isEmpty) {
-        setState(() { _loadingRemote = false; });
+        setState(() {
+          _loadingRemote = false;
+          _remoteError = 'Sign in to see your latest results.';
+        });
         return;
       }
       final url = ApiConstants.endpoint('api/student/my-results');
-      final response = await http.get(url, headers: {
-        'Authorization': 'Bearer $token',
-        'Accept': 'application/json',
-      }).timeout(const Duration(seconds: 10));
+      final response = await http
+          .get(
+            url,
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Accept': 'application/json',
+            },
+          )
+          .timeout(const Duration(seconds: 10));
+      if (!mounted) return;
 
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
         final dynamic rawResults = decoded is List
             ? decoded
             : decoded is Map
-                ? decoded['results'] ?? decoded['Results'] ?? decoded['data'] ?? decoded['Data']
-                : null;
+            ? decoded['results'] ??
+                  decoded['Results'] ??
+                  decoded['data'] ??
+                  decoded['Data']
+            : null;
         final list = rawResults is List ? rawResults : <dynamic>[];
         setState(() {
           _remoteResults = list
@@ -982,10 +810,22 @@ class _ProgressTabState extends State<_ProgressTab> {
           _loadingRemote = false;
         });
       } else {
-        setState(() { _loadingRemote = false; });
+        setState(() {
+          _loadingRemote = false;
+          _remoteError = 'Could not refresh your results. Saved exams are still available.';
+        });
       }
     } catch (e) {
-      setState(() { _loadingRemote = false; });
+      if (mounted) {
+        setState(() {
+          _loadingRemote = false;
+          _remoteError = 'Check your connection and try again. Saved exams are still available.';
+        });
+      }
+    } finally {
+      if (mounted) {
+        widget.onChanged(_remoteResults, _loadingRemote, _remoteError);
+      }
     }
   }
 
@@ -997,121 +837,97 @@ class _ProgressTabState extends State<_ProgressTab> {
   @override
   Widget build(BuildContext context) {
     final isLoading = widget.isLoading || _loadingRemote;
-    final filteredResults = _remoteResults.where((r) => 
-        r.title.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
-
-    return RefreshIndicator(
-      color: Colors.orange,
+    final filteredResults = _remoteResults
+        .where(
+          (r) => r.title.toLowerCase().contains(_searchQuery.toLowerCase()),
+        )
+        .toList();
+    final filteredCached = widget.cachedExams
+        .where(
+          (e) => e.subject.toLowerCase().contains(_searchQuery.toLowerCase()),
+        )
+        .toList();
+    final error = _remoteError ?? widget.cacheError;
+    return PrepPage(
       onRefresh: _refresh,
-      child: CustomScrollView(
-        slivers: [
-          // ── Summary header ───────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: _ProgressHeader(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const PrepHeading(
+            eyebrow: 'LOOK HOW FAR YOU’VE COME',
+            title: 'Your progress',
+            subtitle:
+                'Review your exams and find your next learning opportunity.',
+          ),
+          const SizedBox(height: 24),
+          if (isLoading)
+            const PrepState(title: 'Loading your results', loading: true)
+          else ...[
+            if (error != null) ...[
+              PrepState(
+                title: 'Results could not refresh',
+                message: error,
+                icon: Icons.cloud_off_outlined,
+                action: 'Try again',
+                onAction: _refresh,
+              ),
+              const SizedBox(height: 16),
+            ],
+            _ProgressHeader(
               remoteResults: _remoteResults,
               cachedExams: widget.cachedExams,
             ),
-          ),
-
-          // ── Section label & Search ───────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      const _SectionHeader(
-                        icon: Icons.history_rounded,
-                        title: 'My Results',
-                        color: Colors.orange,
-                      ),
-                      const Spacer(),
-                      Text(
-                        'Pull to refresh',
-                        style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    onChanged: (val) => setState(() => _searchQuery = val),
-                    decoration: InputDecoration(
-                      hintText: 'Search exams by title...',
-                      prefixIcon: const Icon(Icons.search, color: Colors.orange),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                      filled: true,
-                      fillColor: Colors.white,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                    ),
-                  ),
-                ],
-              ),
+          ],
+          const PrepSection(title: 'Exam history'),
+          TextField(
+            onChanged: (value) => setState(() => _searchQuery = value),
+            textInputAction: TextInputAction.search,
+            decoration: const InputDecoration(
+              labelText: 'Search exams',
+              hintText: 'Search by exam title',
+              prefixIcon: Icon(Icons.search_rounded),
             ),
           ),
-
-          // ── List or states ───────────────────────────────────────────
-          if (isLoading)
-            const SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 48),
-                child: Center(child: CircularProgressIndicator(color: Colors.orange)),
+          const SizedBox(height: 16),
+          if (!isLoading)
+            if (_remoteResults.isEmpty && widget.cachedExams.isEmpty)
+              const PrepState(
+                title: 'No exams yet',
+                message: 'Scan your tutor’s QR code from the Dashboard to get started.',
+              )
+            else if ((_remoteResults.isNotEmpty && filteredResults.isEmpty) ||
+                (_remoteResults.isEmpty && filteredCached.isEmpty))
+              const PrepState(
+                title: 'No matching exams',
+                message: 'Try another exam title.',
+                icon: Icons.search_off_rounded,
+              )
+            else if (_remoteResults.isNotEmpty)
+              ...filteredResults.map(
+                (r) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _RemoteResultTile(result: r),
+                ),
+              )
+            else ...[
+              const PrepPill(
+                'Saved on this device',
+                icon: Icons.offline_pin_outlined,
               ),
-            )
-          else if (_remoteResults.isEmpty && widget.cachedExams.isEmpty)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 28),
-                child: Column(
-                  children: [
-                    Icon(Icons.assignment_outlined, size: 52, color: Colors.grey.shade300),
-                    const SizedBox(height: 12),
-                    Text(
-                      'No sessions yet',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.grey.shade500),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Scan a QR code from the Dashboard to start your first exam session.',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
+              const SizedBox(height: 12),
+              ...filteredCached.map(
+                (e) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _SessionTile(exam: e),
                 ),
               ),
-            )
-          else if (_remoteResults.isNotEmpty)
-            // Live backend results
-            SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (_, i) => _RemoteResultTile(result: filteredResults[i]),
-                childCount: filteredResults.length,
-              ),
-            )
-          else
-            // Fallback to SQLite cached exams
-            SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (_, i) => _SessionTile(exam: widget.cachedExams[i]),
-                childCount: widget.cachedExams.length,
-              ),
-            ),
-
-          const SliverToBoxAdapter(child: SizedBox(height: 32)),
+            ],
         ],
       ),
     );
   }
 }
 
-// ── Remote result tile ─────────────────────────────────────────────────────
 class _RemoteResultTile extends StatelessWidget {
   const _RemoteResultTile({required this.result});
   final _RemoteResult result;
@@ -1125,10 +941,10 @@ class _RemoteResultTile extends StatelessWidget {
       : result.totalScore / result.totalQuestions;
 
   Color get _scoreColor {
-    if (!_isSubmitted) return Colors.orange;
-    return _pct >= 0.5 ? Colors.green : Colors.red;
+    if (!_isSubmitted) return PrepColors.primary;
+    return _pct >= 0.5 ? PrepColors.primary : PrepColors.error;
   }
-  
+
   String get _statusLabel {
     if (!_isSubmitted) return 'In Progress';
     return _pct >= 0.5 ? 'Passed' : 'Failed';
@@ -1140,9 +956,13 @@ class _RemoteResultTile extends StatelessWidget {
 
     var normalized = rawDate.trim();
     final hasUtcSuffix = normalized.endsWith(' UTC');
-    if (hasUtcSuffix) normalized = normalized.substring(0, normalized.length - 4);
+    if (hasUtcSuffix) {
+      normalized = normalized.substring(0, normalized.length - 4);
+    }
     normalized = normalized.replaceFirst(' ', 'T');
-    if (hasUtcSuffix && !normalized.endsWith('Z')) normalized = '${normalized}Z';
+    if (hasUtcSuffix && !normalized.endsWith('Z')) {
+      normalized = '${normalized}Z';
+    }
 
     final date = DateTime.tryParse(normalized);
     if (date == null) return rawDate;
@@ -1150,273 +970,173 @@ class _RemoteResultTile extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final pctLabel = result.totalQuestions == 0
-        ? '—'
-        : '${(_pct * 100).round()}%';
-
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ExamReviewScreen(
-              sessionId: result.sessionGuid,
-              subject: result.subject,
-              title: result.title,
-              score: result.totalScore,
-              totalQuestions: result.totalQuestions,
-              date: _formattedEndTime,
-              questionsJson: result.questionsJson ?? '[]',
-              answersJson: result.answersJson ?? '{}',
-            ),
+  Widget build(BuildContext context) => _ExamHistoryCard(
+    title: result.title,
+    subject: result.subject,
+    date: _formattedEndTime,
+    score: result.totalQuestions == 0
+        ? 'Score unavailable'
+        : '${result.totalScore}/${result.totalQuestions} · ${(_pct * 100).round()}%',
+    status: _statusLabel,
+    color: _scoreColor,
+    onTap: () {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ExamReviewScreen(
+            sessionId: result.sessionGuid,
+            subject: result.subject,
+            title: result.title,
+            score: result.totalScore,
+            totalQuestions: result.totalQuestions,
+            date: _formattedEndTime,
+            questionsJson: result.questionsJson ?? '[]',
+            answersJson: result.answersJson ?? '{}',
           ),
-        );
-      },
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.grey.shade100),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withAlpha(8),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
-            ),
-          ],
         ),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 54,
-              height: 54,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  CircularProgressIndicator(
-                    value: result.totalQuestions == 0 ? 0 : _pct,
-                    backgroundColor: _scoreColor.withAlpha(20),
-                    valueColor: AlwaysStoppedAnimation<Color>(_scoreColor),
-                    strokeWidth: 4.5,
-                    strokeCap: StrokeCap.round,
-                  ),
-                  Center(
-                    child: Text(
-                      pctLabel,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: _scoreColor,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    result.title,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF1A1A1A),
-                      letterSpacing: -0.2,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          result.subject,
-                          style: TextStyle(fontSize: 10, color: Colors.grey.shade600, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Icon(Icons.calendar_today_rounded, size: 10, color: Colors.grey.shade400),
-                      const SizedBox(width: 4),
-                      Text(
-                        _formattedEndTime,
-                        style: TextStyle(fontSize: 11, color: Colors.grey.shade500, fontWeight: FontWeight.w500),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  '${result.totalScore}/${result.totalQuestions}',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: _scoreColor.withAlpha(20),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: _scoreColor.withAlpha(50)),
-                  ),
-                  child: Text(
-                    _statusLabel,
-                    style: TextStyle(fontSize: 10, color: _scoreColor, fontWeight: FontWeight.w800, letterSpacing: 0.3),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+      );
+    },
+  );
 }
-
 
 class _ProgressHeader extends StatelessWidget {
   const _ProgressHeader({
     required this.remoteResults,
     required this.cachedExams,
   });
-
   final List<_RemoteResult> remoteResults;
   final List<CachedExam> cachedExams;
 
-  int get _totalSubmitted => remoteResults.isNotEmpty
-      ? remoteResults.length
-      : cachedExams.where((e) => e.status == 'submitted').length;
-
-  double get _avgScore {
-    if (remoteResults.isNotEmpty) {
-      final scored = remoteResults.where((r) => r.totalQuestions > 0).toList();
-      if (scored.isEmpty) return 0;
-      return scored.map((r) => r.totalScore / r.totalQuestions * 100).reduce((a, b) => a + b) / scored.length;
-    }
-    final scored = cachedExams.where((e) => e.status == 'submitted' && e.totalScore > 0).toList();
-    if (scored.isEmpty) return 0;
-    return scored.map((e) => e.totalScore.toDouble()).reduce((a, b) => a + b) / scored.length;
-  }
-
-  int get _passCount {
-    if (remoteResults.isNotEmpty) {
-      return remoteResults.where((r) => r.totalQuestions > 0 && r.totalScore / r.totalQuestions >= 0.5).length;
-    }
-    // For cached exams, calculate actual pass rate based on score
-    return cachedExams.where((e) {
-      if (e.status != 'submitted') return false;
-      int qCount = 0;
-      try {
-        final questions = jsonDecode(e.questionsJson);
-        if (questions is List) qCount = questions.length;
-      } catch (_) {}
-      return qCount > 0 && e.totalScore / qCount >= 0.5;
-    }).length;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final avgLabel = remoteResults.isEmpty && cachedExams.isEmpty
+    // Presentation-only summary of completed records. Never manufacture scores.
+    final percentages = <double>[];
+    var completed = 0;
+    var total = 0;
+    if (remoteResults.isNotEmpty) {
+      total = remoteResults.length;
+      for (final result in remoteResults) {
+        final status = result.status.toLowerCase();
+        if (status != 'submitted' && status != 'completed') continue;
+        completed++;
+        if (result.totalQuestions > 0) {
+          percentages.add(result.totalScore / result.totalQuestions * 100);
+        }
+      }
+    } else {
+      total = cachedExams.length;
+      for (final exam in cachedExams) {
+        final status = exam.status.toLowerCase();
+        if (status != 'submitted' && status != 'completed') continue;
+        completed++;
+        try {
+          final questions = jsonDecode(exam.questionsJson);
+          if (questions is List && questions.isNotEmpty) {
+            percentages.add(exam.totalScore / questions.length * 100);
+          }
+        } catch (_) {
+          /* Missing question data is shown without a percentage. */
+        }
+      }
+    }
+    final average = percentages.isEmpty
         ? '—'
-        : '${_avgScore.toStringAsFixed(0)}%';
-    final passLabel = _totalSubmitted == 0 ? '—' : '$_passCount/$_totalSubmitted';
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 22, 20, 22),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.orange, Color(0xFFE65100)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'My Results',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
+        : '${(percentages.reduce((a, b) => a + b) / percentages.length).round()}%';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        PrepMetrics(
+          items: [
+            PrepMetric(
+              label: 'Completed exams',
+              value: '$completed',
+              icon: Icons.task_alt_rounded,
             ),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Exam history and performance overview',
-            style: TextStyle(color: Colors.white70, fontSize: 12),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              _ProgressStat(label: 'Submitted', value: '$_totalSubmitted'),
-              const SizedBox(width: 12),
-              _ProgressStat(label: 'Avg Score', value: avgLabel),
-              const SizedBox(width: 12),
-              _ProgressStat(label: 'Passed', value: passLabel),
-            ],
-          ),
-        ],
-      ),
+            PrepMetric(
+              label: 'Average score',
+              value: average,
+              icon: Icons.insights_rounded,
+            ),
+            PrepMetric(
+              label: 'Total sessions',
+              value: '$total',
+              icon: Icons.history_rounded,
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Text(
+          remoteResults.isNotEmpty
+              ? 'Based on your available exam results.'
+              : 'Based on exams saved on this device.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
     );
   }
 }
 
-class _ProgressStat extends StatelessWidget {
-  const _ProgressStat({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
+class _ExamHistoryCard extends StatelessWidget {
+  const _ExamHistoryCard({
+    required this.title,
+    required this.subject,
+    required this.date,
+    required this.score,
+    required this.status,
+    required this.color,
+    this.onTap,
+    this.icon = Icons.assignment_outlined,
+  });
+  final String title;
+  final String subject;
+  final String date;
+  final String score;
+  final String status;
+  final Color color;
+  final VoidCallback? onTap;
+  final IconData icon;
   @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.white.withAlpha(25),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withAlpha(50)),
-        ),
-        child: Column(
+  Widget build(BuildContext context) => PrepCard(
+    onTap: onTap,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 10,
+          runSpacing: 8,
           children: [
-            Text(
-              value,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+            PrepPill(
+              status,
+              icon: icon,
+              color: color,
+              background: color.withAlpha(20),
             ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: const TextStyle(color: Colors.white70, fontSize: 10),
+            PrepPill(
+              score,
+              icon: Icons.analytics_outlined,
+              color: PrepColors.ink,
+              background: PrepColors.canvas,
             ),
           ],
         ),
-      ),
-    );
-  }
+        const SizedBox(height: 14),
+        Text(title, style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 6),
+        if (subject != title) ...[Text(subject), const SizedBox(height: 6)],
+        Text(date, style: Theme.of(context).textTheme.bodySmall),
+        if (onTap != null) ...[
+          const SizedBox(height: 14),
+          const Text(
+            'Review answers →',
+            style: TextStyle(
+              color: PrepColors.primary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
 }
 
 class _SessionTile extends StatelessWidget {
@@ -1425,7 +1145,8 @@ class _SessionTile extends StatelessWidget {
   final CachedExam exam;
 
   bool get _isCompleted =>
-      exam.status.toLowerCase() == 'submitted' || exam.status.toLowerCase() == 'completed';
+      exam.status.toLowerCase() == 'submitted' ||
+      exam.status.toLowerCase() == 'completed';
 
   int get _totalQuestions {
     try {
@@ -1441,8 +1162,8 @@ class _SessionTile extends StatelessWidget {
       (_totalQuestions == 0 ? 0 : exam.totalScore / _totalQuestions) >= 0.5;
 
   Color get _statusColor {
-    if (!_isCompleted) return Colors.orange;
-    return _isPassed ? Colors.green : Colors.red;
+    if (!_isCompleted) return PrepColors.primary;
+    return _isPassed ? PrepColors.primary : PrepColors.error;
   }
 
   String get _statusLabel {
@@ -1462,158 +1183,34 @@ class _SessionTile extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: !_isCompleted
-          ? null
-          : () {
-              Navigator.push(
-                context,
-                MaterialPageRoute<void>(
-                  builder: (_) => ExamReviewScreen(
-                    sessionId: exam.sessionId,
-                    subject: exam.subject,
-                    title: exam.subject,
-                    score: exam.totalScore,
-                    totalQuestions: _totalQuestions,
-                    date: _formattedCreatedAt,
-                    questionsJson: exam.questionsJson,
-                    answersJson: exam.answersJson,
-                  ),
-                ),
-              );
-            },
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.grey.shade200),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withAlpha(6),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
-        children: [
-          // Subject icon
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: Colors.orange.withAlpha(20),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.laptop_mac_rounded,
-                color: Colors.orange, size: 22),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  exam.subject,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1A1A1A),
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  _formattedCreatedAt,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.grey.shade400,
-                    fontFamily: 'monospace',
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: _statusColor.withAlpha(25),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: _statusColor.withAlpha(60)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(_statusIcon, color: _statusColor, size: 10),
-                    const SizedBox(width: 4),
-                    Text(
-                      _statusLabel,
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: _statusColor,
-                      ),
-                    ),
-                  ],
+  Widget build(BuildContext context) => _ExamHistoryCard(
+    title: exam.subject,
+    subject: exam.subject,
+    date: _formattedCreatedAt,
+    score: _isCompleted
+        ? '${exam.totalScore}/$_totalQuestions'
+        : 'Not submitted',
+    status: _statusLabel,
+    color: _statusColor,
+    icon: _statusIcon,
+    onTap: !_isCompleted
+        ? null
+        : () {
+            Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => ExamReviewScreen(
+                  sessionId: exam.sessionId,
+                  subject: exam.subject,
+                  title: exam.subject,
+                  score: exam.totalScore,
+                  totalQuestions: _totalQuestions,
+                  date: _formattedCreatedAt,
+                  questionsJson: exam.questionsJson,
+                  answersJson: exam.answersJson,
                 ),
               ),
-              if (_isCompleted) ...[
-                const SizedBox(height: 5),
-                Text(
-                  '${exam.totalScore} pts',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.green,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ],
-        ),
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// SHARED UTILITIES
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({
-    required this.icon,
-    required this.title,
-    required this.color,
-  });
-
-  final IconData icon;
-  final String title;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, color: color, size: 16),
-        const SizedBox(width: 6),
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF1A1A1A),
-          ),
-        ),
-      ],
-    );
-  }
+            );
+          },
+  );
 }

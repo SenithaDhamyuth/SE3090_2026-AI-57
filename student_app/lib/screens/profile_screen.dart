@@ -9,6 +9,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 
 import '../api_constants.dart';
+import '../ui/prep_ui.dart';
+import 'change_password_screen.dart';
 
 /// ProfileScreen — lets an authenticated student update their display name,
 /// phone number, address, college, and avatar.
@@ -21,14 +23,16 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameCtrl    = TextEditingController();
-  final _phoneCtrl   = TextEditingController();
+  final _nameCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
   final _collegeCtrl = TextEditingController();
 
-  bool    _isLoading       = false;
-  String  _email           = '';
+  bool _isLoading = false;
+  String _email = '';
   String? _profileImageUrl;
+  bool _profileLoading = true;
+  String? _profileError;
 
   @override
   void initState() {
@@ -48,41 +52,66 @@ class _ProfileScreenState extends State<ProfileScreen> {
   /// Loads locally-stored prefs first (fast), then fetches extended profile
   /// details from the backend if a student_id is available.
   Future<void> _loadCurrentProfile() async {
+    setState(() {
+      _profileLoading = true;
+      _profileError = null;
+    });
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     setState(() {
-      _email           = prefs.getString('student_email') ?? '';
-      _nameCtrl.text   = prefs.getString('student_name')  ?? '';
+      _email = prefs.getString('student_email') ?? '';
+      _nameCtrl.text = prefs.getString('student_name') ?? '';
       _profileImageUrl = prefs.getString('profileImageUrl');
     });
 
     // Optionally fetch extra fields from the backend
     final userId = prefs.getString('student_id');
-    if (userId == null || userId.isEmpty) return;
+    if (userId == null || userId.isEmpty) {
+      setState(() => _profileLoading = false);
+      return;
+    }
 
     try {
       final token = prefs.getString('auth_token') ?? '';
-      final response = await http.get(
-        ApiConstants.endpoint('api/studentprofile/$userId'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
-      ).timeout(const Duration(seconds: 15));
+      final response = await http
+          .get(
+            ApiConstants.endpoint('api/studentprofile/$userId'),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Accept': 'application/json',
+            },
+          )
+          .timeout(const Duration(seconds: 15));
 
       if (!mounted) return;
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         setState(() {
-          _phoneCtrl.text   = (data['phoneNumber'] as String?) ?? '';
-          _addressCtrl.text = (data['address']     as String?) ?? '';
-          _collegeCtrl.text = (data['college']     as String?) ?? '';
+          _phoneCtrl.text = (data['phoneNumber'] as String?) ?? '';
+          _addressCtrl.text = (data['address'] as String?) ?? '';
+          _collegeCtrl.text = (data['college'] as String?) ?? '';
         });
+      } else {
+        setState(
+          () => _profileError =
+              'Could not fetch account details. You can try again.',
+        );
       }
     } on TimeoutException {
-      // Silently ignore — fields remain blank, user can fill them in
+      if (mounted) {
+        setState(
+          () => _profileError = 'The connection timed out. Please try again.',
+        );
+      }
     } catch (_) {
-      // Silently ignore
+      if (mounted) {
+        setState(
+          () => _profileError =
+              'Could not load your details. Check your connection.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _profileLoading = false);
     }
   }
 
@@ -160,20 +189,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final token = prefs.getString('auth_token') ?? '';
       if (token.isEmpty) throw StateError('Authentication is required.');
 
-      final response = await http.put(
-        ApiConstants.endpoint('api/studentprofile/update-details'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({
-          'fullName':    _nameCtrl.text.trim(),
-          'phoneNumber': _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
-          'address':     _addressCtrl.text.trim().isEmpty ? null : _addressCtrl.text.trim(),
-          'college':     _collegeCtrl.text.trim().isEmpty ? null : _collegeCtrl.text.trim(),
-        }),
-      ).timeout(const Duration(seconds: 15));
+      final response = await http
+          .put(
+            ApiConstants.endpoint('api/studentprofile/update-details'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+            body: jsonEncode({
+              'fullName': _nameCtrl.text.trim(),
+              'phoneNumber': _phoneCtrl.text.trim().isEmpty
+                  ? null
+                  : _phoneCtrl.text.trim(),
+              'address': _addressCtrl.text.trim().isEmpty
+                  ? null
+                  : _addressCtrl.text.trim(),
+              'college': _collegeCtrl.text.trim().isEmpty
+                  ? null
+                  : _collegeCtrl.text.trim(),
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
 
       if (!mounted) return;
       if (response.statusCode >= 200 && response.statusCode < 300) {
@@ -198,7 +235,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? Colors.red.shade600 : Colors.green.shade600,
+        backgroundColor: isError ? PrepColors.error : PrepColors.primary,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -208,213 +245,133 @@ class _ProfileScreenState extends State<ProfileScreen> {
   InputDecoration _fieldDecoration({
     required String label,
     required IconData icon,
-  }) {
-    return InputDecoration(
-      labelText: label,
-      prefixIcon: Icon(icon),
-      filled: true,
-      fillColor: const Color(0xFFFAFAFA),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.grey.shade300),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(
-          color: Colors.orange,
-          width: 1.5,
-        ),
-      ),
-    );
-  }
+  }) => InputDecoration(labelText: label, prefixIcon: Icon(icon));
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFAFAFA),
-      appBar: AppBar(
-        backgroundColor: Colors.orange,
-        foregroundColor: Colors.white,
-        title: const Text(
-          'My Profile',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // ── Avatar / header ────────────────────────────────────────
-                _ProfileHeader(
-                  email: _email,
-                  imageUrl: _profileImageUrl,
-                  onTapAvatar: _pickAndUploadImage,
-                ),
-                const SizedBox(height: 28),
-
-                // ── Editable fields card ───────────────────────────────────
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.grey.shade200),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withAlpha(8),
-                        blurRadius: 18,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('My profile')),
+    body: PrepPage(
+      maxWidth: 600,
+      onRefresh: _loadCurrentProfile,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _ProfileHeader(
+            email: _email,
+            imageUrl: _profileImageUrl,
+            onTapAvatar: _isLoading ? null : _pickAndUploadImage,
+          ),
+          const SizedBox(height: 24),
+          if (_profileLoading) ...[
+            const PrepState(title: 'Loading profile details', loading: true),
+            const SizedBox(height: 16),
+          ],
+          if (_profileError != null) ...[
+            PrepState(
+              title: 'Some details could not load',
+              message: _profileError,
+              action: 'Try again',
+              onAction: _loadCurrentProfile,
+            ),
+            const SizedBox(height: 16),
+          ],
+          PrepCard(
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const PrepHeading(
+                    title: 'Your details',
+                    subtitle: 'Keep your student information up to date.',
                   ),
-                  padding: const EdgeInsets.all(22),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const _SectionLabel(
-                        icon: Icons.manage_accounts_outlined,
-                        label: 'Account Details',
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        'Update the personal information on your account.',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                      const SizedBox(height: 22),
-
-                      // Full Name ──────────────────────────────────────────
-                      TextFormField(
-                        controller: _nameCtrl,
-                        textCapitalization: TextCapitalization.words,
-                        decoration: _fieldDecoration(
-                          label: 'Full Name',
-                          icon: Icons.person_outline_rounded,
-                        ),
-                        validator: (v) => (v == null || v.trim().isEmpty)
-                            ? 'Name is required'
-                            : null,
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Email (read-only) ───────────────────────────────────
-                      TextFormField(
-                        initialValue: _email,
-                        readOnly: true,
-                        enableInteractiveSelection: false,
-                        style: TextStyle(color: Colors.grey.shade600),
-                        decoration: InputDecoration(
-                          labelText: 'Email Address',
-                          prefixIcon: Icon(
-                            Icons.mail_outline_rounded,
-                            color: Colors.grey.shade500,
-                          ),
-                          suffixIcon: Icon(
-                            Icons.lock_outline_rounded,
-                            size: 18,
-                            color: Colors.grey.shade500,
-                          ),
-                          filled: true,
-                          fillColor: const Color(0xFFF1F2F4),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: BorderSide(color: Colors.grey.shade200),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Your email address cannot be changed here.',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey.shade500,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Phone Number ───────────────────────────────────────
-                      TextFormField(
-                        controller: _phoneCtrl,
-                        keyboardType: TextInputType.phone,
-                        decoration: _fieldDecoration(
-                          label: 'Phone Number',
-                          icon: Icons.phone_outlined,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Address ────────────────────────────────────────────
-                      TextFormField(
-                        controller: _addressCtrl,
-                        maxLines: 3,
-                        decoration: _fieldDecoration(
-                          label: 'Address',
-                          icon: Icons.home_outlined,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // College ────────────────────────────────────────────
-                      TextFormField(
-                        controller: _collegeCtrl,
-                        textCapitalization: TextCapitalization.words,
-                        decoration: _fieldDecoration(
-                          label: 'College',
-                          icon: Icons.school_outlined,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 28),
-
-                // ── Save button ───────────────────────────────────────────
-                SizedBox(
-                  height: 54,
-                  child: FilledButton(
-                    onPressed: _isLoading ? null : _handleSave,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
+                  const SizedBox(height: 24),
+                  TextFormField(
+                    controller: _nameCtrl,
+                    textCapitalization: TextCapitalization.words,
+                    textInputAction: TextInputAction.next,
+                    autofillHints: const [AutofillHints.name],
+                    decoration: _fieldDecoration(
+                      label: 'Full name',
+                      icon: Icons.person_outline_rounded,
                     ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2.5,
-                            ),
-                          )
-                        : const Text(
-                            'Save Changes',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? 'Name is required'
+                        : null,
                   ),
-                ),
-              ],
+                  const SizedBox(height: 18),
+                  TextFormField(
+                    key: ValueKey(_email),
+                    initialValue: _email,
+                    readOnly: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Email address',
+                      helperText: 'Your account email cannot be changed here.',
+                      prefixIcon: Icon(Icons.alternate_email_rounded),
+                      suffixIcon: Icon(Icons.lock_outline_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  TextFormField(
+                    controller: _phoneCtrl,
+                    keyboardType: TextInputType.phone,
+                    textInputAction: TextInputAction.next,
+                    autofillHints: const [AutofillHints.telephoneNumber],
+                    decoration: _fieldDecoration(
+                      label: 'Phone number',
+                      icon: Icons.phone_outlined,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  TextFormField(
+                    controller: _addressCtrl,
+                    minLines: 2,
+                    maxLines: 4,
+                    keyboardType: TextInputType.multiline,
+                    autofillHints: const [AutofillHints.fullStreetAddress],
+                    decoration: _fieldDecoration(
+                      label: 'Address',
+                      icon: Icons.home_outlined,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  TextFormField(
+                    controller: _collegeCtrl,
+                    textCapitalization: TextCapitalization.words,
+                    textInputAction: TextInputAction.done,
+                    decoration: _fieldDecoration(
+                      label: 'College',
+                      icon: Icons.school_outlined,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  FilledButton(
+                    onPressed: _isLoading || _profileLoading
+                        ? null
+                        : _handleSave,
+                    child: _isLoading
+                        ? const PrepBusyLabel('Saving changes…')
+                        : const Text('Save changes'),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
+          const PrepSection(title: 'Account security'),
+          PrepAction(
+            title: 'Change password',
+            subtitle: 'Verify your email and set a new password.',
+            icon: Icons.lock_outline_rounded,
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const ChangePasswordScreen(),
+              ),
+            ),
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  );
 }
 
 class _ProfileHeader extends StatelessWidget {
@@ -423,140 +380,70 @@ class _ProfileHeader extends StatelessWidget {
     this.imageUrl,
     required this.onTapAvatar,
   });
-
   final String email;
   final String? imageUrl;
-  final VoidCallback onTapAvatar;
-
+  final VoidCallback? onTapAvatar;
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [
-            Color(0xFFFF9800),
-            Color(0xFFF57C00),
-          ], // Richer orange gradient
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+    final fallback = Center(
+      child: Text(
+        email.isNotEmpty ? email[0].toUpperCase() : 'S',
+        style: const TextStyle(
+          fontSize: 32,
+          fontWeight: FontWeight.w700,
+          color: PrepColors.primary,
         ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.orange.withAlpha(80),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
-          ),
-        ],
       ),
+    );
+    return PrepCard(
+      color: PrepColors.navy,
+      padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          GestureDetector(
-            onTap: onTapAvatar,
-            child: Stack(
-              alignment: Alignment.bottomRight,
-              children: [
-                Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: Colors.white.withAlpha(80),
-                      width: 4,
+          Semantics(
+            label: 'Profile photo',
+            image: true,
+            child: Container(
+              width: 88,
+              height: 88,
+              clipBehavior: Clip.antiAlias,
+              decoration: const BoxDecoration(
+                color: PrepColors.mint,
+                shape: BoxShape.circle,
+              ),
+              child: imageUrl == null
+                  ? fallback
+                  : Image.network(
+                      imageUrl!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, error, stack) => fallback,
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withAlpha(20),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: CircleAvatar(
-                    radius: 48,
-                    backgroundColor: Colors.white.withAlpha(40),
-                    backgroundImage: imageUrl != null
-                        ? NetworkImage(imageUrl!)
-                        : null,
-                    child: imageUrl == null
-                        ? Text(
-                            email.isNotEmpty ? email[0].toUpperCase() : '?',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 36,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          )
-                        : null,
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withAlpha(30),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.camera_alt_rounded,
-                    size: 20,
-                    color: Colors.orange,
-                  ),
-                ),
-              ],
             ),
           ),
           const SizedBox(height: 16),
           Text(
-            email,
+            email.isEmpty ? 'Student account' : email,
+            textAlign: TextAlign.center,
             style: const TextStyle(
+              fontSize: 17,
+              height: 1.4,
               color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.5,
+              fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 4),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.white.withAlpha(40),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Text(
-              'Student Account',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
+          const SizedBox(height: 8),
+          const Text(
+            'Your IntelliPrep space',
+            style: TextStyle(color: Color(0xFFDBEBEF)),
+          ),
+          const SizedBox(height: 16),
+          FilledButton.tonalIcon(
+            onPressed: onTapAvatar,
+            icon: const Icon(Icons.photo_camera_outlined),
+            label: const Text('Change photo'),
           ),
         ],
       ),
-    );
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel({required this.icon, required this.label});
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icon, color: Colors.orange),
-        const SizedBox(width: 8),
-        Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
-      ],
     );
   }
 }

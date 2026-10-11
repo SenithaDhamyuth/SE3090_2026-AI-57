@@ -1,7 +1,9 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../api_constants.dart';
 import 'home_screen.dart';
 import 'forgot_password_screen.dart';
@@ -42,13 +44,17 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final backendUrl = ApiConstants.endpoint('api/auth/login');
-      final normalizedEmail =
-          ApiConstants.normalizeEmail(_emailController.text);
+      final normalizedEmail = ApiConstants.normalizeEmail(
+        _emailController.text,
+      );
 
       final response = await http
           .post(
-        backendUrl,
-            headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+            backendUrl,
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
             body: jsonEncode({
               'email': normalizedEmail,
               'password': _passwordController.text,
@@ -66,11 +72,20 @@ class _LoginScreenState extends State<LoginScreen> {
           throw Exception('Missing token in response');
         }
         if (data['role']?.toString() != 'Student') {
-          throw Exception('This account is not registered as a student account.');
+          throw Exception(
+            'This account is not registered as a student account.',
+          );
         }
 
+        final userId = data['userId']?.toString();
+        await prefs.remove('student_id');
+        await prefs.remove('student_name');
+        await prefs.remove('profileImageUrl');
         await prefs.setString('auth_token', token);
         await prefs.setString('student_email', normalizedEmail);
+        if (userId != null && userId.isNotEmpty) {
+          await prefs.setString('student_id', userId);
+        }
 
         setState(() => _isLoading = false);
 
@@ -83,24 +98,42 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       if (response.statusCode == 401) {
+        // Determine whether the rejection came from the API (JSON body) or
+        // from a reverse-proxy / gateway (HTML body). The backend always
+        // includes a diagnosticId in its 401 JSON; if the body is not JSON the
+        // request never reached the API server.
+        final contentType = response.headers['content-type'] ?? '';
+        final bodyIsJson = contentType.contains('application/json');
+
+        // Dev-only: log HTTP status and content-type. Never logs credentials.
+        assert(() {
+          // ignore: avoid_print
+          print(
+            '[IntelliPrep][login] HTTP 401 — '
+            'content-type: $contentType, '
+            'body-is-json: $bodyIsJson',
+          );
+          return true;
+        }());
+
         String? diagnosticId;
-        var backendDiagnosticsAvailable = false;
-        try {
-          final responseBody = jsonDecode(response.body);
-          if (responseBody is Map<String, dynamic>) {
-            diagnosticId = responseBody['diagnosticId']?.toString();
-            backendDiagnosticsAvailable =
-                diagnosticId != null && diagnosticId.isNotEmpty;
+        if (bodyIsJson) {
+          try {
+            final responseBody = jsonDecode(response.body);
+            if (responseBody is Map<String, dynamic>) {
+              diagnosticId = responseBody['diagnosticId']?.toString();
+            }
+          } on FormatException {
+            diagnosticId = null;
           }
-        } on FormatException {
-          diagnosticId = null;
         }
+
         setState(() => _isLoading = false);
         if (!mounted) return;
         await _showLoginDiagnostics(
           backendUrl,
           diagnosticId: diagnosticId,
-          backendDiagnosticsAvailable: backendDiagnosticsAvailable,
+          bodyWasJson: bodyIsJson,
         );
         return;
       }
@@ -111,17 +144,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
       setState(() => _isLoading = false);
 
-      final message = e.toString().contains('socket') || e.toString().contains('Timeout')
+      final message =
+          e.toString().contains('socket') || e.toString().contains('Timeout')
           ? 'Unable to reach the server. Check your internet connection.'
           : e.toString().contains('not registered as a student')
-              ? 'This login is for student accounts. Use a student account or contact your administrator.'
+          ? 'This login is for student accounts. Use a student account or contact your administrator.'
           : 'Login failed. Please try again.';
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          behavior: SnackBarBehavior.floating,
-        ),
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
       );
     }
   }
@@ -129,7 +160,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _showLoginDiagnostics(
     Uri loginUrl, {
     String? diagnosticId,
-    required bool backendDiagnosticsAvailable,
+    required bool bodyWasJson,
   }) async {
     String? healthCheckResult;
     bool isChecking = false;
@@ -162,7 +193,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   _diagnosticLine('Support reference', diagnosticId),
                 ],
                 const SizedBox(height: 12),
-                if (!backendDiagnosticsAvailable) ...[
+                // Show a contextual note when no support reference arrived.
+                if (!bodyWasJson) ...[
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(12),
@@ -172,7 +204,29 @@ class _LoginScreenState extends State<LoginScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Text(
-                      'Backend update required: this API is using an older login response and cannot provide the new diagnostic reference. Deploy the latest backend before retrying.',
+                      'The rejection response was not in JSON format. '
+                      'This usually means a proxy or gateway intercepted the request '
+                      'before it reached the API. Try the connection check below.',
+                      style: TextStyle(
+                        color: Color(0xFF8A4B08),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ] else if (diagnosticId == null || diagnosticId.isEmpty) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF4E5),
+                      border: Border.all(color: const Color(0xFFFFD08A)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Text(
+                      'The API rejected the sign-in but did not include a support '
+                      'reference in its response. Server logs will contain the '
+                      'rejection reason.',
                       style: TextStyle(
                         color: Color(0xFF8A4B08),
                         fontWeight: FontWeight.w600,
@@ -216,9 +270,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         setDialogState(() {
                           healthCheckResult = healthy
                               ? 'Connection check passed (HTTP 200). The API is reachable; '
-                                  'this does not verify the student account or database.'
+                                    'this does not verify the student account or database.'
                               : 'Connection check returned HTTP ${response.statusCode}. '
-                                  'Confirm the API deployment is healthy.';
+                                    'Confirm the API deployment is healthy.';
                         });
                       } catch (_) {
                         if (!dialogContext.mounted) return;
@@ -248,20 +302,20 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _diagnosticLine(String label, String value) => Padding(
-        padding: const EdgeInsets.only(bottom: 5),
-        child: RichText(
-          text: TextSpan(
-            style: Theme.of(context).textTheme.bodySmall,
-            children: [
-              TextSpan(
-                text: '$label: ',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              TextSpan(text: value),
-            ],
+    padding: const EdgeInsets.only(bottom: 5),
+    child: Text.rich(
+      TextSpan(
+        style: Theme.of(context).textTheme.bodySmall,
+        children: [
+          TextSpan(
+            text: '$label: ',
+            style: const TextStyle(fontWeight: FontWeight.bold),
           ),
-        ),
-      );
+          TextSpan(text: value),
+        ],
+      ),
+    ),
+  );
 
   // ── Build ────────────────────────────────────────────────────────────
 
@@ -271,10 +325,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFFAFAFA),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
+      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 28),
@@ -307,8 +358,11 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ],
                         ),
-                        child: const Icon(Icons.school_rounded,
-                            color: Colors.white, size: 36),
+                        child: const Icon(
+                          Icons.school_rounded,
+                          color: Colors.white,
+                          size: 36,
+                        ),
                       ),
                       const SizedBox(height: 16),
                       const Text(
@@ -324,7 +378,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       Text(
                         'A/L ICT Student Portal',
                         style: TextStyle(
-                            fontSize: 13, color: Colors.grey.shade500),
+                          fontSize: 13,
+                          color: Colors.grey.shade500,
+                        ),
                       ),
                     ],
                   ),
@@ -355,11 +411,14 @@ class _LoginScreenState extends State<LoginScreen> {
                     hintText: 'student@school.lk',
                     prefixIcon: const Icon(Icons.email_outlined),
                     border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     filled: true,
                     fillColor: Colors.white,
                     contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 14),
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
                   ),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
@@ -386,21 +445,26 @@ class _LoginScreenState extends State<LoginScreen> {
                     labelText: 'Password',
                     prefixIcon: const Icon(Icons.lock_outline_rounded),
                     suffixIcon: IconButton(
-                      icon: Icon(_obscurePassword
-                          ? Icons.visibility_outlined
-                          : Icons.visibility_off_outlined),
-                      onPressed: () => setState(
-                          () => _obscurePassword = !_obscurePassword),
+                      icon: Icon(
+                        _obscurePassword
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                      ),
+                      onPressed: () =>
+                          setState(() => _obscurePassword = !_obscurePassword),
                       tooltip: _obscurePassword
                           ? 'Show password'
                           : 'Hide password',
                     ),
                     border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     filled: true,
                     fillColor: Colors.white,
                     contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 14),
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
@@ -422,9 +486,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       backgroundColor: Colors.orange,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                       textStyle: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.bold),
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     onPressed: _isLoading ? null : _handleLogin,
                     child: _isLoading
@@ -441,7 +508,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
 
                 const SizedBox(height: 16),
-                
+
                 // ── Forgot Password button ─────────────────────────────
                 Center(
                   child: TextButton(
@@ -468,8 +535,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 Center(
                   child: Text(
                     'Use the email and password issued for your student account.',
-                    style: TextStyle(
-                        fontSize: 11, color: Colors.grey.shade400),
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -478,9 +544,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Wrap(
                     spacing: 4,
                     children: [
-                      Icon(Icons.info_outline,
-                          size: 12,
-                          color: colorScheme.secondary.withAlpha(140)),
+                      Icon(
+                        Icons.info_outline,
+                        size: 12,
+                        color: colorScheme.secondary.withAlpha(140),
+                      ),
                       Text(
                         'Sign in using your student account.',
                         style: TextStyle(

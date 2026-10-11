@@ -1,5 +1,8 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
+
+import '../ui/prep_ui.dart';
 
 class ExamReviewScreen extends StatelessWidget {
   final String sessionId;
@@ -37,223 +40,237 @@ class ExamReviewScreen extends StatelessWidget {
     } catch (_) {}
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Exam Review', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.orange,
-        foregroundColor: Colors.white,
-      ),
-      backgroundColor: const Color(0xFFFAFAFA),
-      body: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                border: Border(bottom: BorderSide(color: Color(0xFFEEEEEE))),
-              ),
+      appBar: AppBar(title: const Text('Exam review')),
+      body: PrepPage(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            PrepCard(
+              color: PrepColors.navy,
+              padding: const EdgeInsets.all(24),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const PrepPill(
+                    'YOUR RESULTS',
+                    color: Color(0xFFD7F2B8),
+                    background: Color(0xFF30535C),
+                    icon: Icons.fact_check_outlined,
+                  ),
+                  const SizedBox(height: 20),
                   Text(
                     title,
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.headlineMedium
+                        ?.copyWith(color: Colors.white),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   Text(
-                    '$subject • $date',
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                    subject,
+                    style: const TextStyle(color: Color(0xFFDBEBEF)),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    '$score / $totalQuestions',
+                    style: const TextStyle(
+                      fontSize: 36,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const Text(
+                    'Correct answers',
+                    style: TextStyle(color: Color(0xFFDBEBEF)),
                   ),
                   const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withAlpha(20),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.orange.withAlpha(50)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.stars_rounded, color: Colors.orange),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Score: $score / $totalQuestions',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.orange,
-                          ),
-                        ),
-                      ],
+                  Text(
+                    date,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFFDBEBEF),
                     ),
                   ),
                 ],
               ),
             ),
-          ),
-          if (questions.isEmpty)
-            const SliverFillRemaining(
-              child: Center(
-                child: Text('No questions data available for this session.', style: TextStyle(color: Colors.grey)),
-              ),
-            )
-          else
-            SliverPadding(
-              padding: const EdgeInsets.all(16),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, i) {
-                    final q = questions[i];
-                    final qText = q['questionText'] ?? q['text'] ?? q['question'] ?? 'Untitled';
-                    final options = List<String>.from(q['options'] ?? []);
-                    
-                    // Handle various correctOptionIndex formats
-                    final rawCorrect = q['correctOptionIndex'] ?? q['correctOption'] ?? q['correctIndex'] ?? q['answerIndex'] ?? q['answer'];
-                    final correctIdx = int.tryParse('$rawCorrect') ?? 0;
-
-                    // Get user's answer for this question ID. 
-                    // Answers JSON usually uses string keys like "1", "2"
-                    final qId = q['id']?.toString() ?? '${i + 1}';
-                    final selectedIdxRaw = answers[qId];
-                    final selectedIdx = selectedIdxRaw != null ? int.tryParse('$selectedIdxRaw') ?? -1 : -1;
-
-                    return Card(
-                      elevation: 0,
-                      margin: const EdgeInsets.only(bottom: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        side: BorderSide(color: Colors.grey.shade200),
-                      ),
-                      color: Colors.white,
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+            const PrepSection(title: 'Learn from your answers'),
+            const Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                PrepPill('Correct answer', icon: Icons.check_circle_outline),
+                PrepPill(
+                  'Your incorrect answer',
+                  icon: Icons.cancel_outlined,
+                  color: PrepColors.error,
+                  background: Color(0xFFFCE8E6),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            if (questions.isEmpty)
+              const PrepState(
+                title: 'Review details unavailable',
+                message: 'Question data was not saved for this session. Your score is shown above.',
+              )
+            else
+              ...List.generate(questions.length, (i) {
+                final q = questions[i];
+                final qText =
+                    q['questionText'] ??
+                    q['text'] ??
+                    q['question'] ??
+                    'Untitled';
+                final options = List<String>.from(q['options'] ?? []);
+                final rawCorrect =
+                    q['correctOptionIndex'] ??
+                    q['correctOption'] ??
+                    q['correctIndex'] ??
+                    q['answerIndex'] ??
+                    q['answer'];
+                final parsedCorrectIdx = int.tryParse('$rawCorrect');
+                final correctIdx =
+                    parsedCorrectIdx != null &&
+                        parsedCorrectIdx >= 0 &&
+                        parsedCorrectIdx < options.length
+                    ? parsedCorrectIdx
+                    : null;
+                final qId =
+                    (q['id'] ?? q['questionNo'] ?? q['questionId'])?.toString() ??
+                    '${i + 1}';
+                final selectedIdxRaw = answers[qId];
+                final selectedIdx = selectedIdxRaw != null
+                    ? int.tryParse('$selectedIdxRaw') ?? -1
+                    : -1;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 20),
+                  child: PrepCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
                           children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Container(
-                                  width: 28,
-                                  height: 28,
-                                  decoration: BoxDecoration(
-                                    color: Colors.orange,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      '${i + 1}',
-                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                                    ),
+                            PrepPill('Question ${i + 1}'),
+                            if (selectedIdx == -1)
+                              const PrepPill(
+                                'Unanswered',
+                                color: PrepColors.amber,
+                                background: Color(0xFFFFF2DE),
+                              ),
+                            if (correctIdx == null)
+                              const PrepPill(
+                                'Correct answer not saved',
+                                color: PrepColors.muted,
+                                background: PrepColors.canvas,
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          qText,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 20),
+                        ...List.generate(options.length, (optIdx) {
+                          final isCorrect = correctIdx == optIdx;
+                          final isSelected = selectedIdx == optIdx;
+                          final isWrong =
+                              isSelected && correctIdx != null && !isCorrect;
+                          final color = isWrong
+                              ? PrepColors.error
+                              : isCorrect
+                              ? PrepColors.primary
+                              : PrepColors.muted;
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: Semantics(
+                              selected: isSelected,
+                              label:
+                                  '${isCorrect ? 'Correct answer. ' : ''}${isSelected ? 'Your answer. ' : ''}',
+                              child: Container(
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: isCorrect || isWrong
+                                      ? color.withAlpha(14)
+                                      : PrepColors.canvas,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: isCorrect || isWrong
+                                        ? color
+                                        : PrepColors.line,
                                   ),
                                 ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    qText,
-                                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, height: 1.4),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '${String.fromCharCode(65 + optIdx)}. ${options[optIdx]}',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyLarge,
+                                    ),
+                                    if (isCorrect || isSelected) ...[
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        correctIdx == null && isSelected
+                                            ? 'Your answer · correctness unavailable'
+                                            : isCorrect
+                                            ? (isSelected
+                                                  ? '✓ Correct · Your answer'
+                                                  : '✓ Correct answer')
+                                            : '× Your answer',
+                                        style: TextStyle(
+                                          color: color,
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                        if (q['explanation'] != null &&
+                            q['explanation'].toString().isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: PrepColors.mint,
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Why this answer?',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    color: PrepColors.primary,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  q['explanation'].toString(),
+                                  style: const TextStyle(
+                                    color: PrepColors.ink,
+                                    height: 1.5,
                                   ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 16),
-                            ...List.generate(options.length, (optIdx) {
-                              final isCorrect = correctIdx == optIdx;
-                              final isSelected = selectedIdx == optIdx;
-                              final isWrong = isSelected && !isCorrect;
-
-                              Color bgColor = Colors.transparent;
-                              Color borderColor = Colors.grey.shade300;
-                              Widget trailing = const SizedBox();
-
-                              if (isCorrect) {
-                                bgColor = Colors.green.shade50;
-                                borderColor = Colors.green;
-                                trailing = const Icon(Icons.check_circle, color: Colors.green, size: 20);
-                              } else if (isWrong) {
-                                bgColor = Colors.red.shade50;
-                                borderColor = Colors.red;
-                                trailing = const Icon(Icons.cancel, color: Colors.red, size: 20);
-                              }
-
-                              return Container(
-                                margin: const EdgeInsets.only(bottom: 8),
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                                decoration: BoxDecoration(
-                                  color: bgColor,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: borderColor, width: 1.5),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 26,
-                                      height: 26,
-                                      decoration: BoxDecoration(
-                                        color: isCorrect ? Colors.green : isWrong ? Colors.red : Colors.grey.shade200,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Center(
-                                        child: Text(
-                                          String.fromCharCode(65 + optIdx),
-                                          style: TextStyle(
-                                            color: (isCorrect || isWrong) ? Colors.white : Colors.grey.shade700,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Text(
-                                        options[optIdx],
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          color: (isCorrect || isWrong) ? Colors.black87 : Colors.grey.shade800,
-                                          fontWeight: (isCorrect || isWrong) ? FontWeight.w600 : FontWeight.normal,
-                                        ),
-                                      ),
-                                    ),
-                                    trailing,
-                                  ],
-                                ),
-                              );
-                            }),
-                            if (q['explanation'] != null && q['explanation'].toString().isNotEmpty) ...[
-                              const SizedBox(height: 12),
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.shade50,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.blue.shade100),
-                                ),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Icon(Icons.lightbulb_outline, size: 20, color: Colors.blue.shade700),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Text(
-                                        q['explanation'].toString(),
-                                        style: TextStyle(fontSize: 13, color: Colors.blue.shade900),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ]
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                  childCount: questions.length,
-                ),
-              ),
-            ),
-        ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              }),
+          ],
+        ),
       ),
     );
   }

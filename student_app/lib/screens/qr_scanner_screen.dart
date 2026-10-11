@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:http/http.dart' as http;
+
 import '../api_constants.dart';
 import 'exam_timer_screen.dart';
+import '../ui/prep_ui.dart';
 
 /// QRScannerScreen — UC2.2: Scan a QR code to unlock a timed exam session.
 ///
@@ -90,42 +93,52 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
       } else {
         if (!mounted) return;
         setState(() {
-          _lastError = 'Failed to join exam. Access Code: $accessCode, Status: ${response.statusCode}';
+          _lastError =
+              'Failed to join exam. Access Code: $accessCode, Status: ${response.statusCode}';
         });
       }
     } on TimeoutException {
       if (!mounted) return;
       setState(() {
-        _lastError = 'Could not connect to the server. Check your internet connection.';
+        _lastError =
+            'Could not connect to the server. Check your internet connection.';
         _isProcessing = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Could not connect to the server. Check your internet connection.'),
+          content: Text(
+            'Could not connect to the server. Check your internet connection.',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
     } on SocketException {
       if (!mounted) return;
       setState(() {
-        _lastError = 'Could not connect to the server. Check your internet connection.';
+        _lastError =
+            'Could not connect to the server. Check your internet connection.';
         _isProcessing = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Could not connect to the server. Check your internet connection.'),
+          content: Text(
+            'Could not connect to the server. Check your internet connection.',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _lastError = 'Could not connect to the server. Check your internet connection.';
+        _lastError =
+            'Could not connect to the server. Check your internet connection.';
         _isProcessing = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Could not connect to the server. Check your internet connection.'),
+          content: Text(
+            'Could not connect to the server. Check your internet connection.',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -143,217 +156,160 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
   // ── Build ──────────────────────────────────────────────────────────
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        iconTheme: const IconThemeData(color: Colors.white, size: 28),
-        actionsIconTheme: const IconThemeData(color: Colors.white, size: 28),
-        title: const Text(
-          'Scan Exam QR Code',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-        ),
-        actions: [
-          // Torch toggle
-          IconButton(
-            icon: const Icon(Icons.flashlight_on_outlined),
-            tooltip: 'Toggle torch',
-            onPressed: _toggleTorch,
-          ),
-          // Camera flip
-          IconButton(
-            icon: const Icon(Icons.flip_camera_ios_outlined),
-            tooltip: 'Switch camera',
-            onPressed: _switchCamera,
-          ),
-        ],
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: PrepColors.navy,
+    appBar: AppBar(
+      backgroundColor: PrepColors.navy,
+      foregroundColor: Colors.white,
+      titleTextStyle: Theme.of(context).textTheme.titleLarge
+          ?.copyWith(color: Colors.white),
+      title: const Text(
+        'Join an exam',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
-      body: Stack(
-        children: [
-          // ── Camera preview ──────────────────────────────────────────
-          MobileScanner(
-            controller: _controller,
-            onDetect: _onDetect,
-          ),
-
-          if (_isProcessing)
-            Positioned.fill(
-              child: Container(
-                color: Colors.black.withAlpha(180),
-                child: const Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      CircularProgressIndicator(
-                        color: Colors.green,
-                        strokeWidth: 4,
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.flashlight_on_outlined),
+          tooltip: 'Toggle torch',
+          onPressed: _toggleTorch,
+        ),
+        IconButton(
+          icon: const Icon(Icons.flip_camera_ios_outlined),
+          tooltip: 'Switch camera',
+          onPressed: _switchCamera,
+        ),
+      ],
+    ),
+    body: SafeArea(
+      top: false,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final camera = ClipRRect(
+            borderRadius: BorderRadius.circular(28),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                MobileScanner(controller: _controller, onDetect: _onDetect),
+                IgnorePointer(child: _ScanOverlay(isProcessing: _isProcessing)),
+                if (_isProcessing)
+                  const ColoredBox(
+                    color: Color(0xBB153D47),
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        semanticsLabel: 'Opening exam',
                       ),
-                      SizedBox(height: 18),
-                      Text(
-                        'Unlocking Exam...',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
+              ],
             ),
-
-          // ── Scanning overlay ────────────────────────────────────────
-          _ScanOverlay(isProcessing: _isProcessing),
-
-          // ── Bottom info panel ───────────────────────────────────────
-          Align(
-            alignment: Alignment.bottomCenter,
+          );
+          final info = SingleChildScrollView(
             child: _BottomInfoPanel(
               isProcessing: _isProcessing,
               lastError: _lastError,
             ),
-          ),
-        ],
+          );
+          if (constraints.maxWidth > 600 &&
+              constraints.maxWidth > constraints.maxHeight) {
+            return Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: camera,
+                  ),
+                ),
+                Expanded(flex: 2, child: info),
+              ],
+            );
+          }
+          return Column(
+            children: [
+              Expanded(
+                flex: 3,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: camera,
+                ),
+              ),
+              Flexible(flex: 2, child: info),
+            ],
+          );
+        },
       ),
-    );
-  }
+    ),
+  );
 }
-
-// ── Private overlay widget ─────────────────────────────────────────────────
 
 class _ScanOverlay extends StatelessWidget {
   const _ScanOverlay({required this.isProcessing});
-
   final bool isProcessing;
-
   @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Viewfinder frame
-          Container(
-            width: 240,
-            height: 240,
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: isProcessing ? Colors.green : Colors.orange,
-                width: 3,
-              ),
-              borderRadius: BorderRadius.circular(16),
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final side = constraints.biggest.shortestSide * 0.7;
+      return Center(
+        child: Container(
+          width: side,
+          height: side,
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: isProcessing ? const Color(0xFFD7F2B8) : Colors.white,
+              width: 3,
             ),
-            child: isProcessing
-                ? const Center(
-                    child: CircularProgressIndicator(
-                      color: Colors.green,
-                      strokeWidth: 3,
-                    ),
-                  )
-                : null,
+            borderRadius: BorderRadius.circular(24),
+            color: Colors.white.withAlpha(10),
           ),
-          const SizedBox(height: 20),
-          // Corner accent lines using a CustomPaint
-          Text(
-            isProcessing ? 'Unlocking exam…' : 'Point at the exam QR code',
-            style: TextStyle(
-              color: isProcessing ? Colors.green : Colors.white70,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              letterSpacing: 0.3,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+        ),
+      );
+    },
+  );
 }
 
-// ── Bottom info panel ──────────────────────────────────────────────────────
-
 class _BottomInfoPanel extends StatelessWidget {
-  const _BottomInfoPanel({
-    required this.isProcessing,
-    required this.lastError,
-  });
-
+  const _BottomInfoPanel({required this.isProcessing, required this.lastError});
   final bool isProcessing;
   final String? lastError;
-
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
-      decoration: const BoxDecoration(
-        color: Colors.black87,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.all(24),
+    child: Semantics(
+      liveRegion: true,
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title row
-          Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: Colors.orange.withAlpha(40),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.orange.withAlpha(80)),
-                ),
-                child: const Icon(Icons.qr_code_scanner,
-                    color: Colors.orange, size: 18),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'IntelliPrep Exam Unlock',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      'UC2.2 · A/L ICT Assessment',
-                      style: TextStyle(
-                        color: Colors.white38,
-                        fontSize: 10,
-                        fontFamily: 'monospace',
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          const PrepPill(
+            'EXAM CHECK-IN',
+            color: Color(0xFFD7F2B8),
+            background: Color(0xFF30535C),
+            icon: Icons.qr_code_scanner_rounded,
           ),
-          const SizedBox(height: 14),
-          // Instructions / error
+          const SizedBox(height: 16),
+          Text(
+            isProcessing ? 'Opening your exam…' : 'Point. Scan. You’re in.',
+            style: Theme.of(context).textTheme.titleLarge
+                ?.copyWith(color: Colors.white),
+          ),
+          const SizedBox(height: 10),
           if (lastError != null)
             _InfoChip(
-              icon: Icons.error_outline,
+              icon: Icons.error_outline_rounded,
               text: lastError!,
-              color: Colors.red,
+              color: const Color(0xFFFFB4AB),
             )
           else
             const _InfoChip(
-              icon: Icons.info_outline,
-              text: 'Your tutor will display the QR code at the start of the exam.',
-              color: Colors.white54,
+              icon: Icons.info_outline_rounded,
+              text: 'Position your tutor’s QR code inside the frame. Keep your phone steady and the code well lit.',
+              color: Color(0xFFDBEBEF),
             ),
         ],
       ),
-    );
-  }
+    ),
+  );
 }
 
 class _InfoChip extends StatelessWidget {
@@ -362,25 +318,21 @@ class _InfoChip extends StatelessWidget {
     required this.text,
     required this.color,
   });
-
   final IconData icon;
   final String text;
   final Color color;
-
   @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, color: color, size: 14),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Text(
-            text,
-            style: TextStyle(color: color, fontSize: 12, height: 1.4),
-          ),
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Icon(icon, color: color, size: 20),
+      const SizedBox(width: 10),
+      Expanded(
+        child: Text(
+          text,
+          style: TextStyle(fontSize: 15, height: 1.5, color: color),
         ),
-      ],
-    );
-  }
+      ),
+    ],
+  );
 }

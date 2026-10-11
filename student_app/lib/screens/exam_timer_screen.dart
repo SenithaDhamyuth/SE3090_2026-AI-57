@@ -9,6 +9,7 @@ import '../models/cached_exam.dart';
 import '../services/database_helper.dart';
 import '../api_constants.dart';
 import 'exam_review_screen.dart';
+import '../ui/prep_ui.dart';
 
 class _JoinedExam {
   final List<Map<String, dynamic>> questions;
@@ -69,7 +70,7 @@ Future<_JoinedExam> _fetchExam(String sessionId) async {
         : rawQuestions;
 
     if (parsed is! List) {
-      print(
+      debugPrint(
         '❌ JSON Error: parsed questionsJson is not a List. Type is ${parsed.runtimeType}',
       );
       return _JoinedExam(
@@ -86,13 +87,13 @@ Future<_JoinedExam> _fetchExam(String sessionId) async {
       durationMinutes: durationMinutes > 0 ? durationMinutes : 30,
     );
   } on TimeoutException {
-    print('❌ API Error: Connection timed out.');
+    debugPrint('❌ API Error: Connection timed out.');
     throw Exception('Connection failed. Check your internet connection.');
   } on FormatException catch (e, stack) {
-    print('❌ JSON FormatException: ${e.message}\n$stack');
+    debugPrint('❌ JSON FormatException: ${e.message}\n$stack');
     throw Exception('Connection failed. Check your internet connection.');
   } catch (e, stack) {
-    print('❌ API Catch-all Error: $e\n$stack');
+    debugPrint('❌ API Catch-all Error: $e\n$stack');
     if (e is Exception && e.toString().contains('Connection failed')) {
       rethrow;
     }
@@ -140,6 +141,7 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
   Timer? _serverSyncTimer;
   bool _syncingTimer = false;
   bool _submitted = false;
+  int _currentQuestionIndex = 0;
 
   // ── Loaded question state ─────────────────────────────────────────────
   final List<_Question> _questions = [];
@@ -256,7 +258,7 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
           .where((question) {
             // We only require text to not be empty now, since questionNo might be 0 or missing in some rogue JSONs.
             if (question.text.isEmpty) {
-              print('⚠️ Warning: Dropped question because text was empty.');
+              debugPrint('⚠️ Warning: Dropped question because text was empty.');
               return false;
             }
             return true;
@@ -277,7 +279,16 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
       });
 
       _initAnswers();
-      await _cacheExamLocally();
+      try {
+        await _cacheExamLocally();
+      } catch (error) {
+        debugPrint('[ExamTimerScreen] Initial local cache failed: $error');
+        if (mounted) {
+          setState(
+            () => _saveStatus = 'Local save unavailable — syncing online',
+          );
+        }
+      }
     } catch (e) {
       if (!mounted) return;
 
@@ -302,7 +313,14 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
       durationMinutes: _configuredDurationMinutes,
       questionsJson: jsonEncode(
         _questions
-            .map((q) => {'id': q.id, 'text': q.text, 'options': q.options})
+            .map(
+              (q) => {
+                'id': q.id,
+                'text': q.text,
+                'options': q.options,
+                'correctOptionIndex': q.correctIndex,
+              },
+            )
             .toList(),
       ),
       answersJson: '{}',
@@ -512,9 +530,7 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
 
       final body = jsonEncode(payload);
 
-      print(
-        '[ExamTimerScreen] → POST /api/student/submit | payload keys: ${payload.keys.toList()} | score=${payload['totalScore']}',
-      );
+      debugPrint('[ExamTimerScreen] Submitting exam result.');
 
       final response = await http
           .post(
@@ -529,8 +545,8 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
           )
           .timeout(const Duration(seconds: 15));
 
-      print(
-        '[ExamTimerScreen] ← Backend submit response: HTTP ${response.statusCode} | body: ${response.body}',
+      debugPrint(
+        '[ExamTimerScreen] Exam submission response: HTTP ${response.statusCode}.',
       );
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -571,8 +587,9 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
     } catch (e, stack) {
       debugPrint('[ExamTimerScreen] Local submit save failed: $e');
       debugPrint('[ExamTimerScreen] Stack: $stack');
-      if (mounted)
+      if (mounted) {
         setState(() => _saveStatus = 'Local save failed — syncing to server');
+      }
     }
 
     // 2. Sync to backend (best-effort — does not block the UI)
@@ -602,7 +619,7 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
             child: const Text('Cancel'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.orange),
+            style: FilledButton.styleFrom(backgroundColor: PrepColors.primary),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Submit'),
           ),
@@ -619,9 +636,11 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
 
     showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       isDismissible: false,
       enableDrag: false,
-      backgroundColor: Colors.transparent,
+      backgroundColor: Colors.white,
+      showDragHandle: true,
       builder: (_) => _ResultsSheet(
         score: score,
         total: total,
@@ -671,9 +690,9 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
   }
 
   Color get _timerColor {
-    if (_remainingSeconds <= 300) return Colors.red;
-    if (_remainingSeconds <= 600) return Colors.orange;
-    return Colors.orange.shade700;
+    if (_remainingSeconds <= 300) return PrepColors.error;
+    if (_remainingSeconds <= 600) return PrepColors.amber;
+    return PrepColors.primary;
   }
 
   int get _answeredCount => _answers.values.where((v) => v >= 0).length;
@@ -681,232 +700,288 @@ class _ExamTimerScreenState extends State<ExamTimerScreen>
   // ── Build ────────────────────────────────────────────────────────────
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFFAFAFA),
-      appBar: _buildAppBar(),
-      body: _isLoadingQuestions
-          ? const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(color: Colors.orange),
-                  SizedBox(height: 16),
-                  Text(
-                    'Loading questions...',
-                    style: TextStyle(
-                      fontSize: 15,
-                      color: Colors.grey,
-                      fontWeight: FontWeight.w500,
+  Widget build(BuildContext context) => Scaffold(
+    appBar: _buildAppBar(),
+    body: SafeArea(
+      top: false,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (_isLoadingQuestions) {
+            return const PrepPage(
+              child: PrepState(
+                title: 'Preparing your exam',
+                message: 'Loading questions and synchronizing your timer.',
+                loading: true,
+              ),
+            );
+          }
+          if (_questions.isEmpty) {
+            return PrepPage(
+              child: PrepState(
+                title: 'Exam unavailable',
+                message: _questionsError.isNotEmpty
+                    ? _questionsError
+                    : 'No questions are available for this session.',
+                icon: Icons.assignment_late_outlined,
+                action: 'Back to scanner',
+                onAction: () => Navigator.of(context).pop(),
+              ),
+            );
+          }
+          final compact =
+              constraints.maxHeight < 480 ||
+              MediaQuery.textScalerOf(context).scale(16) > 24;
+          return Column(
+            children: [
+              if (!compact) _buildTimerBanner(),
+              Expanded(
+                child: SingleChildScrollView(
+                  key: ValueKey(_currentQuestionIndex),
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 760),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (compact) ...[
+                            _buildTimerBanner(),
+                            const SizedBox(height: 16),
+                          ],
+                          Wrap(
+                            alignment: WrapAlignment.spaceBetween,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 12,
+                            children: [
+                              Text(
+                                'Question ${_currentQuestionIndex + 1} of ${_questions.length}',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              TextButton.icon(
+                                onPressed: _showQuestionNavigator,
+                                icon: const Icon(
+                                  Icons.grid_view_rounded,
+                                  size: 18,
+                                ),
+                                label: const Text('All questions'),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          _QuestionCard(
+                            question: _questions[_currentQuestionIndex],
+                            selectedIndex:
+                                _answers[_questions[_currentQuestionIndex]
+                                    .id] ??
+                                -1,
+                            isSubmitted: _submitted,
+                            onSelected: _submitted
+                                ? null
+                                : (idx) => _selectAnswer(
+                                    _questions[_currentQuestionIndex].id,
+                                    idx,
+                                  ),
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Select one answer. You can revisit questions before submitting.',
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ],
-              ),
-            )
-          : _questions.isEmpty
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  _questionsError.isNotEmpty
-                      ? _questionsError
-                      : 'No questions are available for this session.',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 16, color: Colors.grey),
                 ),
               ),
-            )
-          : Column(
+            ],
+          );
+        },
+      ),
+    ),
+    bottomNavigationBar: _isLoadingQuestions || _questions.isEmpty
+        ? null
+        : _buildBottomBar(),
+  );
+
+  void _showQuestionNavigator() {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.75,
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildTimerBanner(),
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
-                    itemCount: _questions.length,
-                    itemBuilder: (_, i) => _QuestionCard(
-                      question: _questions[i],
-                      selectedIndex: _answers[_questions[i].id] ?? -1,
-                      isSubmitted: _submitted,
-                      onSelected: _submitted
-                          ? null
-                          : (idx) => _selectAnswer(_questions[i].id, idx),
-                    ),
-                  ),
+                Text(
+                  'Your questions',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Check marks show answered questions. Tap a number to revisit it.',
+                ),
+                const SizedBox(height: 20),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: List.generate(_questions.length, (i) {
+                    final answered = (_answers[_questions[i].id] ?? -1) >= 0;
+                    return Semantics(
+                      label:
+                          'Question ${i + 1}, ${answered ? 'answered' : 'unanswered'}',
+                      selected: i == _currentQuestionIndex,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: i == _currentQuestionIndex
+                              ? PrepColors.mint
+                              : null,
+                        ),
+                        onPressed: () {
+                          setState(() => _currentQuestionIndex = i);
+                          Navigator.pop(sheetContext);
+                        },
+                        child: Text('${i + 1}${answered ? ' ✓' : ''}'),
+                      ),
+                    );
+                  }),
                 ),
               ],
             ),
-      bottomNavigationBar: _isLoadingQuestions || _questions.isEmpty
-          ? null
-          : _buildBottomBar(),
+          ),
+        ),
+      ),
     );
   }
 
-  PreferredSizeWidget _buildAppBar() {
-    return AppBar(
-      backgroundColor: Colors.orange,
-      foregroundColor: Colors.white,
-      elevation: 0,
-      title: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'A/L ICT Mock Exam',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+  PreferredSizeWidget _buildAppBar() => AppBar(
+    title: Text(
+      _submitted ? 'Exam submitted' : 'A/L ICT exam',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    ),
+    actions: [
+      if (_dbSaving)
+        const Padding(
+          padding: EdgeInsets.all(18),
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              semanticsLabel: 'Saving progress',
+            ),
           ),
-          Text(
-            'Session: ${widget.qrPayload.length > 16 ? widget.qrPayload.substring(0, 16) : widget.qrPayload}…',
-            style: const TextStyle(fontSize: 9, color: Colors.white70),
-          ),
-        ],
-      ),
-      actions: [
-        if (_dbSaving)
-          const Padding(
-            padding: EdgeInsets.only(right: 8),
-            child: Center(
-              child: SizedBox(
-                width: 14,
-                height: 14,
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 2,
+        ),
+    ],
+  );
+
+  Widget _buildTimerBanner() => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+    decoration: const BoxDecoration(
+      color: Colors.white,
+      border: Border(bottom: BorderSide(color: PrepColors.line)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Wrap(
+          spacing: 16,
+          runSpacing: 8,
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Semantics(
+              label: 'Time remaining $_timerLabel',
+              child: ExcludeSemantics(
+                child: Text(
+                  _timerLabel,
+                  style: TextStyle(
+                    fontSize: 30,
+                    fontWeight: FontWeight.w800,
+                    color: _timerColor,
+                  ),
                 ),
               ),
             ),
-          )
-        else if (_saveStatus.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: Center(
-              child: Text(
-                _saveStatus,
-                style: const TextStyle(fontSize: 10, color: Colors.white70),
-              ),
+            PrepPill(
+              '$_answeredCount / ${_questions.length} answered',
+              icon: Icons.task_alt_rounded,
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          _remainingSeconds <= 300
+              ? 'Time is running out. Check your answers.'
+              : 'Time remaining',
+          style: TextStyle(color: _timerColor, fontSize: 13),
+        ),
+        const SizedBox(height: 12),
+        LinearProgressIndicator(
+          value: _questions.isEmpty ? 0 : _answeredCount / _questions.length,
+          minHeight: 5,
+          backgroundColor: PrepColors.line,
+          borderRadius: BorderRadius.circular(4),
+          semanticsLabel: 'Questions answered',
+          semanticsValue: _questions.isEmpty
+              ? '0'
+              : '${(_answeredCount / _questions.length * 100).round()}',
+        ),
+        if (_saveStatus.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              _saveStatus,
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
+        ],
       ],
-    );
-  }
+    ),
+  );
 
-  Widget _buildTimerBanner() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
-      ),
+  Widget _buildBottomBar() => SafeArea(
+    top: false,
+    child: Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+      color: Colors.white,
       child: Row(
         children: [
-          // Countdown clock
-          Icon(Icons.timer_outlined, color: _timerColor, size: 20),
-          const SizedBox(width: 8),
-          Text(
-            _timerLabel,
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: _timerColor,
-              fontFamily: 'monospace',
-            ),
+          IconButton.outlined(
+            tooltip: 'Previous question',
+            onPressed: _currentQuestionIndex > 0
+                ? () => setState(() => _currentQuestionIndex--)
+                : null,
+            icon: const Icon(Icons.arrow_back_rounded),
           ),
-          const SizedBox(width: 4),
-          Text(
-            _remainingSeconds <= 300 ? ' — Time running out!' : ' remaining',
-            style: TextStyle(fontSize: 11, color: _timerColor.withAlpha(180)),
-          ),
-          const Spacer(),
-          // Progress chip
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.orange.withAlpha(20),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.orange.withAlpha(60)),
-            ),
-            child: Text(
-              '$_answeredCount / ${_questions.length}',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: Colors.orange,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBottomBar() {
-    return Container(
-      padding: EdgeInsets.fromLTRB(
-        16,
-        12,
-        16,
-        MediaQuery.of(context).padding.bottom + 12,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Colors.grey.shade200)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(15),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Progress indicator
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: _questions.isEmpty
-                  ? 0
-                  : _answeredCount / _questions.length,
-              backgroundColor: Colors.grey.shade200,
-              valueColor: const AlwaysStoppedAnimation<Color>(Colors.orange),
-              minHeight: 6,
-            ),
-          ),
-          const SizedBox(height: 12),
-          // Submit button
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: FilledButton.icon(
-              style: FilledButton.styleFrom(
-                backgroundColor: _submitted ? Colors.grey : Colors.orange,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: FilledButton(
               onPressed: _submitted ? null : () => _handleSubmit(),
-              icon: Icon(
-                _submitted ? Icons.check_circle : Icons.send_rounded,
-                size: 18,
-              ),
-              label: Text(
-                _submitted
-                    ? 'Exam Submitted'
-                    : 'Submit Answers ($_answeredCount/${_questions.length})',
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              child: Text(_submitted ? 'Submitted' : 'Submit answers'),
             ),
+          ),
+          const SizedBox(width: 12),
+          IconButton.outlined(
+            tooltip: 'Next question',
+            onPressed: _currentQuestionIndex < _questions.length - 1
+                ? () => setState(() => _currentQuestionIndex++)
+                : null,
+            icon: const Icon(Icons.arrow_forward_rounded),
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
 }
-
-// ── Question card widget ───────────────────────────────────────────────────
 
 class _QuestionCard extends StatelessWidget {
   const _QuestionCard({
@@ -915,86 +990,33 @@ class _QuestionCard extends StatelessWidget {
     required this.isSubmitted,
     required this.onSelected,
   });
-
   final _Question question;
   final int selectedIndex;
   final bool isSubmitted;
-  final void Function(int)? onSelected;
-
+  final ValueChanged<int>? onSelected;
   @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 14),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: Colors.grey.shade200),
-      ),
-      color: Colors.white,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Question number badge + text
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: Colors.orange,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Center(
-                    child: Text(
-                      '${question.id}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    question.text,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF1A1A1A),
-                      height: 1.4,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            // Options
-            ...List.generate(question.options.length, (i) {
-              return _OptionTile(
-                label: String.fromCharCode(65 + i), // A, B, C, D
-                text: question.options[i],
-                isSelected: selectedIndex == i,
-                isCorrect: isSubmitted && question.correctIndex == i,
-                isWrong:
-                    isSubmitted &&
-                    selectedIndex == i &&
-                    question.correctIndex != i,
-                onTap: onSelected == null ? null : () => onSelected!(i),
-              );
-            }),
-          ],
+  Widget build(BuildContext context) => PrepCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(question.text, style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 24),
+        ...List.generate(
+          question.options.length,
+          (i) => _OptionTile(
+            label: String.fromCharCode(65 + i),
+            text: question.options[i],
+            isSelected: selectedIndex == i,
+            isCorrect: isSubmitted && question.correctIndex == i,
+            isWrong:
+                isSubmitted && selectedIndex == i && question.correctIndex != i,
+            onTap: onSelected == null ? null : () => onSelected!(i),
+          ),
         ),
-      ),
-    );
-  }
+      ],
+    ),
+  );
 }
-
-// ── Option tile ────────────────────────────────────────────────────────────
 
 class _OptionTile extends StatelessWidget {
   const _OptionTile({
@@ -1005,97 +1027,94 @@ class _OptionTile extends StatelessWidget {
     required this.isWrong,
     required this.onTap,
   });
-
   final String label;
   final String text;
   final bool isSelected;
   final bool isCorrect;
   final bool isWrong;
   final VoidCallback? onTap;
-
-  Color get _borderColor {
-    if (isCorrect) return Colors.green;
-    if (isWrong) return Colors.red;
-    if (isSelected) return Colors.orange;
-    return Colors.grey.shade300;
-  }
-
-  Color get _bgColor {
-    if (isCorrect) return Colors.green.shade50;
-    if (isWrong) return Colors.red.shade50;
-    if (isSelected) return Colors.orange.shade50;
-    return Colors.transparent;
-  }
-
-  Color get _labelBg {
-    if (isCorrect) return Colors.green;
-    if (isWrong) return Colors.red;
-    if (isSelected) return Colors.orange;
-    return Colors.grey.shade300;
-  }
-
-  Color get _labelFg {
-    if (isSelected || isCorrect || isWrong) return Colors.white;
-    return Colors.grey.shade600;
-  }
-
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: _bgColor,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: _borderColor, width: 1.5),
-        ),
-        child: Row(
-          children: [
-            // Label bubble
-            Container(
-              width: 26,
-              height: 26,
-              decoration: BoxDecoration(
-                color: _labelBg,
-                borderRadius: BorderRadius.circular(7),
-              ),
-              child: Center(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    color: _labelFg,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
+    final accent = isWrong ? PrepColors.error : PrepColors.primary;
+    final active = isSelected || isCorrect || isWrong;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Semantics(
+        selected: isSelected,
+        inMutuallyExclusiveGroup: true,
+        button: true,
+        enabled: onTap != null,
+        label: isCorrect
+            ? 'Correct answer'
+            : isWrong
+            ? 'Incorrect answer'
+            : null,
+        child: Material(
+          color: active ? accent.withAlpha(16) : Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(
+              color: active ? accent : PrepColors.line,
+              width: active ? 2 : 1,
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: active ? accent : PrepColors.canvas,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      label,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: active ? Colors.white : PrepColors.muted,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      text,
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        fontWeight: isSelected
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                      ),
+                    ),
+                  ),
+                  if (active) ...[
+                    const SizedBox(width: 8),
+                    Icon(
+                      isWrong
+                          ? Icons.cancel_outlined
+                          : Icons.check_circle_rounded,
+                      color: accent,
+                      size: 22,
+                    ),
+                  ],
+                ],
               ),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                text,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey.shade800,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                ),
-              ),
-            ),
-            if (isCorrect)
-              const Icon(Icons.check_circle, color: Colors.green, size: 18)
-            else if (isWrong)
-              const Icon(Icons.cancel, color: Colors.red, size: 18),
-          ],
+          ),
         ),
       ),
     );
   }
 }
-
-// ── Results bottom sheet ───────────────────────────────────────────────────
 
 class _ResultsSheet extends StatelessWidget {
   const _ResultsSheet({
@@ -1113,9 +1132,9 @@ class _ResultsSheet extends StatelessWidget {
   final VoidCallback onViewResults;
 
   Color get _gradeColor {
-    if (percentage >= 75) return Colors.green;
-    if (percentage >= 50) return Colors.orange;
-    return Colors.red;
+    if (percentage >= 75) return PrepColors.primary;
+    if (percentage >= 50) return PrepColors.amber;
+    return PrepColors.error;
   }
 
   String get _grade {
@@ -1133,128 +1152,70 @@ class _ResultsSheet extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.fromLTRB(
-        24,
-        24,
-        24,
-        MediaQuery.of(context).padding.bottom + 24,
+  Widget build(BuildContext context) => SafeArea(
+    child: ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.85,
       ),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Handle bar
-          Container(
-            width: 40,
-            height: 4,
-            margin: const EdgeInsets.only(bottom: 20),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade300,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          // Score circle
-          Container(
-            width: 100,
-            height: 100,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: _gradeColor, width: 4),
-              color: _gradeColor.withAlpha(20),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: _gradeColor.withAlpha(16),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Text(
                   _grade,
                   style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
+                    fontSize: 52,
+                    fontWeight: FontWeight.w800,
                     color: _gradeColor,
                   ),
                 ),
-                Text(
-                  '$percentage%',
-                  style: TextStyle(fontSize: 12, color: _gradeColor),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Exam Complete!',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey.shade900,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '$score out of $total correct',
-            style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _feedback,
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 8),
-          // Saved locally badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.green.shade50,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.green.shade200),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.storage_rounded,
-                  color: Colors.green.shade600,
-                  size: 14,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  'Results saved offline (UC2.5)',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.green.shade700,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: FilledButton.icon(
-              style: FilledButton.styleFrom(
-                backgroundColor: Colors.orange,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
               ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Exam complete',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(_feedback, textAlign: TextAlign.center),
+            const SizedBox(height: 24),
+            PrepMetrics(
+              items: [
+                PrepMetric(
+                  label: 'Correct answers',
+                  value: '$score / $total',
+                  icon: Icons.task_alt_rounded,
+                ),
+                PrepMetric(
+                  label: 'Your score',
+                  value: '$percentage%',
+                  icon: Icons.insights_rounded,
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Review your answers to see what to practise next.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            FilledButton.icon(
               onPressed: onViewResults,
-              icon: const Icon(Icons.analytics_rounded, size: 20),
-              label: const Text(
-                '🎯 View My Results',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-              ),
+              icon: const Icon(Icons.fact_check_outlined),
+              label: const Text('Review my answers'),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    );
-  }
+    ),
+  );
 }
