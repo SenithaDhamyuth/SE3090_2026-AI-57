@@ -1,26 +1,31 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React, { lazy } from "react";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
 
-import AdminLayout from './AdminLayout';
-import ProtectedRoute from './ProtectedRoute';
-import Dashboard from './Dashboard';
-import ExamSessions from './ExamSessions';
-import StudentManagement from './StudentManagement';
-import StudyPlanManager from './StudyPlanManager';
-import PastPaperAnalytics from './PastPaperAnalytics';
-import QuestionBankForm from './QuestionBankForm';
-import AdminLogin from './AdminLogin';
-import PendingApprovals from './PendingApprovals';
-import StudentMarks from './StudentMarks';
+import AdminLayout from "./AdminLayout";
+import ProtectedRoute from "./ProtectedRoute";
+const Dashboard = lazy(() => import("./Dashboard"));
+const ExamSessions = lazy(() => import("./ExamSessions"));
+const StudentManagement = lazy(() => import("./StudentManagement"));
+const StudyPlanManager = lazy(() => import("./StudyPlanManager"));
+const PastPaperAnalytics = lazy(() => import("./PastPaperAnalytics"));
+const QuestionBankForm = lazy(() => import("./QuestionBankForm"));
+import AdminLogin from "./AdminLogin";
+const PendingApprovals = lazy(() => import("./PendingApprovals"));
+const StudentMarks = lazy(() => import("./StudentMarks"));
 
 function App() {
   return (
     <Router>
       <Routes>
         <Route path="/login" element={<AdminLogin />} />
-        
-        <Route 
-          path="/" 
+
+        <Route
+          path="/"
           element={
             <ProtectedRoute>
               <AdminLayout />

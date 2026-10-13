@@ -32,7 +32,7 @@ public class StudentController : ControllerBase
     {
         // Extract student ID from the JWT claims
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue(ClaimTypes.NameIdentifier);
-        
+
         if (!int.TryParse(userIdClaim, out int studentId))
         {
             _logger.LogWarning("[StudentController] Invalid or missing NameIdentifier claim.");
@@ -55,7 +55,7 @@ public class StudentController : ControllerBase
         {
             // Parse the JSON array to return structured JSON rather than an escaped string
             var planDetails = JsonSerializer.Deserialize<object>(plan.PlanDetailsJson);
-            
+
             return Ok(new
             {
                 planId = plan.Id,
@@ -74,9 +74,7 @@ public class StudentController : ControllerBase
     // GET /api/student/my-results
     //
     // Called by Flutter "Progress" tab to fetch the student's submitted attempts.
-    // Returns sessions where StudentId matches (from QR field) OR where the
-    // session GUID exists in the request. The latest submitted attempt remains
-    // available even though the exam session returns to Ready for another try.
+    // Returns only sessions owned by the authenticated student.
     // ─────────────────────────────────────────────────────────────────────────
     [HttpGet("my-results")]
     [Authorize(Roles = "Student")]
@@ -86,21 +84,30 @@ public class StudentController : ControllerBase
         if (!int.TryParse(userIdClaim, out int studentId))
             return Unauthorized(new { message = "Invalid student token." });
 
-        // We match on StudentProfileId since that is stamped when session is created
+        var studentIdText = studentId.ToString(
+            System.Globalization.CultureInfo.InvariantCulture);
+        var studentProfileIds = await _db.StudentProfiles
+            .AsNoTracking()
+            .Where(p => p.UserId == studentIdText)
+            .Select(p => p.Id)
+            .ToListAsync(cancellationToken);
+
         var sessions = await _db.ExamSessions
             .AsNoTracking()
-            .Where(s => s.EndTime != null && s.StudentProfileId == studentId)
+            .Where(s => s.EndTime != null
+                && (s.StudentId == studentIdText
+                    || studentProfileIds.Contains(s.StudentProfileId)))
             .OrderByDescending(s => s.EndTime)
             .Select(s => new
             {
-                sessionGuid       = s.SessionId,
-                subject           = s.Subject,
-                title             = s.Title ?? s.Subject,
-                totalScore        = s.TotalScore,
-                endTime           = s.EndTime != null ? s.EndTime.Value.ToString("yyyy-MM-dd HH:mm") + " UTC" : null,
-                durationMinutes   = s.DurationMinutes,
-                questionsJson     = s.QuestionsJson,
-                answersJson       = s.AnswersJson,
+                sessionGuid = s.SessionId,
+                subject = s.Subject,
+                title = s.Title ?? s.Subject,
+                totalScore = s.TotalScore,
+                endTime = s.EndTime != null ? s.EndTime.Value.ToString("yyyy-MM-dd HH:mm") + " UTC" : null,
+                durationMinutes = s.DurationMinutes,
+                questionsJson = s.QuestionsJson,
+                answersJson = s.AnswersJson,
                 originalObjective = s.OriginalObjective
             })
             .ToListAsync(cancellationToken);
@@ -174,7 +181,7 @@ public class StudentController : ControllerBase
                 "[StudentController] papers/join — no session found for code '{Code}'.", accessCode);
             return NotFound(new
             {
-                message    = "Invalid or expired access code. Please ask your teacher to regenerate the QR.",
+                message = "Invalid or expired access code. Please ask your teacher to regenerate the QR.",
                 accessCode
             });
         }
@@ -184,7 +191,7 @@ public class StudentController : ControllerBase
             return BadRequest(new
             {
                 message = "This exam has not been prepared yet. Questions are still being generated.",
-                status  = session.Status
+                status = session.Status
             });
 
         // Guard: block access to sessions awaiting admin approval
@@ -192,14 +199,14 @@ public class StudentController : ControllerBase
             return StatusCode(403, new
             {
                 message = "This exam is pending admin approval. Your tutor must approve it before you can begin.",
-                status  = session.Status
+                status = session.Status
             });
 
         if (session.Status == "Abandoned")
             return StatusCode(410, new
             {
                 message = "This exam session was rejected by an admin and is no longer available.",
-                status  = session.Status
+                status = session.Status
             });
 
         _logger.LogInformation(
@@ -209,15 +216,15 @@ public class StudentController : ControllerBase
         // Return everything the Flutter app needs to start the exam
         return Ok(new
         {
-            sessionDbId      = session.Id,            // int PK — used for POST /submit
-            sessionGuid      = session.SessionId,      // GUID used as QR payload
-            subject          = session.Subject,
-            durationMinutes  = session.DurationMinutes > 0 ? session.DurationMinutes : 30,
-            status           = session.Status,
-            startTime        = session.StartTime,
-            isTimerLocked    = session.IsTimerLocked,
-            questionsJson    = session.QuestionsJson,  // raw JSON array of MCQs
-            message          = "Exam session validated. You may begin.",
+            sessionDbId = session.Id,            // int PK — used for POST /submit
+            sessionGuid = session.SessionId,      // GUID used as QR payload
+            subject = session.Subject,
+            durationMinutes = session.DurationMinutes > 0 ? session.DurationMinutes : 30,
+            status = session.Status,
+            startTime = session.StartTime,
+            isTimerLocked = session.IsTimerLocked,
+            questionsJson = session.QuestionsJson,  // raw JSON array of MCQs
+            message = "Exam session validated. You may begin.",
         });
     }
 
@@ -314,10 +321,15 @@ public class StudentController : ControllerBase
     // to know the DB primary key.
     // ─────────────────────────────────────────────────────────────────────────
     [HttpPost("submit")]
+    [Authorize(Roles = "Student")]
     public async Task<IActionResult> SubmitExam(
         [FromBody] StudentSubmitDto dto,
         CancellationToken cancellationToken)
     {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdClaim, out var studentId))
+            return Unauthorized(new { message = "Invalid student token." });
+
         _logger.LogInformation(
             "[StudentController] submit called | SessionGuid: {Guid}", dto.SessionGuid);
 
@@ -333,28 +345,44 @@ public class StudentController : ControllerBase
         if (session.Status != "InProgress" || !session.IsTimerLocked)
             return Conflict(new { message = "There is no active attempt to submit.", status = session.Status });
 
+        var studentIdText = studentId.ToString(
+            System.Globalization.CultureInfo.InvariantCulture);
+        var studentProfile = await _db.StudentProfiles
+            .FirstOrDefaultAsync(p => p.UserId == studentIdText, cancellationToken);
+        var linkedProfile = session.StudentProfileId > 0
+            ? await _db.StudentProfiles.FirstOrDefaultAsync(
+                p => p.Id == session.StudentProfileId, cancellationToken)
+            : studentProfile;
+
+        if ((linkedProfile is not null && linkedProfile.UserId != studentIdText)
+            || (session.StudentProfileId > 0 && linkedProfile is null)
+            || (!string.IsNullOrWhiteSpace(session.StudentId)
+                && session.StudentId != studentIdText
+                && linkedProfile is null))
+        {
+            return Forbid();
+        }
+
+        session.StudentId = studentIdText;
+        if (session.StudentProfileId == 0 && studentProfile is not null)
+            session.StudentProfileId = studentProfile.Id;
+
         var previousSessionScore = session.EndTime.HasValue ? session.TotalScore : 0;
 
         // Save this as the latest result and make the same QR available again.
-        session.AnswersJson   = dto.AnswersJson ?? "[]";
-        session.TotalScore    = dto.TotalScore;
-        session.Status        = "Ready";
-        session.EndTime       = DateTime.UtcNow;
+        session.AnswersJson = dto.AnswersJson ?? "[]";
+        session.TotalScore = dto.TotalScore;
+        session.Status = "Ready";
+        session.EndTime = DateTime.UtcNow;
         session.IsTimerLocked = false;
 
         // Update student's cumulative points if profile exists
-        if (session.StudentProfileId > 0)
+        if (linkedProfile is not null)
         {
-            var profile = await _db.StudentProfiles
-                .FirstOrDefaultAsync(p => p.Id == session.StudentProfileId, cancellationToken);
-
-            if (profile != null)
-            {
-                profile.TotalPoints += dto.TotalScore - previousSessionScore;
-                _logger.LogInformation(
-                    "[StudentController] StudentProfile {ProfileId} TotalPoints → {Points}.",
-                    profile.Id, profile.TotalPoints);
-            }
+            linkedProfile.TotalPoints += dto.TotalScore - previousSessionScore;
+            _logger.LogInformation(
+                "[StudentController] StudentProfile {ProfileId} TotalPoints → {Points}.",
+                linkedProfile.Id, linkedProfile.TotalPoints);
         }
 
         await _db.SaveChangesAsync(cancellationToken);
@@ -365,11 +393,11 @@ public class StudentController : ControllerBase
 
         return Ok(new
         {
-            message    = "Exam submitted successfully.",
-            sessionId  = session.Id,
+            message = "Exam submitted successfully.",
+            sessionId = session.Id,
             totalScore = session.TotalScore,
-            endTime    = session.EndTime,
-            status     = session.Status
+            endTime = session.EndTime,
+            status = session.Status
         });
     }
 
@@ -412,9 +440,9 @@ public class StudentController : ControllerBase
 
         return Ok(new
         {
-            message  = "Profile updated successfully.",
+            message = "Profile updated successfully.",
             fullName = user.FullName,
-            email    = user.Email
+            email = user.Email
         });
     }
 }
@@ -479,24 +507,24 @@ public class AdminMarksController : ControllerBase
             .OrderByDescending(s => s.EndTime)
             .Select(s => new
             {
-                sessionId         = s.Id,
-                sessionGuid       = s.SessionId,
-                studentProfileId  = s.StudentProfileId,
-                studentId         = s.StudentId,
-                subject           = s.Subject,
-                title             = s.Title ?? s.Subject,
-                totalScore        = s.TotalScore,
-                endTime           = s.EndTime,
-                startTime         = s.StartTime,
-                durationMinutes   = s.DurationMinutes,
-                questionsJson     = s.QuestionsJson,
+                sessionId = s.Id,
+                sessionGuid = s.SessionId,
+                studentProfileId = s.StudentProfileId,
+                studentId = s.StudentId,
+                subject = s.Subject,
+                title = s.Title ?? s.Subject,
+                totalScore = s.TotalScore,
+                endTime = s.EndTime,
+                startTime = s.StartTime,
+                durationMinutes = s.DurationMinutes,
+                questionsJson = s.QuestionsJson,
                 originalObjective = s.OriginalObjective,
             })
             .ToListAsync(cancellationToken);
 
         // Enrich with student names via StudentProfiles → Users join
         var profileIds = rawSessions.Select(s => s.studentProfileId).Distinct().ToList();
-        var profiles   = await _db.StudentProfiles
+        var profiles = await _db.StudentProfiles
             .AsNoTracking()
             .Where(p => profileIds.Contains(p.Id))
             .Select(p => new { p.Id, p.UserId })
@@ -505,6 +533,8 @@ public class AdminMarksController : ControllerBase
         // Parse UserId strings into ints to join with Users
         var userIds = profiles
             .Select(p => int.TryParse(p.UserId, out var uid) ? uid : 0)
+            .Concat(rawSessions
+                .Select(s => int.TryParse(s.studentId, out var uid) ? uid : 0))
             .Where(uid => uid > 0)
             .Distinct()
             .ToList();
@@ -512,7 +542,7 @@ public class AdminMarksController : ControllerBase
         var users = await _db.Users
             .AsNoTracking()
             .Where(u => userIds.Contains(u.Id))
-            .Select(u => new { u.Id, u.FullName, u.Email })
+            .Select(u => new { u.Id, u.FullName, u.Email, u.ProfileImageUrl })
             .ToDictionaryAsync(u => u.Id, cancellationToken);
 
         var profileMap = profiles.ToDictionary(
@@ -520,8 +550,8 @@ public class AdminMarksController : ControllerBase
             p =>
             {
                 if (int.TryParse(p.UserId, out var uid) && users.TryGetValue(uid, out var u))
-                    return (name: u.FullName, email: u.Email);
-                return (name: $"Student #{p.Id}", email: string.Empty);
+                    return (name: u.FullName, email: u.Email, profileImageUrl: u.ProfileImageUrl, hasUser: true);
+                return (name: $"Student #{p.Id}", email: string.Empty, profileImageUrl: (string?)null, hasUser: false);
             });
 
         // Count questions and build result
@@ -540,21 +570,40 @@ public class AdminMarksController : ControllerBase
             catch { /* ignore */ }
 
             profileMap.TryGetValue(s.studentProfileId, out var student);
+            var directUser = int.TryParse(s.studentId, out var userId)
+                ? users.GetValueOrDefault(userId)
+                : null;
+            var studentName = student.hasUser
+                ? student.name
+                : directUser?.FullName ?? student.name ?? $"Student #{s.studentId}";
+            var studentEmail = student.hasUser
+                ? student.email
+                : directUser?.Email ?? student.email ?? string.Empty;
+            var profileImageUrl = student.hasUser
+                ? student.profileImageUrl
+                : directUser?.ProfileImageUrl ?? student.profileImageUrl;
 
             return new
             {
                 s.sessionId,
                 s.sessionGuid,
                 s.studentId,
-                studentName   = student.name ?? $"Student #{s.studentId}",
-                studentEmail  = student.email ?? string.Empty,
+                s.studentProfileId,
+                studentName,
+                studentEmail,
+                profileImageUrl,
                 s.subject,
                 s.title,
+                examTitle = s.title,
                 s.totalScore,
-                totalQuestions  = qCount,
-                endTime         = s.endTime?.ToString("yyyy-MM-dd HH:mm") + (s.endTime.HasValue ? " UTC" : string.Empty),
-                startTime       = s.startTime.ToString("yyyy-MM-dd HH:mm") + " UTC",
+                score = s.totalScore,
+                totalQuestions = qCount,
+                maxScore = qCount,
+                endTime = s.endTime?.ToString("yyyy-MM-dd HH:mm") + (s.endTime.HasValue ? " UTC" : string.Empty),
+                submittedAt = s.endTime,
+                startTime = s.startTime.ToString("yyyy-MM-dd HH:mm") + " UTC",
                 s.durationMinutes,
+                duration = s.durationMinutes,
                 s.originalObjective,
             };
         }).ToList();
@@ -562,7 +611,7 @@ public class AdminMarksController : ControllerBase
         return Ok(new
         {
             totalSessions = result.Count,
-            sessions      = result
+            sessions = result
         });
     }
 }

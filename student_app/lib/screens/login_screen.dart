@@ -1,6 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+
+import '../ui/prep_ui.dart';
+
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -77,15 +80,8 @@ class _LoginScreenState extends State<LoginScreen> {
           );
         }
 
-        final userId = data['userId']?.toString();
-        await prefs.remove('student_id');
-        await prefs.remove('student_name');
-        await prefs.remove('profileImageUrl');
         await prefs.setString('auth_token', token);
         await prefs.setString('student_email', normalizedEmail);
-        if (userId != null && userId.isNotEmpty) {
-          await prefs.setString('student_id', userId);
-        }
 
         setState(() => _isLoading = false);
 
@@ -98,42 +94,26 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       if (response.statusCode == 401) {
-        // Determine whether the rejection came from the API (JSON body) or
-        // from a reverse-proxy / gateway (HTML body). The backend always
-        // includes a diagnosticId in its 401 JSON; if the body is not JSON the
-        // request never reached the API server.
-        final contentType = response.headers['content-type'] ?? '';
-        final bodyIsJson = contentType.contains('application/json');
-
-        // Dev-only: log HTTP status and content-type. Never logs credentials.
-        assert(() {
-          // ignore: avoid_print
-          print(
-            '[IntelliPrep][login] HTTP 401 — '
-            'content-type: $contentType, '
-            'body-is-json: $bodyIsJson',
-          );
-          return true;
-        }());
-
         String? diagnosticId;
-        if (bodyIsJson) {
-          try {
-            final responseBody = jsonDecode(response.body);
-            if (responseBody is Map<String, dynamic>) {
-              diagnosticId = responseBody['diagnosticId']?.toString();
-            }
-          } on FormatException {
-            diagnosticId = null;
+        final responseIsHtml =
+            response.headers['content-type']?.toLowerCase().contains(
+              'text/html',
+            ) ??
+            false;
+        try {
+          final responseBody = jsonDecode(response.body);
+          if (responseBody is Map<String, dynamic>) {
+            diagnosticId = responseBody['diagnosticId']?.toString();
           }
+        } on FormatException {
+          diagnosticId = null;
         }
-
         setState(() => _isLoading = false);
         if (!mounted) return;
         await _showLoginDiagnostics(
           backendUrl,
           diagnosticId: diagnosticId,
-          bodyWasJson: bodyIsJson,
+          responseIsHtml: responseIsHtml,
         );
         return;
       }
@@ -160,7 +140,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _showLoginDiagnostics(
     Uri loginUrl, {
     String? diagnosticId,
-    required bool bodyWasJson,
+    required bool responseIsHtml,
   }) async {
     String? healthCheckResult;
     bool isChecking = false;
@@ -178,8 +158,8 @@ class _LoginScreenState extends State<LoginScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Text(
-                  'The server responded, but did not authenticate this sign-in. '
-                  'For privacy, it does not reveal whether the email or password was incorrect.',
+                  'The server returned HTTP 401: the email or password is invalid. '
+                  'For privacy, it does not reveal which credential was incorrect.',
                 ),
                 const SizedBox(height: 16),
                 _diagnosticLine('API host', loginUrl.origin),
@@ -193,8 +173,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   _diagnosticLine('Support reference', diagnosticId),
                 ],
                 const SizedBox(height: 12),
-                // Show a contextual note when no support reference arrived.
-                if (!bodyWasJson) ...[
+                if (responseIsHtml) ...[
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(12),
@@ -204,9 +183,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Text(
-                      'The rejection response was not in JSON format. '
-                      'This usually means a proxy or gateway intercepted the request '
-                      'before it reached the API. Try the connection check below.',
+                      'The 401 response was HTML instead of JSON. A proxy or gateway may have generated it before the request reached the login endpoint.',
                       style: TextStyle(
                         color: Color(0xFF8A4B08),
                         fontWeight: FontWeight.w600,
@@ -224,9 +201,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Text(
-                      'The API rejected the sign-in but did not include a support '
-                      'reference in its response. Server logs will contain the '
-                      'rejection reason.',
+                      'The API response did not include a support reference. If the problem continues, ask the API administrator to check the server logs.',
                       style: TextStyle(
                         color: Color(0xFF8A4B08),
                         fontWeight: FontWeight.w600,
@@ -303,8 +278,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Widget _diagnosticLine(String label, String value) => Padding(
     padding: const EdgeInsets.only(bottom: 5),
-    child: Text.rich(
-      TextSpan(
+    child: RichText(
+      text: TextSpan(
         style: Theme.of(context).textTheme.bodySmall,
         children: [
           TextSpan(
@@ -320,251 +295,155 @@ class _LoginScreenState extends State<LoginScreen> {
   // ── Build ────────────────────────────────────────────────────────────
 
   @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFFAFAFA),
-      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 28),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 20),
-
-                // ── Logo / branding ────────────────────────────────────
-                Center(
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 72,
-                        height: 72,
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Colors.orange, Color(0xFFE65100)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.orange.withAlpha(80),
-                              blurRadius: 20,
-                              offset: const Offset(0, 6),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.school_rounded,
-                          color: Colors.white,
-                          size: 36,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'IntelliPrep',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1A1A1A),
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'A/L ICT Student Portal',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey.shade500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 44),
-
-                // ── Section label ──────────────────────────────────────
-                Text(
-                  'Sign in to continue',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade700,
-                    letterSpacing: 0.2,
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // ── Email field ────────────────────────────────────────
-                TextFormField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  textInputAction: TextInputAction.next,
-                  autocorrect: false,
-                  decoration: InputDecoration(
-                    labelText: 'Email address',
-                    hintText: 'student@school.lk',
-                    prefixIcon: const Icon(Icons.email_outlined),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+  Widget build(BuildContext context) => Scaffold(
+    body: SafeArea(
+      child: PrepPage(
+        maxWidth: 560,
+        child: AutofillGroup(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 20),
+              PrepCard(
+                color: PrepColors.navy,
+                padding: const EdgeInsets.all(28),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.school_rounded,
+                      color: Color(0xFFD7F2B8),
+                      size: 38,
                     ),
-                    filled: true,
-                    fillColor: Colors.white,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 14,
+                    const SizedBox(height: 28),
+                    Text(
+                      'IntelliPrep',
+                      style: Theme.of(context).textTheme.headlineLarge
+                          ?.copyWith(color: Colors.white),
                     ),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Please enter your email.';
-                    }
-                    if (!value.contains('@')) {
-                      return 'Enter a valid email address.';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 14),
-
-                // ── Password field ─────────────────────────────────────
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: _obscurePassword,
-                  textInputAction: TextInputAction.done,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  textCapitalization: TextCapitalization.none,
-                  onFieldSubmitted: (_) => _handleLogin(),
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    prefixIcon: const Icon(Icons.lock_outline_rounded),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscurePassword
-                            ? Icons.visibility_outlined
-                            : Icons.visibility_off_outlined,
-                      ),
-                      onPressed: () =>
-                          setState(() => _obscurePassword = !_obscurePassword),
-                      tooltip: _obscurePassword
-                          ? 'Show password'
-                          : 'Hide password',
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    filled: true,
-                    fillColor: Colors.white,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 14,
-                    ),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter your password.';
-                    }
-                    if (value.length < 4) {
-                      return 'Password must be at least 4 characters.';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 28),
-
-                // ── Login button ───────────────────────────────────────
-                SizedBox(
-                  height: 52,
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      textStyle: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    onPressed: _isLoading ? null : _handleLogin,
-                    child: _isLoading
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2.5,
-                            ),
-                          )
-                        : const Text('Login'),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // ── Forgot Password button ─────────────────────────────
-                Center(
-                  child: TextButton(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const ForgotPasswordScreen(),
-                        ),
-                      );
-                    },
-                    child: Text(
-                      'Forgot Password?',
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Build confidence.\nOne exam at a time.',
                       style: TextStyle(
-                        color: Colors.orange.shade700,
-                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                        fontSize: 20,
+                        height: 1.4,
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 24),
+                    const PrepPill(
+                      'A/L ICT · Student portal',
+                      color: Colors.white,
+                      background: Color(0xFF30535C),
+                    ),
+                  ],
                 ),
-
-                const SizedBox(height: 24),
-
-                // ── Hint ───────────────────────────────────────────────
-                Center(
-                  child: Text(
-                    'Use the email and password issued for your student account.',
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Center(
-                  child: Wrap(
-                    spacing: 4,
+              ),
+              const SizedBox(height: 24),
+              PrepCard(
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Icon(
-                        Icons.info_outline,
-                        size: 12,
-                        color: colorScheme.secondary.withAlpha(140),
+                      const PrepHeading(
+                        title: 'Welcome back',
+                        subtitle: 'Sign in with your student account.',
                       ),
-                      Text(
-                        'Sign in using your student account.',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey.shade400,
+                      const SizedBox(height: 24),
+                      TextFormField(
+                        controller: _emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
+                        autofillHints: const [
+                          AutofillHints.username,
+                          AutofillHints.email,
+                        ],
+                        autocorrect: false,
+                        decoration: const InputDecoration(
+                          labelText: 'Email address',
+                          prefixIcon: Icon(Icons.alternate_email_rounded),
                         ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Please enter your email.';
+                          }
+                          if (!value.contains('@')) {
+                            return 'Enter a valid email address.';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 18),
+                      TextFormField(
+                        controller: _passwordController,
+                        obscureText: _obscurePassword,
+                        textInputAction: TextInputAction.done,
+                        autofillHints: const [AutofillHints.password],
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        textCapitalization: TextCapitalization.none,
+                        onFieldSubmitted: (_) {
+                          if (!_isLoading) _handleLogin();
+                        },
+                        decoration: InputDecoration(
+                          labelText: 'Password',
+                          prefixIcon: const Icon(Icons.lock_outline_rounded),
+                          suffixIcon: IconButton(
+                            tooltip: _obscurePassword
+                                ? 'Show password'
+                                : 'Hide password',
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                            ),
+                            onPressed: () => setState(
+                              () => _obscurePassword = !_obscurePassword,
+                            ),
+                          ),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter your password.';
+                          }
+                          if (value.length < 4) {
+                            return 'Password must be at least 4 characters.';
+                          }
+                          return null;
+                        },
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const ForgotPasswordScreen(),
+                            ),
+                          ),
+                          child: const Text('Forgot password?'),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      FilledButton(
+                        onPressed: _isLoading ? null : _handleLogin,
+                        child: _isLoading
+                            ? const PrepBusyLabel('Signing in…')
+                            : const Text('Sign in'),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 32),
-              ],
-            ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Use the email and password issued for your student account.',
+                textAlign: TextAlign.center,
+              ),
+            ],
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
 }

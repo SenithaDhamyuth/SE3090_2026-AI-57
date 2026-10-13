@@ -1,10 +1,22 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Loader2, Mail, Lock, AlertCircle, ArrowRight } from 'lucide-react';
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  Loader2,
+  Mail,
+  Lock,
+  ArrowRight,
+  Eye,
+  EyeOff,
+  BookOpen,
+  GraduationCap,
+  ShieldCheck,
+} from "lucide-react";
+import { Brand, Notice } from "./components/ui";
 
 export default function AdminLogin() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const navigate = useNavigate();
@@ -15,24 +27,28 @@ export default function AdminLogin() {
     setError(null);
 
     try {
-      const res = await fetch((import.meta.env.VITE_API_URL || 'https://intelliprep-rhx3.onrender.com') + '/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
+      const res = await fetch(
+        (import.meta.env.VITE_API_URL ||
+          "https://intelliprep-rhx3.onrender.com") + "/api/auth/login",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        },
+      );
 
       const data = await res.json().catch(() => null);
 
       if (!res.ok) {
-        throw new Error(data?.message || 'Invalid email or password.');
+        throw new Error(data?.message || "Invalid email or password.");
       }
 
-      if (data.role !== 'Admin') {
-        throw new Error('Access denied. Admin role required.');
+      if (data.role !== "Admin") {
+        throw new Error("Access denied. Admin role required.");
       }
 
-      localStorage.setItem('admin_token', data.token);
-      navigate('/', { replace: true });
+      localStorage.setItem("admin_token", data.token);
+      navigate("/", { replace: true });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -41,80 +57,129 @@ export default function AdminLogin() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-50 p-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-zinc-100 p-8">
-        <div className="mb-8 text-center">
-          <div className="w-12 h-12 bg-orange-600 rounded-xl mx-auto flex items-center justify-center mb-4 shadow-sm">
-            <Lock className="text-white" size={24} />
-          </div>
-          <h1 className="text-2xl font-bold text-zinc-900 tracking-tight">Admin Login</h1>
-          <p className="text-sm text-zinc-500 mt-2">Sign in to the IntelliPrep management dashboard</p>
+    <main className="login-page">
+      <section className="login-story">
+        <Brand light />
+        <div className="login-story-copy">
+          <span className="story-kicker">A/L ICT · THE ADMIN WORKSPACE</span>
+          <h1>
+            Great learning.
+            <br />
+            Thoughtfully
+            <br />
+            <em>managed.</em>
+          </h1>
+          <p>
+            A calmer space to prepare assessments, guide study plans and support
+            your students.
+          </p>
         </div>
-
-        {error && (
-          <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-100 flex items-start gap-3">
-            <AlertCircle className="text-red-600 shrink-0 mt-0.5" size={18} />
-            <p className="text-sm text-red-800 font-medium">{error}</p>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <div className="login-story-workflow">
           <div>
-            <label className="block text-sm font-medium text-zinc-700 mb-1.5" htmlFor="email">
-              Email Address
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                <Mail className="text-zinc-400" size={18} />
-              </div>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="block w-full pl-10 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all"
-                placeholder="admin@intelliprep.com"
-              />
-            </div>
+            <BookOpen size={20} />
+            <span>Prepare</span>
           </div>
-
+          <ArrowRight size={16} />
           <div>
-            <label className="block text-sm font-medium text-zinc-700 mb-1.5" htmlFor="password">
-              Password
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                <Lock className="text-zinc-400" size={18} />
-              </div>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="block w-full pl-10 pr-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all"
-                placeholder="••••••••"
-              />
-            </div>
+            <ShieldCheck size={20} />
+            <span>Review</span>
           </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 text-white font-semibold py-2.5 px-4 rounded-xl shadow-sm transition-all active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed mt-2"
+          <ArrowRight size={16} />
+          <div>
+            <GraduationCap size={20} />
+            <span>Inspire</span>
+          </div>
+        </div>
+        <span className="login-decoration decoration-one" aria-hidden="true" />
+        <span className="login-decoration decoration-two" aria-hidden="true" />
+        <p className="login-story-footer">
+          Built around better learning. Built for IntelliPrep.
+        </p>
+      </section>
+      <section className="login-form-panel">
+        <div className="login-mobile-brand">
+          <Brand />
+        </div>
+        <div className="login-form-wrap">
+          <span className="login-glyph">
+            <ShieldCheck size={27} />
+          </span>
+          <p className="eyebrow">GOOD TO HAVE YOU BACK</p>
+          <h2>Sign in to your workspace</h2>
+          <p className="login-description">
+            Use your admin account to continue to IntelliPrep.
+          </p>
+          {error && <Notice type="error" text={error} />}
+          <form
+            onSubmit={handleSubmit}
+            className="login-form"
+            aria-busy={loading}
           >
-            {loading ? (
-              <Loader2 className="animate-spin" size={18} />
-            ) : (
-              <>
-                Sign In
-                <ArrowRight size={18} />
-              </>
-            )}
-          </button>
-        </form>
-      </div>
-    </div>
+            <div>
+              <label htmlFor="email">Email address</label>
+              <div className="input-with-icon">
+                <Mail size={18} aria-hidden="true" />
+                <input
+                  id="email"
+                  type="email"
+                  autoComplete="username"
+                  inputMode="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Enter your email address"
+                />
+              </div>
+            </div>
+            <div>
+              <label htmlFor="password">Password</label>
+              <div className="input-with-icon password-input">
+                <Lock size={18} aria-hidden="true" />
+                <input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your password"
+                />
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  onClick={() => setShowPassword((value) => !value)}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </div>
+            <button
+              className="button button-primary login-submit"
+              type="submit"
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" /> Signing in…
+                </>
+              ) : (
+                <>
+                  Sign in <ArrowRight size={18} />
+                </>
+              )}
+            </button>
+          </form>
+          <p className="login-help">
+            <Lock size={14} /> Admin access only. Use the account provided to
+            you.
+          </p>
+        </div>
+        <p className="login-form-footer">
+          IntelliPrep <span>·</span> A/L ICT learning platform
+        </p>
+      </section>
+    </main>
   );
 }

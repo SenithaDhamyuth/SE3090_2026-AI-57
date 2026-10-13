@@ -1,26 +1,50 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { ModalFrame, PageHeader, Metric } from "./components/ui";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
-  Brain, CheckCircle2, Clock, AlertCircle,
-  RefreshCw, X, Sparkles, ShieldCheck,
-  ClipboardList, Loader2, Eye, ListChecks,
-  BookOpen, ChevronRight, ChevronLeft, Ban,
-  Zap, Layers, Network, Database, Code2, Globe, Cpu,
-  BarChart3, FlaskConical, Wifi, Monitor, Download, Trash2
-} from 'lucide-react';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+  Brain,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  RefreshCw,
+  X,
+  Sparkles,
+  ShieldCheck,
+  ClipboardList,
+  Loader2,
+  Eye,
+  ListChecks,
+  BookOpen,
+  ChevronRight,
+  ChevronLeft,
+  Ban,
+  Zap,
+  Layers,
+  Network,
+  Database,
+  Code2,
+  Globe,
+  Cpu,
+  BarChart3,
+  FlaskConical,
+  Wifi,
+  Monitor,
+  Download,
+  Trash2,
+} from "lucide-react";
 
-const API_BASE = (import.meta.env.VITE_API_URL || 'https://intelliprep-rhx3.onrender.com')
-  .replace(/\/+$/, '')
-  .replace(/\/api$/i, '');
+const API_BASE = (
+  import.meta.env.VITE_API_URL || "https://intelliprep-rhx3.onrender.com"
+)
+  .replace(/\/+$/, "")
+  .replace(/\/api$/i, "");
 
 // ── Authenticated fetch ────────────────────────────────────────────────────────
 const authFetch = (url, options = {}) => {
-  const token = localStorage.getItem('admin_token') || '';
+  const token = localStorage.getItem("admin_token") || "";
   return fetch(url, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
       ...options.headers,
     },
@@ -31,25 +55,25 @@ const authFetch = (url, options = {}) => {
 // SYLLABUS DATA
 // ═══════════════════════════════════════════════════════════════════════════════
 const GRADE_12_TOPICS = [
-  { id: 'data-rep',       label: 'Data Representation',   icon: Layers },
-  { id: 'logic-gates',    label: 'Logic Gates',            icon: Zap },
-  { id: 'networking',     label: 'Networking',             icon: Network },
-  { id: 'database',       label: 'Database Management',    icon: Database },
-  { id: 'programming',    label: 'Programming Concepts',   icon: Code2 },
-  { id: 'os',             label: 'Operating Systems',      icon: Monitor },
-  { id: 'systems-anal',   label: 'Systems Analysis',       icon: BarChart3 },
-  { id: 'data-comms',     label: 'Data Communications',    icon: Wifi },
+  { id: "data-rep", label: "Data Representation", icon: Layers },
+  { id: "logic-gates", label: "Logic Gates", icon: Zap },
+  { id: "networking", label: "Networking", icon: Network },
+  { id: "database", label: "Database Management", icon: Database },
+  { id: "programming", label: "Programming Concepts", icon: Code2 },
+  { id: "os", label: "Operating Systems", icon: Monitor },
+  { id: "systems-anal", label: "Systems Analysis", icon: BarChart3 },
+  { id: "data-comms", label: "Data Communications", icon: Wifi },
 ];
 
 const GRADE_13_TOPICS = [
-  { id: 'web-dev',        label: 'Web Development',        icon: Globe },
-  { id: 'iot',            label: 'Internet of Things (IoT)', icon: Cpu },
-  { id: 'software-eng',   label: 'Software Engineering',   icon: FlaskConical },
-  { id: 'ai-basics',      label: 'AI & Expert Systems',    icon: Brain },
-  { id: 'cyber',          label: 'Cybersecurity',          icon: ShieldCheck },
-  { id: 'proj-mgmt',      label: 'Project Management',     icon: ClipboardList },
-  { id: 'multimedia',     label: 'Multimedia Systems',     icon: BookOpen },
-  { id: 'cloud',          label: 'Cloud Computing',        icon: Layers },
+  { id: "web-dev", label: "Web Development", icon: Globe },
+  { id: "iot", label: "Internet of Things (IoT)", icon: Cpu },
+  { id: "software-eng", label: "Software Engineering", icon: FlaskConical },
+  { id: "ai-basics", label: "AI & Expert Systems", icon: Brain },
+  { id: "cyber", label: "Cybersecurity", icon: ShieldCheck },
+  { id: "proj-mgmt", label: "Project Management", icon: ClipboardList },
+  { id: "multimedia", label: "Multimedia Systems", icon: BookOpen },
+  { id: "cloud", label: "Cloud Computing", icon: Layers },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -59,20 +83,20 @@ const GRADE_13_TOPICS = [
 const StatusBadge = ({ approved, published }) => {
   if (!approved) {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold bg-orange-50 text-orange-700 border-orange-200">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-semibold bg-orange-50 text-orange-700 border-orange-200">
         <Clock size={10} /> Pending Review
       </span>
     );
   }
   if (published) {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold bg-green-50 text-green-700 border-green-200">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-semibold bg-green-50 text-green-700 border-green-200">
         <Zap size={10} /> Active
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold bg-zinc-50 text-zinc-700 border-zinc-200">
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-semibold bg-zinc-50 text-zinc-700 border-zinc-200">
       <CheckCircle2 size={10} /> Approved
     </span>
   );
@@ -80,12 +104,14 @@ const StatusBadge = ({ approved, published }) => {
 
 const PriorityBadge = ({ priority }) => {
   const styles = {
-    High:   'bg-red-50 text-red-700 border-red-200',
-    Medium: 'bg-orange-50 text-orange-700 border-orange-200',
-    Low:    'bg-zinc-50 text-zinc-600 border-zinc-200',
+    High: "bg-red-50 text-red-700 border-red-200",
+    Medium: "bg-orange-50 text-orange-700 border-orange-200",
+    Low: "bg-zinc-50 text-zinc-600 border-zinc-200",
   };
   return (
-    <span className={`inline-block px-1.5 py-0.5 rounded border text-[10px] font-bold ${styles[priority] ?? styles.Low}`}>
+    <span
+      className={`inline-block px-1.5 py-0.5 rounded border text-xs font-bold ${styles[priority] ?? styles.Low}`}
+    >
       {priority}
     </span>
   );
@@ -93,17 +119,23 @@ const PriorityBadge = ({ priority }) => {
 
 const Alert = ({ type, text, onDismiss }) => {
   const styles = {
-    success: 'bg-zinc-50 border-zinc-200 text-zinc-800',
-    error:   'bg-red-50 border-red-200 text-red-800',
-    info:    'bg-orange-50 border-orange-200 text-orange-800',
+    success: "bg-zinc-50 border-zinc-200 text-zinc-800",
+    error: "bg-red-50 border-red-200 text-red-800",
+    info: "bg-orange-50 border-orange-200 text-orange-800",
   };
-  const Icon = type === 'success' ? CheckCircle2 : AlertCircle;
+  const Icon = type === "success" ? CheckCircle2 : AlertCircle;
   return (
-    <div className={`flex items-start gap-3 p-3.5 rounded-lg border text-sm ${styles[type]}`}>
+    <div
+      className={`flex items-start gap-3 p-3.5 rounded-lg border text-sm ${styles[type]}`}
+    >
       <Icon size={16} className="mt-0.5 shrink-0" />
       <p className="flex-1 font-medium leading-snug">{text}</p>
       {onDismiss && (
-        <button onClick={onDismiss} className="shrink-0 opacity-60 hover:opacity-100 transition-opacity">
+        <button
+          aria-label="Dismiss message"
+          onClick={onDismiss}
+          className="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+        >
           <X size={14} />
         </button>
       )}
@@ -117,33 +149,49 @@ function TopicCheckbox({ topic, checked, onChange }) {
   return (
     <button
       type="button"
+      aria-pressed={checked}
       onClick={() => onChange(topic.label)}
       className={`group flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl border text-left transition-all duration-150 ${
         checked
-          ? 'bg-orange-50 border-orange-300 shadow-sm'
-          : 'bg-white border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50'
+          ? "bg-orange-50 border-orange-300 shadow-sm"
+          : "bg-white border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50"
       }`}
     >
       {/* Checkbox circle */}
-      <span className={`flex-shrink-0 w-4.5 h-4.5 rounded border-2 flex items-center justify-center transition-colors ${
-        checked ? 'bg-orange-500 border-orange-500' : 'border-zinc-300 group-hover:border-zinc-400'
-      }`} style={{ width: 18, height: 18 }}>
+      <span
+        className={`flex-shrink-0 w-4.5 h-4.5 rounded border-2 flex items-center justify-center transition-colors ${
+          checked
+            ? "bg-orange-500 border-orange-500"
+            : "border-zinc-300 group-hover:border-zinc-400"
+        }`}
+        style={{ width: 18, height: 18 }}
+      >
         {checked && (
           <svg viewBox="0 0 10 8" fill="none" className="w-2.5 h-2">
-            <path d="M1 4l3 3 5-6" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            <path
+              d="M1 4l3 3 5-6"
+              stroke="white"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </svg>
         )}
       </span>
 
       {/* Icon */}
-      <span className={`flex-shrink-0 transition-colors ${checked ? 'text-orange-500' : 'text-zinc-400'}`}>
+      <span
+        className={`flex-shrink-0 transition-colors ${checked ? "text-orange-500" : "text-zinc-400"}`}
+      >
         <Icon size={14} />
       </span>
 
       {/* Label */}
-      <span className={`text-[12px] font-medium leading-tight transition-colors ${
-        checked ? 'text-orange-800' : 'text-zinc-700'
-      }`}>
+      <span
+        className={`text-[12px] font-medium leading-tight transition-colors ${
+          checked ? "text-orange-800" : "text-zinc-700"
+        }`}
+      >
         {topic.label}
       </span>
 
@@ -158,22 +206,24 @@ function TopicCheckbox({ topic, checked, onChange }) {
 
 // ── Grade section wrapper ─────────────────────────────────────────────────────
 function GradeSection({ title, subtitle, topics, excludedTopics, onToggle }) {
-  const excludedInGroup = topics.filter(t => excludedTopics.includes(t.label)).length;
+  const excludedInGroup = topics.filter((t) =>
+    excludedTopics.includes(t.label),
+  ).length;
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
         <div>
-          <p className="text-[13px] font-bold text-zinc-800">{title}</p>
-          <p className="text-[11px] text-zinc-400">{subtitle}</p>
+          <p className="text-sm font-bold text-zinc-800">{title}</p>
+          <p className="text-xs text-zinc-400">{subtitle}</p>
         </div>
         {excludedInGroup > 0 && (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-[10px] font-bold border border-orange-200">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-xs font-bold border border-orange-200">
             <Ban size={9} /> {excludedInGroup} excluded
           </span>
         )}
       </div>
       <div className="grid grid-cols-2 gap-2">
-        {topics.map(t => (
+        {topics.map((t) => (
           <TopicCheckbox
             key={t.id}
             topic={t}
@@ -192,9 +242,24 @@ function GradeSection({ title, subtitle, topics, excludedTopics, onToggle }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 function PlanTimeline({ days }) {
   const priorityConfig = {
-    High:   { dot: 'bg-red-500',    line: 'border-red-200',    badge: 'bg-red-50 text-red-700 border-red-200 shadow-sm shadow-red-100',    label: '🔥 High Probability' },
-    Medium: { dot: 'bg-orange-400', line: 'border-orange-200', badge: 'bg-orange-50 text-orange-700 border-orange-200', label: 'Medium Priority' },
-    Low:    { dot: 'bg-zinc-400',   line: 'border-zinc-200',   badge: 'bg-zinc-50 text-zinc-600 border-zinc-200', label: 'Low Priority' },
+    High: {
+      dot: "bg-red-700",
+      line: "border-red-200",
+      badge: "bg-red-50 text-red-700 border-red-200 shadow-sm shadow-red-100",
+      label: "High Probability",
+    },
+    Medium: {
+      dot: "bg-orange-700",
+      line: "border-orange-200",
+      badge: "bg-orange-50 text-orange-700 border-orange-200",
+      label: "Medium Priority",
+    },
+    Low: {
+      dot: "bg-zinc-600",
+      line: "border-zinc-200",
+      badge: "bg-zinc-50 text-zinc-600 border-zinc-200",
+      label: "Low Priority",
+    },
   };
 
   return (
@@ -206,31 +271,47 @@ function PlanTimeline({ days }) {
         {days.map((d, idx) => {
           const cfg = priorityConfig[d.priority] ?? priorityConfig.Low;
           const isLast = idx === days.length - 1;
-          const isHigh = d.priority === 'High';
-          
+          const isHigh = d.priority === "High";
+
           return (
             <div key={idx} className="flex gap-4 group">
               {/* Timeline dot */}
               <div className="flex-shrink-0 relative z-10 mt-1">
-                <div className={`w-[18px] h-[18px] rounded-full border-2 border-white shadow-md flex items-center justify-center ${cfg.dot}`}>
-                      <span className="text-[8px] text-white font-bold leading-none">{idx + 1}</span>
+                <div
+                  className={`w-6 h-6 rounded-full border-2 border-white shadow-md flex items-center justify-center ${cfg.dot}`}
+                >
+                  <span className="text-xs text-white font-bold leading-none">
+                    {idx + 1}
+                  </span>
                 </div>
               </div>
 
               {/* Card */}
-              <div className={`flex-1 bg-white rounded-xl border shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-3.5 mb-0.5 transition-all duration-150 hover:shadow-md ${
-                isLast ? 'border-zinc-200 bg-zinc-50/30' : (isHigh ? 'border-red-200 bg-red-50/10' : 'border-zinc-200')
-              }`}>
+              <div
+                className={`flex-1 bg-white rounded-xl border shadow-[0_1px_4px_rgba(0,0,0,0.06)] p-3.5 mb-0.5 transition-all duration-150 hover:shadow-md ${
+                  isLast
+                    ? "border-zinc-200 bg-zinc-50/30"
+                    : isHigh
+                      ? "border-red-200 bg-red-50/10"
+                      : "border-zinc-200"
+                }`}
+              >
                 <div className="flex items-start justify-between gap-2 flex-wrap">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-bold ${cfg.badge}`}>
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-full border text-xs font-bold ${cfg.badge}`}
+                      >
                         {cfg.label}
                       </span>
                     </div>
-                    <p className="mt-1.5 text-[13px] font-bold text-zinc-800 leading-snug">Day {idx + 1}: {d.topic}</p>
+                    <p className="mt-1.5 text-sm font-bold text-zinc-800 leading-snug">
+                      Day {idx + 1}: {d.topic}
+                    </p>
                     {d.subtopics && (
-                      <p className="mt-0.5 text-[11px] text-zinc-500 leading-snug">{d.subtopics}</p>
+                      <p className="mt-0.5 text-xs text-zinc-500 leading-snug">
+                        {d.subtopics}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -250,19 +331,19 @@ function PlanTimeline({ days }) {
 //   Step 3: Generated plan preview (timeline)
 // ═══════════════════════════════════════════════════════════════════════════════
 function GeneratePlanModal({ onClose, onSuccess }) {
-  const [step, setStep]                   = useState(1);   // 1 | 2 | 3
+  const [step, setStep] = useState(1); // 1 | 2 | 3
   const [excludedTopics, setExcludedTopics] = useState([]);
-  const [loading, setLoading]             = useState(false);
-  const [alert, setAlert]                 = useState(null);
-  const [planResult, setPlanResult]       = useState(null); // { planDays, planId, message }
+  const [loading, setLoading] = useState(false);
+  const [alert, setAlert] = useState(null);
+  const [planResult, setPlanResult] = useState(null); // { planDays, planId, message }
 
   const toggleTopic = (label) =>
-    setExcludedTopics(prev =>
-      prev.includes(label) ? prev.filter(t => t !== label) : [...prev, label]
+    setExcludedTopics((prev) =>
+      prev.includes(label) ? prev.filter((t) => t !== label) : [...prev, label],
     );
 
   // ── Step 1 → 2 validation ────────────────────────────────────────────────
-  const handleStep1Next = e => {
+  const handleStep1Next = (e) => {
     e.preventDefault();
     setAlert(null);
     setStep(2);
@@ -274,7 +355,7 @@ function GeneratePlanModal({ onClose, onSuccess }) {
     setLoading(true);
     try {
       const res = await authFetch(`${API_BASE}/api/aiagent/generate-plan`, {
-        method: 'POST',
+        method: "POST",
         body: JSON.stringify({
           excludedTopics,
         }),
@@ -287,291 +368,349 @@ function GeneratePlanModal({ onClose, onSuccess }) {
       }
 
       setPlanResult({
-        planId:   data.studyPlanId,
-        message:  data.message,
+        planId: data.studyPlanId,
+        message: data.message,
         planDays: data.planDays ?? [],
       });
       setStep(3);
-      onSuccess(`General study plan #${data.studyPlanId} generated — ${data.planDays?.length ?? 0} day(s) scheduled.`);
+      onSuccess(
+        `General study plan #${data.studyPlanId} generated — ${data.planDays?.length ?? 0} day(s) scheduled.`,
+      );
     } catch (err) {
-      setAlert({ type: 'error', text: err.message });
+      setAlert({ type: "error", text: err.message });
     } finally {
       setLoading(false);
     }
   };
 
   // ── Step labels ───────────────────────────────────────────────────────────
-  const stepLabels = ['Plan Options', 'Exclude Topics', 'Preview'];
+  const stepLabels = ["Plan Options", "Exclude Topics", "Preview"];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={step !== 3 ? onClose : undefined} />
-
-      <div className={`relative bg-white rounded-2xl shadow-2xl w-full overflow-hidden flex flex-col transition-all duration-300 ${
-        step === 3 ? 'max-w-2xl max-h-[90vh]' : 'max-w-xl'
-      }`}>
-
-        {/* ── Modal Header ── */}
-        <div className="px-6 py-4 border-b border-zinc-100 bg-zinc-50/60 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2">
-            <Sparkles size={17} className="text-orange-600" />
-            <span className="font-bold text-zinc-800 text-[15px]">Generate General Study Plan</span>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg border border-zinc-200 text-zinc-400 hover:text-zinc-700 transition-all"
-          >
-            <X size={14} />
-          </button>
+    <ModalFrame label="Generate a study plan" onClose={onClose} wide>
+      {/* ── Modal Header ── */}
+      <div className="px-6 py-4 border-b border-zinc-100 bg-zinc-50/60 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-2">
+          <Sparkles size={17} className="text-orange-600" />
+          <span className="font-bold text-zinc-800 text-[15px]">
+            Generate General Study Plan
+          </span>
         </div>
+        <button
+          aria-label="Close dialog"
+          onClick={onClose}
+          className="p-1.5 rounded-lg border border-zinc-200 text-zinc-400 hover:text-zinc-700 transition-all"
+        >
+          <X size={14} />
+        </button>
+      </div>
 
-        {/* ── Step indicator ── */}
-        <div className="px-6 pt-4 pb-0 shrink-0">
-          <div className="flex items-center gap-0">
-            {stepLabels.map((label, i) => {
-              const num = i + 1;
-              const done = step > num;
-              const active = step === num;
-              return (
-                <React.Fragment key={num}>
-                  <div className="flex flex-col items-center gap-1">
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold transition-all ${
-                      done   ? 'bg-orange-500 text-white' :
-                      active ? 'bg-orange-100 text-orange-700 ring-2 ring-orange-400 ring-offset-1' :
-                               'bg-zinc-100 text-zinc-400'
-                    }`}>
-                      {done ? <CheckCircle2 size={14} /> : num}
-                    </div>
-                    <span className={`text-[10px] font-semibold whitespace-nowrap ${
-                      active ? 'text-orange-700' : done ? 'text-orange-500' : 'text-zinc-400'
-                    }`}>{label}</span>
+      {/* ── Step indicator ── */}
+      <div className="px-6 pt-4 pb-0 shrink-0">
+        <div className="flex items-center gap-0">
+          {stepLabels.map((label, i) => {
+            const num = i + 1;
+            const done = step > num;
+            const active = step === num;
+            return (
+              <React.Fragment key={num}>
+                <div className="flex flex-col items-center gap-1">
+                  <div
+                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                      done
+                        ? "bg-orange-500 text-white"
+                        : active
+                          ? "bg-orange-100 text-orange-700 ring-2 ring-orange-400 ring-offset-1"
+                          : "bg-zinc-100 text-zinc-400"
+                    }`}
+                  >
+                    {done ? <CheckCircle2 size={14} /> : num}
                   </div>
-                  {i < stepLabels.length - 1 && (
-                    <div className={`flex-1 h-px mx-2 mb-4 transition-colors ${done ? 'bg-orange-300' : 'bg-zinc-200'}`} />
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </div>
+                  <span
+                    className={`text-xs font-semibold whitespace-nowrap ${
+                      active
+                        ? "text-orange-700"
+                        : done
+                          ? "text-orange-500"
+                          : "text-zinc-400"
+                    }`}
+                  >
+                    {label}
+                  </span>
+                </div>
+                {i < stepLabels.length - 1 && (
+                  <div
+                    className={`flex-1 h-px mx-2 mb-4 transition-colors ${done ? "bg-orange-300" : "bg-zinc-200"}`}
+                  />
+                )}
+              </React.Fragment>
+            );
+          })}
         </div>
+      </div>
 
-        {/* ── Alert ── */}
-        {alert && (
-          <div className="px-6 pt-3 shrink-0">
-            <Alert type={alert.type} text={alert.text} onDismiss={() => setAlert(null)} />
-          </div>
-        )}
+      {/* ── Alert ── */}
+      {alert && (
+        <div className="px-6 pt-3 shrink-0">
+          <Alert
+            type={alert.type}
+            text={alert.text}
+            onDismiss={() => setAlert(null)}
+          />
+        </div>
+      )}
 
-        {/* ══════════════════════════════════════════════════════════════════
+      {/* ══════════════════════════════════════════════════════════════════
             STEP 1 — Basic details
         ══════════════════════════════════════════════════════════════════ */}
-        {step === 1 && (
-          <form onSubmit={handleStep1Next} className="p-6 space-y-5">
-            {/* Info banner */}
+      {step === 1 && (
+        <form onSubmit={handleStep1Next} className="p-6 space-y-5">
+          {/* Info banner */}
+          <div className="bg-orange-50 border border-orange-200/70 rounded-lg p-3 flex gap-2 text-xs text-orange-800">
+            <Brain size={14} className="shrink-0 mt-0.5 text-orange-600" />
+            <span>
+              The AI retrieves syllabus boundaries and past-paper probabilities
+              from the database, then generates a general seven-day study plan.
+              You can <strong>exclude topics</strong> if you want to skip
+              certain areas.
+            </span>
+          </div>
+
+          {/* Actions */}
+          <div className="pt-2 flex items-center justify-end gap-3 border-t border-zinc-100">
+            <button
+              type="button"
+
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-zinc-600 hover:text-zinc-800 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold shadow-sm transition-colors active:scale-95"
+            >
+              Next <ChevronRight size={14} />
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════
+            STEP 2 — Topic exclusion
+        ══════════════════════════════════════════════════════════════════ */}
+      {step === 2 && (
+        <div
+          className="flex flex-col overflow-hidden"
+          style={{ maxHeight: "75vh" }}
+        >
+          {/* Scrollable body */}
+          <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
+            {/* Sub-header */}
             <div className="bg-orange-50 border border-orange-200/70 rounded-lg p-3 flex gap-2 text-xs text-orange-800">
-              <Brain size={14} className="shrink-0 mt-0.5 text-orange-600" />
+              <CheckCircle2
+                size={14}
+                className="shrink-0 mt-0.5 text-orange-500"
+              />
               <span>
-                The AI retrieves syllabus boundaries and past-paper probabilities from the database,
-                then generates a general seven-day study plan.
-                You can <strong>exclude topics</strong> if you want to skip certain areas.
+                Check the topics your student has{" "}
+                <strong>already studied</strong>. These will be completely
+                excluded from the generated plan so the AI focuses only on
+                what's left to learn.
               </span>
             </div>
 
-            {/* Actions */}
-            <div className="pt-2 flex items-center justify-end gap-3 border-t border-zinc-100">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 text-sm font-medium text-zinc-600 hover:text-zinc-800 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold shadow-sm transition-colors active:scale-95"
-              >
-                Next <ChevronRight size={14} />
-              </button>
-            </div>
-          </form>
-        )}
+            {/* Grade 12 */}
+            <GradeSection
+              title="Grade 12 ICT Topics"
+              subtitle="Core foundation syllabus"
+              topics={GRADE_12_TOPICS}
+              excludedTopics={excludedTopics}
+              onToggle={toggleTopic}
+            />
 
-        {/* ══════════════════════════════════════════════════════════════════
-            STEP 2 — Topic exclusion
-        ══════════════════════════════════════════════════════════════════ */}
-        {step === 2 && (
-          <div className="flex flex-col overflow-hidden" style={{ maxHeight: '75vh' }}>
-            {/* Scrollable body */}
-            <div className="overflow-y-auto flex-1 px-6 py-5 space-y-5">
-              {/* Sub-header */}
-              <div className="bg-orange-50 border border-orange-200/70 rounded-lg p-3 flex gap-2 text-xs text-orange-800">
-                <CheckCircle2 size={14} className="shrink-0 mt-0.5 text-orange-500" />
-                <span>
-                  Check the topics your student has <strong>already studied</strong>.
-                  These will be completely excluded from the generated plan so the AI focuses
-                  only on what's left to learn.
-                </span>
-              </div>
+            {/* Divider */}
+            <div className="border-t border-dashed border-zinc-200" />
 
-              {/* Grade 12 */}
-              <GradeSection
-                title="Grade 12 ICT Topics"
-                subtitle="Core foundation syllabus"
-                topics={GRADE_12_TOPICS}
-                excludedTopics={excludedTopics}
-                onToggle={toggleTopic}
-              />
-
-              {/* Divider */}
-              <div className="border-t border-dashed border-zinc-200" />
-
-              {/* Grade 13 */}
-              <GradeSection
-                title="Grade 13 ICT Topics"
-                subtitle="Advanced & applied syllabus"
-                topics={GRADE_13_TOPICS}
-                excludedTopics={excludedTopics}
-                onToggle={toggleTopic}
-              />
-            </div>
-
-            {/* Footer */}
-            <div className="px-6 py-4 border-t border-zinc-100 bg-zinc-50/60 shrink-0 flex items-center justify-between">
-              {/* Excluded pill */}
-              <div className="flex items-center gap-2">
-                {excludedTopics.length > 0 ? (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-100 text-orange-700 border border-orange-200 text-[11px] font-bold">
-                    <Ban size={11} /> {excludedTopics.length} topic{excludedTopics.length !== 1 ? 's' : ''} excluded
-                  </span>
-                ) : (
-                  <span className="text-[11px] text-zinc-400 italic">No topics excluded — full syllabus included</span>
-                )}
-              </div>
-
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => { setStep(1); setAlert(null); }}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-zinc-600 hover:text-zinc-800 transition-colors"
-                >
-                  <ChevronLeft size={14} /> Back
-                </button>
-                <button
-                  onClick={handleGenerate}
-                  disabled={loading}
-                  className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors active:scale-95"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 size={14} className="animate-spin" />
-                      <span>Generating…</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles size={14} />
-                      <span>Generate Plan</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
+            {/* Grade 13 */}
+            <GradeSection
+              title="Grade 13 ICT Topics"
+              subtitle="Advanced & applied syllabus"
+              topics={GRADE_13_TOPICS}
+              excludedTopics={excludedTopics}
+              onToggle={toggleTopic}
+            />
           </div>
-        )}
 
-        {/* ══════════════════════════════════════════════════════════════════
-            STEP 3 — Plan preview (vertical timeline)
-        ══════════════════════════════════════════════════════════════════ */}
-        {step === 3 && planResult && (
-          <div className="flex flex-col overflow-hidden flex-1">
-            {/* Success header */}
-            <div className="px-6 py-4 bg-zinc-50 border-b border-zinc-100 shrink-0">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 size={16} className="text-zinc-600" />
-                <p className="text-[13px] font-semibold text-zinc-800">
-                  Plan #{planResult.planId} generated — {planResult.planDays.length} day schedule
-                </p>
-              </div>
-              <p className="text-[11px] text-zinc-600 mt-0.5">
-                Awaiting admin approval before the student can view this plan.
-              </p>
-            </div>
-
-            {/* Summary chips */}
-            <div className="px-6 pt-4 pb-2 shrink-0 flex items-center gap-2 flex-wrap">
-              {['High', 'Medium', 'Low'].map(p => {
-                const count = planResult.planDays.filter(d => d.priority === p).length;
-                if (!count) return null;
-                const colors = {
-                  High:   'bg-red-50 text-red-700 border-red-200',
-                  Medium: 'bg-orange-50 text-orange-700 border-orange-200',
-                  Low:    'bg-zinc-50 text-zinc-600 border-zinc-200',
-                };
-                return (
-                  <span key={p} className={`inline-flex items-center px-2.5 py-1 rounded-full border text-[11px] font-bold ${colors[p]}`}>
-                    {p}: {count} day{count !== 1 ? 's' : ''}
-                  </span>
-                );
-              })}
-              {excludedTopics.length > 0 && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-orange-50 border border-orange-200 text-orange-700 text-[11px] font-bold">
-                  <Ban size={10} /> {excludedTopics.length} topic{excludedTopics.length !== 1 ? 's' : ''} excluded
+          {/* Footer */}
+          <div className="px-6 py-4 border-t border-zinc-100 bg-zinc-50/60 shrink-0 flex items-center justify-between">
+            {/* Excluded pill */}
+            <div className="flex items-center gap-2">
+              {excludedTopics.length > 0 ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-100 text-orange-700 border border-orange-200 text-xs font-bold">
+                  <Ban size={11} /> {excludedTopics.length} topic
+                  {excludedTopics.length !== 1 ? "s" : ""} excluded
+                </span>
+              ) : (
+                <span className="text-xs text-zinc-400 italic">
+                  No topics excluded — full syllabus included
                 </span>
               )}
             </div>
 
-            {/* Scrollable timeline */}
-            <div className="overflow-y-auto flex-1 px-6 pb-6 pt-2">
-              <PlanTimeline days={planResult.planDays} />
-            </div>
-
-            {/* Footer */}
-            <div className="px-6 py-4 border-t border-zinc-100 bg-zinc-50/60 shrink-0 flex justify-end">
+            <div className="flex items-center gap-3">
               <button
-                onClick={onClose}
-                className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-900 text-white text-sm font-semibold shadow-sm transition-colors"
+                onClick={() => {
+                  setStep(1);
+                  setAlert(null);
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-zinc-600 hover:text-zinc-800 transition-colors"
               >
-                <CheckCircle2 size={14} /> Done
+                <ChevronLeft size={14} /> Back
+              </button>
+              <button
+                onClick={handleGenerate}
+                disabled={loading}
+                className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold shadow-sm disabled:opacity-50 disabled:cursor-not-allowed transition-colors active:scale-95"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>Generating…</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={14} />
+                    <span>Generate Plan</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Loading overlay — shown during Step 2 → API call */}
-        {loading && (
-          <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center gap-4 z-10">
-            <div className="relative">
-              <Loader2 size={40} className="animate-spin text-orange-500" />
-              <Brain size={18} className="absolute inset-0 m-auto text-orange-600 animate-pulse" />
-            </div>
-            <div className="text-center">
-              <p className="text-[15px] font-bold text-zinc-800">Generating Study Plan…</p>
-              <p className="text-[12px] text-zinc-500 mt-1">
-                The AI is analysing syllabus data and past-paper probabilities.<br />
-                This may take 10–20 seconds.
+      {/* ══════════════════════════════════════════════════════════════════
+            STEP 3 — Plan preview (vertical timeline)
+        ══════════════════════════════════════════════════════════════════ */}
+      {step === 3 && planResult && (
+        <div className="flex flex-col overflow-hidden flex-1">
+          {/* Success header */}
+          <div className="px-6 py-4 bg-zinc-50 border-b border-zinc-100 shrink-0">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 size={16} className="text-zinc-600" />
+              <p className="text-sm font-semibold text-zinc-800">
+                Plan #{planResult.planId} generated —{" "}
+                {planResult.planDays.length} day schedule
               </p>
             </div>
+            <p className="text-xs text-zinc-600 mt-0.5">
+              Awaiting admin approval before the student can view this plan.
+            </p>
+          </div>
+
+          {/* Summary chips */}
+          <div className="px-6 pt-4 pb-2 shrink-0 flex items-center gap-2 flex-wrap">
+            {["High", "Medium", "Low"].map((p) => {
+              const count = planResult.planDays.filter(
+                (d) => d.priority === p,
+              ).length;
+              if (!count) return null;
+              const colors = {
+                High: "bg-red-50 text-red-700 border-red-200",
+                Medium: "bg-orange-50 text-orange-700 border-orange-200",
+                Low: "bg-zinc-50 text-zinc-600 border-zinc-200",
+              };
+              return (
+                <span
+                  key={p}
+                  className={`inline-flex items-center px-2.5 py-1 rounded-full border text-xs font-bold ${colors[p]}`}
+                >
+                  {p}: {count} day{count !== 1 ? "s" : ""}
+                </span>
+              );
+            })}
             {excludedTopics.length > 0 && (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-50 border border-orange-200 text-orange-700 text-[11px] font-semibold">
-                <Ban size={11} /> Excluding {excludedTopics.length} topic{excludedTopics.length !== 1 ? 's' : ''}
-              </div>
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-orange-50 border border-orange-200 text-orange-700 text-xs font-bold">
+                <Ban size={10} /> {excludedTopics.length} topic
+                {excludedTopics.length !== 1 ? "s" : ""} excluded
+              </span>
             )}
           </div>
-        )}
-      </div>
-    </div>
+
+          {/* Scrollable timeline */}
+          <div
+            className="overflow-y-auto flex-1 px-6 pb-6 pt-2"
+            tabIndex={0}
+            role="region"
+            aria-label="Generated study schedule"
+          >
+            <PlanTimeline days={planResult.planDays} />
+          </div>
+
+          {/* Footer */}
+          <div className="px-6 py-4 border-t border-zinc-100 bg-zinc-50/60 shrink-0 flex justify-end">
+            <button
+              onClick={onClose}
+              className="inline-flex items-center gap-2 px-5 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-900 text-white text-sm font-semibold shadow-sm transition-colors"
+            >
+              <CheckCircle2 size={14} /> Done
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Loading overlay — shown during Step 2 → API call */}
+      {loading && (
+        <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center gap-4 z-10">
+          <div className="relative">
+            <Loader2 size={40} className="animate-spin text-orange-500" />
+            <Brain
+              size={18}
+              className="absolute inset-0 m-auto text-orange-600 animate-pulse"
+            />
+          </div>
+          <div className="text-center">
+            <p className="text-[15px] font-bold text-zinc-800">
+              Generating Study Plan…
+            </p>
+            <p className="text-[12px] text-zinc-500 mt-1">
+              The AI is analysing syllabus data and past-paper probabilities.
+              <br />
+              This may take 10–20 seconds.
+            </p>
+          </div>
+          {excludedTopics.length > 0 && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-50 border border-orange-200 text-orange-700 text-xs font-semibold">
+              <Ban size={11} /> Excluding {excludedTopics.length} topic
+              {excludedTopics.length !== 1 ? "s" : ""}
+            </div>
+          )}
+        </div>
+      )}
+    </ModalFrame>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PLAN DETAIL MODAL
 // ═══════════════════════════════════════════════════════════════════════════════
-function PlanDetailModal({ planId, onClose, onApprove, onReject, approving, deleting }) {
-  const [plan, setPlan]     = useState(null);
-  const [days, setDays]     = useState([]);
+function PlanDetailModal({
+  planId,
+  onClose,
+  onApprove,
+  onReject,
+  approving,
+  deleting,
+  actionError,
+}) {
+  const [plan, setPlan] = useState(null);
+  const [days, setDays] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError]   = useState(null);
-  const [view, setView]     = useState('table'); // 'timeline' | 'table'
+  const [error, setError] = useState(null);
+  const [view, setView] = useState("table"); // 'timeline' | 'table'
   const [exporting, setExporting] = useState(false);
-  
+
   const tableRef = useRef(null);
 
   useEffect(() => {
@@ -586,16 +725,22 @@ function PlanDetailModal({ planId, onClose, onApprove, onReject, approving, dele
         const data = await res.json();
         if (!cancelled) {
           setPlan(data);
-          const parsedDays = typeof data.planDetailsJson === 'string'
-            ? JSON.parse(data.planDetailsJson)
-            : data.planDetailsJson;
-          if (!Array.isArray(parsedDays)) throw new Error('The saved plan is not a JSON array.');
-          setDays(parsedDays.map((day, index) => ({
-            day: index + 1,
-            topic: typeof day?.topic === 'string' ? day.topic : '',
-            subtopics: typeof day?.subtopics === 'string' ? day.subtopics : '',
-            priority: typeof day?.priority === 'string' ? day.priority : 'Medium',
-          })));
+          const parsedDays =
+            typeof data.planDetailsJson === "string"
+              ? JSON.parse(data.planDetailsJson)
+              : data.planDetailsJson;
+          if (!Array.isArray(parsedDays))
+            throw new Error("The saved plan is not a JSON array.");
+          setDays(
+            parsedDays.map((day, index) => ({
+              day: index + 1,
+              topic: typeof day?.topic === "string" ? day.topic : "",
+              subtopics:
+                typeof day?.subtopics === "string" ? day.subtopics : "",
+              priority:
+                typeof day?.priority === "string" ? day.priority : "Medium",
+            })),
+          );
         }
       } catch (err) {
         if (!cancelled) setError(err.message);
@@ -604,21 +749,27 @@ function PlanDetailModal({ planId, onClose, onApprove, onReject, approving, dele
       }
     };
     fetchPlan();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [planId]);
 
   const handleExportPDF = async () => {
     if (!tableRef.current) return;
     setExporting(true);
     try {
+      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+        import("html2canvas"),
+        import("jspdf"),
+      ]);
       const canvas = await html2canvas(tableRef.current, { scale: 2 });
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF("p", "mm", "a4");
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      
+
       pdf.text(`General Study Plan Template #${planId}`, 14, 15);
-      pdf.addImage(imgData, 'PNG', 0, 20, pdfWidth, pdfHeight);
+      pdf.addImage(imgData, "PNG", 0, 20, pdfWidth, pdfHeight);
       pdf.save(`AL_ICT_General_Study_Plan_${planId}.pdf`);
     } catch (err) {
       setError(`PDF Export failed: ${err.message}`);
@@ -628,173 +779,227 @@ function PlanDetailModal({ planId, onClose, onApprove, onReject, approving, dele
   };
 
   const isPending = plan && !plan.isApproved;
-  const canApprove = days.length === 7 && days.every(day =>
-    day.topic.trim() && day.subtopics.trim() && ['High', 'Medium', 'Low'].includes(day.priority)
-  );
-  const updateDay = (index, field, value) => setDays(current =>
-    current.map((day, dayIndex) => dayIndex === index ? { ...day, [field]: value } : day)
-  );
+  const canApprove =
+    days.length === 7 &&
+    days.every(
+      (day) =>
+        day.topic.trim() &&
+        day.subtopics.trim() &&
+        ["High", "Medium", "Low"].includes(day.priority),
+    );
+  const updateDay = (index, field, value) =>
+    setDays((current) =>
+      current.map((day, dayIndex) =>
+        dayIndex === index ? { ...day, [field]: value } : day,
+      ),
+    );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[88vh] flex flex-col overflow-hidden">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-zinc-100 bg-zinc-50/60 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2">
-            <ListChecks size={17} className="text-orange-600" />
-              <span className="font-bold text-zinc-800 text-[15px]">
-              Study Plan #{planId} — {isPending ? 'Review and edit' : 'Schedule'}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            {/* Download PDF button */}
-            {!loading && !isPending && days.length > 0 && view === 'table' && (
-              <button
-                onClick={handleExportPDF}
-                disabled={exporting}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-600 hover:bg-zinc-700 text-white text-[12px] font-semibold transition-colors disabled:opacity-50"
-              >
-                {exporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-                Export PDF
-              </button>
-            )}
-
-            {!isPending && (
-              <div className="flex items-center gap-1 bg-zinc-100 rounded-lg p-0.5 ml-2">
-                {[['timeline', 'Timeline'], ['table', 'Table']].map(([key, label]) => (
-                  <button
-                    key={key}
-                    onClick={() => setView(key)}
-                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
-                      view === key ? 'bg-white text-zinc-800 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg border border-zinc-200 text-zinc-400 hover:text-zinc-700 hover:border-zinc-300 transition-all ml-1"
-            >
-              <X size={14} />
-            </button>
-          </div>
+    <ModalFrame label="Study plan schedule" onClose={onClose} wide>
+      {/* Header */}
+      <div className="px-6 py-4 border-b border-zinc-100 bg-zinc-50/60 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-2">
+          <ListChecks size={17} className="text-orange-600" />
+          <span className="font-bold text-zinc-800 text-[15px]">
+            Study Plan #{planId} — {isPending ? "Review and edit" : "Schedule"}
+          </span>
         </div>
+        <div className="flex items-center gap-2">
+          {/* Download PDF button */}
+          {!loading && !isPending && days.length > 0 && view === "table" && (
+            <button
+              onClick={handleExportPDF}
+              disabled={exporting}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-600 hover:bg-zinc-700 text-white text-[12px] font-semibold transition-colors disabled:opacity-50"
+            >
+              {exporting ? (
+                <Loader2 size={13} className="animate-spin" />
+              ) : (
+                <Download size={13} />
+              )}
+              Export PDF
+            </button>
+          )}
 
-        {/* Body */}
-        <div className="overflow-y-auto flex-1 p-5">
-          {loading && (
-            <div className="flex items-center justify-center py-12 gap-2 text-zinc-400">
-              <Loader2 size={18} className="animate-spin" />
-              <span className="text-sm">Loading schedule…</span>
-            </div>
-          )}
-          {error && <Alert type="error" text={error} />}
-          {!loading && !error && isPending && days.length !== 7 && (
-            <Alert type="error" text={`This plan contains ${days.length} day(s). Exactly 7 days are required before approval.`} />
-          )}
-          {!loading && !error && days.length === 0 && (
-            <p className="text-sm text-zinc-400 text-center py-10">No schedule data available.</p>
-          )}
-
-          {!loading && !error && isPending && days.length > 0 && (
-            <div className="space-y-3">
-              {days.map((day, index) => (
-                <section key={index} className="rounded-lg border border-zinc-200 bg-white p-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <span className="inline-flex h-7 items-center justify-center rounded-full bg-orange-100 px-2.5 text-xs font-bold text-orange-700">
-                      Day {index + 1}
-                    </span>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="text-xs font-semibold text-zinc-600">
-                      Topic
-                      <input
-                        value={day.topic}
-                        onChange={event => updateDay(index, 'topic', event.target.value)}
-                        className="mt-1 block w-full rounded-md border border-zinc-300 px-3 py-2 text-sm font-normal text-zinc-800 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
-                      />
-                    </label>
-                    <label className="text-xs font-semibold text-zinc-600">
-                      Priority
-                      <select
-                        value={day.priority}
-                        onChange={event => updateDay(index, 'priority', event.target.value)}
-                        className="mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-normal text-zinc-800 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
-                      >
-                        {['High', 'Medium', 'Low'].map(priority => <option key={priority}>{priority}</option>)}
-                      </select>
-                    </label>
-                    <label className="text-xs font-semibold text-zinc-600 sm:col-span-2">
-                      Topics and study activities
-                      <textarea
-                        rows={3}
-                        value={day.subtopics}
-                        onChange={event => updateDay(index, 'subtopics', event.target.value)}
-                        className="mt-1 block w-full resize-y rounded-md border border-zinc-300 px-3 py-2 text-sm font-normal leading-relaxed text-zinc-800 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
-                      />
-                    </label>
-                  </div>
-                </section>
+          {!isPending && (
+            <div className="flex items-center gap-1 bg-zinc-100 rounded-lg p-0.5 ml-2">
+              {[
+                ["timeline", "Timeline"],
+                ["table", "Table"],
+              ].map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setView(key)}
+                  className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
+                    view === key
+                      ? "bg-white text-zinc-800 shadow-sm"
+                      : "text-zinc-500 hover:text-zinc-700"
+                  }`}
+                >
+                  {label}
+                </button>
               ))}
             </div>
           )}
-
-          {!loading && days.length > 0 && view === 'timeline' && (
-            !isPending && <PlanTimeline days={days} />
-          )}
-
-          {!loading && days.length > 0 && !isPending && view === 'table' && (
-            <div ref={tableRef} className="overflow-x-auto rounded-lg border border-zinc-200 bg-white">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="bg-zinc-50 border-b border-zinc-200">
-                    {['Day', 'Topic', 'Sub-topics', 'Priority'].map(h => (
-                      <th key={h} className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-100">
-                  {days.map((d, i) => (
-                    <tr key={i} className="hover:bg-zinc-50/60 transition-colors">
-                      <td className="px-4 py-2.5 text-[12px] font-bold text-orange-700 whitespace-nowrap">Day {i + 1}</td>
-                      <td className="px-4 py-2.5 text-[12px] font-semibold text-zinc-800 max-w-[160px]">{d.topic}</td>
-                      <td className="px-4 py-2.5 text-[11px] text-zinc-500 max-w-[200px] leading-snug">{d.subtopics}</td>
-                      <td className="px-4 py-2.5"><PriorityBadge priority={d.priority} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <button
+            aria-label="Close dialog"
+            onClick={onClose}
+            className="p-1.5 rounded-lg border border-zinc-200 text-zinc-400 hover:text-zinc-700 hover:border-zinc-300 transition-all ml-1"
+          >
+            <X size={14} />
+          </button>
         </div>
-        {isPending && (
-          <div className="flex items-center justify-between gap-3 border-t border-zinc-100 bg-zinc-50/60 px-5 py-4">
-            <button
-              onClick={() => onReject(planId)}
-              disabled={deleting || approving}
-              className="inline-flex items-center gap-2 rounded-md border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-              Reject / Delete
-            </button>
-            <button
-              onClick={() => onApprove(planId, days)}
-              disabled={!canApprove || approving || deleting}
-              className="inline-flex items-center gap-2 rounded-md bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {approving ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
-              {approving ? 'Approving…' : 'Approve Plan'}
-            </button>
+      </div>
+
+      {/* Body */}
+      <div className="overflow-y-auto flex-1 p-5">
+        {loading && (
+          <div className="flex items-center justify-center py-12 gap-2 text-zinc-400">
+            <Loader2 size={18} className="animate-spin" />
+            <span className="text-sm">Loading schedule…</span>
+          </div>
+        )}
+        {error && <Alert type="error" text={error} />}
+        {actionError && <Alert type="error" text={actionError} />}
+        {!loading && !error && isPending && days.length !== 7 && (
+          <Alert
+            type="error"
+            text={`This plan contains ${days.length} day(s). Exactly 7 days are required before approval.`}
+          />
+        )}
+        {!loading && !error && days.length === 0 && (
+          <p className="text-sm text-zinc-400 text-center py-10">
+            No schedule data available.
+          </p>
+        )}
+
+        {!loading && !error && isPending && days.length > 0 && (
+          <div className="space-y-3">
+            {days.map((day, index) => (
+              <section
+                key={index}
+                className="rounded-lg border border-zinc-200 bg-white p-4"
+              >
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="inline-flex h-7 items-center justify-center rounded-full bg-orange-100 px-2.5 text-xs font-bold text-orange-700">
+                    Day {index + 1}
+                  </span>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="text-xs font-semibold text-zinc-600">
+                    Topic
+                    <input
+                      value={day.topic}
+                      onChange={(event) =>
+                        updateDay(index, "topic", event.target.value)
+                      }
+                      className="mt-1 block w-full rounded-md border border-zinc-300 px-3 py-2 text-sm font-normal text-zinc-800 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                    />
+                  </label>
+                  <label className="text-xs font-semibold text-zinc-600">
+                    Priority
+                    <select
+                      value={day.priority}
+                      onChange={(event) =>
+                        updateDay(index, "priority", event.target.value)
+                      }
+                      className="mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-normal text-zinc-800 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                    >
+                      {["High", "Medium", "Low"].map((priority) => (
+                        <option key={priority}>{priority}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-xs font-semibold text-zinc-600 sm:col-span-2">
+                    Topics and study activities
+                    <textarea
+                      rows={3}
+                      value={day.subtopics}
+                      onChange={(event) =>
+                        updateDay(index, "subtopics", event.target.value)
+                      }
+                      className="mt-1 block w-full resize-y rounded-md border border-zinc-300 px-3 py-2 text-sm font-normal leading-relaxed text-zinc-800 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                    />
+                  </label>
+                </div>
+              </section>
+            ))}
+          </div>
+        )}
+
+        {!loading && days.length > 0 && view === "timeline" && !isPending && (
+          <PlanTimeline days={days} />
+        )}
+
+        {!loading && days.length > 0 && !isPending && view === "table" && (
+          <div
+            ref={tableRef}
+            className="overflow-x-auto rounded-lg border border-zinc-200 bg-white"
+          >
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-zinc-50 border-b border-zinc-200">
+                  {["Day", "Topic", "Sub-topics", "Priority"].map((h) => (
+                    <th
+                      key={h}
+                      className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-zinc-400"
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100">
+                {days.map((d, i) => (
+                  <tr key={i} className="hover:bg-zinc-50/60 transition-colors">
+                    <td className="px-4 py-2.5 text-[12px] font-bold text-orange-700 whitespace-nowrap">
+                      Day {i + 1}
+                    </td>
+                    <td className="px-4 py-2.5 text-[12px] font-semibold text-zinc-800 max-w-[160px]">
+                      {d.topic}
+                    </td>
+                    <td className="px-4 py-2.5 text-xs text-zinc-500 max-w-[200px] leading-snug">
+                      {d.subtopics}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <PriorityBadge priority={d.priority} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
-    </div>
+      {isPending && (
+        <div className="flex items-center justify-between gap-3 border-t border-zinc-100 bg-zinc-50/60 px-5 py-4">
+          <button
+            onClick={() => onReject(planId)}
+            disabled={deleting || approving}
+            className="inline-flex items-center gap-2 rounded-md border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {deleting ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <Trash2 size={14} />
+            )}
+            Reject / Delete
+          </button>
+          <button
+            onClick={() => onApprove(planId, days)}
+            disabled={!canApprove || approving || deleting}
+            className="inline-flex items-center gap-2 rounded-md bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {approving ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <ShieldCheck size={14} />
+            )}
+            {approving ? "Approving…" : "Approve Plan"}
+          </button>
+        </div>
+      )}
+    </ModalFrame>
   );
 }
 
@@ -802,12 +1007,12 @@ function PlanDetailModal({ planId, onClose, onApprove, onReject, approving, dele
 // MAIN COMPONENT — StudyPlanManager
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function StudyPlanManager() {
-  const [plans, setPlans]               = useState([]);
-  const [loading, setLoading]           = useState(true);
-  const [pageAlert, setPageAlert]       = useState(null);
-  const [filter, setFilter]             = useState('all');
-  const [approvingId, setApprovingId]   = useState(null);
-  const [deletingId, setDeletingId]     = useState(null);
+  const [plans, setPlans] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [pageAlert, setPageAlert] = useState(null);
+  const [filter, setFilter] = useState("all");
+  const [approvingId, setApprovingId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
   const [showGenModal, setShowGenModal] = useState(false);
   const [detailPlanId, setDetailPlanId] = useState(null);
 
@@ -823,8 +1028,11 @@ export default function StudyPlanManager() {
       const data = await res.json();
       setPlans(Array.isArray(data.plans) ? data.plans : []);
     } catch (err) {
-      if (err.name !== 'AbortError') {
-        setPageAlert({ type: 'error', text: `Failed to load plans: ${err.message}` });
+      if (err.name !== "AbortError") {
+        setPageAlert({
+          type: "error",
+          text: `Failed to load plans: ${err.message}`,
+        });
         setPlans([]);
       }
     } finally {
@@ -842,45 +1050,67 @@ export default function StudyPlanManager() {
     setApprovingId(planId);
     setPageAlert(null);
     try {
-      const res = await authFetch(`${API_BASE}/api/aiagent/approve-plan/${planId}`, {
-        method: 'PUT',
-        body: JSON.stringify({ planDetailsJson: planDays }),
-      });
+      const res = await authFetch(
+        `${API_BASE}/api/aiagent/approve-plan/${planId}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ planDetailsJson: planDays }),
+        },
+      );
       const data = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(data?.message || `Server error ${res.status}`);
-      setPlans(prev =>
-        prev.map(p =>
+      if (!res.ok)
+        throw new Error(data?.message || `Server error ${res.status}`);
+      setPlans((prev) =>
+        prev.map((p) =>
           p.id === planId
-            ? { ...p, isApproved: true, approvedByEmail: data.approvedBy, approvedAt: data.approvedAt }
-            : p
-        )
+            ? {
+                ...p,
+                isApproved: true,
+                approvedByEmail: data.approvedBy,
+                approvedAt: data.approvedAt,
+              }
+            : p,
+        ),
       );
       setDetailPlanId(null);
-      setPageAlert({ type: 'success', text: `Plan #${planId} approved. The student can now view their schedule.` });
+      setPageAlert({
+        type: "success",
+        text: `Plan #${planId} approved. The student can now view their schedule.`,
+      });
     } catch (err) {
-      setPageAlert({ type: 'error', text: err.message });
+      setPageAlert({ type: "error", text: err.message });
     } finally {
       setApprovingId(null);
     }
   };
 
   const handleReject = async (planId) => {
-    const plan = plans.find(p => p.id === planId);
-    const label = plan?.isApproved ? 'approved' : 'pending';
-    if (!window.confirm(`Delete this ${label} study plan #${planId}? This cannot be undone.`)) return;
+    const plan = plans.find((p) => p.id === planId);
+    const label = plan?.isApproved ? "approved" : "pending";
+    if (
+      !window.confirm(
+        `Delete this ${label} study plan #${planId}? This cannot be undone.`,
+      )
+    )
+      return;
     setDeletingId(planId);
     setPageAlert(null);
     try {
-      const res = await authFetch(`${API_BASE}/api/aiagent/plans/${planId}`, { method: 'DELETE' });
+      const res = await authFetch(`${API_BASE}/api/aiagent/plans/${planId}`, {
+        method: "DELETE",
+      });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
         throw new Error(data?.message || `Server error ${res.status}`);
       }
-      setPlans(current => current.filter(p => p.id !== planId));
+      setPlans((current) => current.filter((p) => p.id !== planId));
       setDetailPlanId(null);
-      setPageAlert({ type: 'success', text: `Plan #${planId} was deleted successfully.` });
+      setPageAlert({
+        type: "success",
+        text: `Plan #${planId} was deleted successfully.`,
+      });
     } catch (err) {
-      setPageAlert({ type: 'error', text: err.message });
+      setPageAlert({ type: "error", text: err.message });
     } finally {
       setDeletingId(null);
     }
@@ -890,42 +1120,73 @@ export default function StudyPlanManager() {
     setPageAlert(null);
     try {
       const publishUrl = `${API_BASE}/api/aiagent/publish-plan/${planId}`;
-      const res = await authFetch(publishUrl, { method: 'PUT' });
+      const res = await authFetch(publishUrl, { method: "PUT" });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        const message = res.status === 404
-          ? data?.message || `The API at ${new URL(publishUrl).origin} returned an empty 404 for PUT ${new URL(publishUrl).pathname}. The deployed backend does not expose this publish route. Deploy the current backend, then retry.`
-          : data?.message || `Server error ${res.status}`;
+        const message =
+          res.status === 404
+            ? data?.message ||
+              `The API at ${new URL(publishUrl).origin} returned an empty 404 for PUT ${new URL(publishUrl).pathname}. The deployed backend does not expose this publish route. Deploy the current backend, then retry.`
+            : data?.message || `Server error ${res.status}`;
         throw new Error(message);
       }
-      
+
       // Re-fetch to correctly update all plans (unpublishing others for the student)
       await fetchPlans();
-      setPageAlert({ type: 'success', text: `Plan #${planId} published successfully. It is now active on the student's mobile app.` });
+      setPageAlert({
+        type: "success",
+        text: `Plan #${planId} published successfully. It is now active on the student's mobile app.`,
+      });
     } catch (err) {
-      setPageAlert({ type: 'error', text: err.message });
+      setPageAlert({ type: "error", text: err.message });
     }
   };
 
-  const filtered      = plans.filter(p => filter === 'pending' ? !p.isApproved : filter === 'approved' ? p.isApproved : true);
-  const pendingCount  = plans.filter(p => !p.isApproved).length;
-  const approvedCount = plans.filter(p =>  p.isApproved).length;
+  const filtered = plans.filter((p) =>
+    filter === "pending"
+      ? !p.isApproved
+      : filter === "approved"
+        ? p.isApproved
+        : true,
+  );
+  const pendingCount = plans.filter((p) => !p.isApproved).length;
+  const approvedCount = plans.filter((p) => p.isApproved).length;
 
   const stats = [
-    { label: 'Total Plans',    value: plans.length,  icon: ClipboardList, color: 'text-zinc-700',    bg: 'bg-zinc-100',    border: 'border-zinc-200' },
-    { label: 'Pending Review', value: pendingCount,   icon: Clock,         color: 'text-orange-700',   bg: 'bg-orange-50',    border: 'border-orange-200/60' },
-    { label: 'Approved',       value: approvedCount,  icon: CheckCircle2,  color: 'text-zinc-700', bg: 'bg-zinc-50',  border: 'border-zinc-200/60' },
+    {
+      label: "Total Plans",
+      value: plans.length,
+      icon: ClipboardList,
+      color: "text-zinc-700",
+      bg: "bg-zinc-100",
+      border: "border-zinc-200",
+    },
+    {
+      label: "Pending Review",
+      value: pendingCount,
+      icon: Clock,
+      color: "text-orange-700",
+      bg: "bg-orange-50",
+      border: "border-orange-200/60",
+    },
+    {
+      label: "Approved",
+      value: approvedCount,
+      icon: CheckCircle2,
+      color: "text-zinc-700",
+      bg: "bg-zinc-50",
+      border: "border-zinc-200/60",
+    },
   ];
 
   return (
-    <div className="max-w-[1200px] mx-auto px-6 py-6 space-y-5">
-
+    <div className="page plans-page">
       {/* ── Modals ── */}
       {showGenModal && (
         <GeneratePlanModal
           onClose={() => setShowGenModal(false)}
           onSuccess={(msg) => {
-            setPageAlert({ type: 'success', text: msg });
+            setPageAlert({ type: "success", text: msg });
             fetchPlans();
           }}
         />
@@ -933,6 +1194,7 @@ export default function StudyPlanManager() {
       {detailPlanId && (
         <PlanDetailModal
           planId={detailPlanId}
+          actionError={pageAlert?.type === "error" ? pageAlert.text : null}
           onClose={() => setDetailPlanId(null)}
           onApprove={handleApprove}
           onReject={handleReject}
@@ -941,61 +1203,75 @@ export default function StudyPlanManager() {
         />
       )}
 
-      {/* ── Page header ── */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-[22px] font-bold text-zinc-900 tracking-tight leading-none">
-            AI Study Plan Manager
-          </h1>
-          <p className="text-[13px] text-zinc-400 mt-2">
-            Generate AI-personalised study plans, review the schedule, and approve before students see them.
-          </p>
-        </div>
+      <PageHeader
+        eyebrow="SMALL STEPS. STEADY PROGRESS."
+        title="AI study plans"
+        description="Build a focused week of learning. Review the schedule, then publish it for your students."
+      >
         <button
+          className="button button-primary"
           onClick={() => setShowGenModal(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-[13px] font-semibold shadow-sm transition-all active:scale-95"
         >
-          <Sparkles size={14} strokeWidth={2.5} />
-          Generate Plan
+          <Sparkles size={17} /> Generate plan
         </button>
-      </div>
+      </PageHeader>
 
       {/* ── Page-level alert ── */}
       {pageAlert && (
-        <Alert type={pageAlert.type} text={pageAlert.text} onDismiss={() => setPageAlert(null)} />
+        <Alert
+          type={pageAlert.type}
+          text={pageAlert.text}
+          onDismiss={() => setPageAlert(null)}
+        />
       )}
 
-      {/* ── Stat ribbon ── */}
-      <div className="grid grid-cols-3 gap-3">
-        {stats.map((s, i) => (
-          <div key={i} className={`flex items-center gap-3 px-4 py-3.5 rounded-xl bg-white border shadow-[0_1px_3px_rgba(0,0,0,0.04)] ${s.border}`}>
-            <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${s.bg} ${s.color} shrink-0`}>
-              <s.icon size={16} strokeWidth={2} />
-            </div>
-            <div>
-              <p className="text-[10px] text-zinc-400 font-medium leading-none">{s.label}</p>
-              <p className="text-2xl font-bold text-zinc-900 leading-tight">{s.value}</p>
-            </div>
-          </div>
+      <div className="metric-grid metric-grid-three">
+        {stats.map((stat) => (
+          <Metric
+            key={stat.label}
+            label={stat.label}
+            value={loading || pageAlert?.type === "error" ? "—" : stat.value}
+            icon={stat.icon}
+            accent={stat.label === "Pending Review"}
+          />
         ))}
+      </div>
+      <div className="plan-workflow">
+        <span>
+          <Sparkles size={16} /> Generate
+        </span>
+        <span aria-hidden="true">→</span>
+        <span>
+          <ShieldCheck size={16} /> Review & approve
+        </span>
+        <span aria-hidden="true">→</span>
+        <span>
+          <Zap size={16} /> Publish to students
+        </span>
       </div>
 
       {/* ── Table card ── */}
-      <div className="bg-white border border-zinc-200/80 rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
-
+      <div className="surface">
         {/* Toolbar */}
-        <div className="px-5 py-3.5 border-b border-zinc-100 flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-1 bg-zinc-100 rounded-lg p-1">
+        <div className="table-toolbar">
+          <div
+            className="filter-group"
+            role="group"
+            aria-label="Filter study plans"
+          >
             {[
-              { key: 'all',      label: 'All Plans' },
-              { key: 'pending',  label: `Pending (${pendingCount})` },
-              { key: 'approved', label: 'Approved' },
-            ].map(tab => (
+              { key: "all", label: "All Plans" },
+              { key: "pending", label: `Pending (${pendingCount})` },
+              { key: "approved", label: "Approved" },
+            ].map((tab) => (
               <button
                 key={tab.key}
+                aria-pressed={filter === tab.key}
                 onClick={() => setFilter(tab.key)}
                 className={`px-3 py-1 rounded-md text-[12px] font-semibold transition-all ${
-                  filter === tab.key ? 'bg-white text-zinc-800 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'
+                  filter === tab.key
+                    ? "bg-white text-zinc-800 shadow-sm"
+                    : "text-zinc-500 hover:text-zinc-700"
                 }`}
               >
                 {tab.label}
@@ -1003,8 +1279,11 @@ export default function StudyPlanManager() {
             ))}
           </div>
           <div className="ml-auto flex items-center gap-2">
-            <span className="text-[11px] text-zinc-400">
-              <span className="font-semibold text-zinc-600">{filtered.length}</span> plan{filtered.length !== 1 ? 's' : ''}
+            <span className="text-xs text-zinc-400">
+              <span className="font-semibold text-zinc-600">
+                {filtered.length}
+              </span>{" "}
+              plan{filtered.length !== 1 ? "s" : ""}
             </span>
             <button
               onClick={() => fetchPlans()}
@@ -1012,7 +1291,7 @@ export default function StudyPlanManager() {
               title="Refresh"
               className="p-1.5 rounded-lg border border-zinc-200 hover:border-zinc-300 text-zinc-400 hover:text-zinc-600 transition-colors disabled:opacity-40"
             >
-              <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+              <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
             </button>
           </div>
         </div>
@@ -1026,12 +1305,16 @@ export default function StudyPlanManager() {
         )}
 
         {/* Empty */}
-        {!loading && filtered.length === 0 && (
+        {!loading && pageAlert?.type !== "error" && filtered.length === 0 && (
           <div className="py-16 text-center">
             <Brain size={36} className="mx-auto text-zinc-200 mb-3" />
-            <p className="text-[14px] font-semibold text-zinc-400">No plans found</p>
+            <p className="text-[14px] font-semibold text-zinc-400">
+              No plans found
+            </p>
             <p className="text-[12px] text-zinc-300 mt-1">
-              {filter === 'pending' ? 'All plans have been approved.' : 'Click "Generate Plan" to create the first AI study plan.'}
+              {filter === "pending"
+                ? "All plans have been approved."
+                : 'Click "Generate Plan" to create the first AI study plan.'}
             </p>
           </div>
         )}
@@ -1039,73 +1322,105 @@ export default function StudyPlanManager() {
         {/* Table */}
         {!loading && filtered.length > 0 && (
           <div className="overflow-x-auto">
-            <table className="w-full text-left">
+            <table className="data-table responsive-table plan-table">
               <thead>
                 <tr className="border-b border-zinc-100 bg-zinc-50/50">
-                  {['Plan ID', 'Student', 'Created', 'Status', 'Approved By', 'Actions'].map(col => (
-                    <th key={col} className="px-5 py-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-zinc-400 whitespace-nowrap">
+                  {[
+                    "Plan ID",
+                    "Student",
+                    "Created",
+                    "Status",
+                    "Approved By",
+                    "Actions",
+                  ].map((col) => (
+                    <th
+                      key={col}
+                      className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-400 whitespace-nowrap"
+                    >
                       {col}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-50">
-                {filtered.map(plan => {
+                {filtered.map((plan) => {
                   const isApprovingThis = approvingId === plan.id;
                   return (
-                    <tr key={plan.id} className="hover:bg-zinc-50/60 transition-colors group">
-                      <td className="px-5 py-3.5">
-                        <span className="font-mono text-[12px] font-semibold text-zinc-700">#{plan.id}</span>
+                    <tr
+                      key={plan.id}
+                      className="hover:bg-zinc-50/60 transition-colors group"
+                    >
+                      <td data-label="Plan ID" className="px-5 py-3.5">
+                        <span className="font-mono text-[12px] font-semibold text-zinc-700">
+                          #{plan.id}
+                        </span>
                       </td>
-                      <td className="px-5 py-3.5">
+                      <td data-label="Student" className="px-5 py-3.5">
                         <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white text-[10px] font-bold shrink-0">
-                            {plan.studentId === 0 ? '🌍' : (plan.studentId || '?')}
+                          <div className="w-6 h-6 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                            {plan.studentId === 0 ? (
+                              <Globe size={15} aria-hidden="true" />
+                            ) : (
+                              plan.studentId || "?"
+                            )}
                           </div>
                           <span className="text-[12px] text-zinc-600 font-medium">
-                            {plan.studentId === 0
-                              ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200 text-[11px] font-bold">🌍 Global Plan (All Students)</span>
-                              : `Student #${plan.studentId}`
-                            }
+                            {plan.studentId === 0 ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200 text-xs font-bold">
+                                All students
+                              </span>
+                            ) : (
+                              `Student #${plan.studentId}`
+                            )}
                           </span>
                         </div>
                       </td>
-                      <td className="px-5 py-3.5">
-                        <span className="text-[11px] text-zinc-400 font-medium">{plan.createdAt}</span>
+                      <td data-label="Created" className="px-5 py-3.5">
+                        <span className="text-xs text-zinc-400 font-medium">
+                          {plan.createdAt}
+                        </span>
                       </td>
-                      <td className="px-5 py-3.5">
-                        <StatusBadge approved={plan.isApproved} published={plan.isPublished} />
+                      <td data-label="Status" className="px-5 py-3.5">
+                        <StatusBadge
+                          approved={plan.isApproved}
+                          published={plan.isPublished}
+                        />
                       </td>
-                      <td className="px-5 py-3.5">
+                      <td data-label="Approved by" className="px-5 py-3.5">
                         {plan.isApproved ? (
                           <div>
-                            <p className="text-[11px] font-semibold text-zinc-700 flex items-center gap-1">
-                              <ShieldCheck size={11} className="text-zinc-600" />
-                              {plan.approvedByEmail ?? 'Admin'}
+                            <p className="text-xs font-semibold text-zinc-700 flex items-center gap-1">
+                              <ShieldCheck
+                                size={11}
+                                className="text-zinc-600"
+                              />
+                              {plan.approvedByEmail ?? "Admin"}
                             </p>
                             {plan.approvedAt && (
-                              <p className="text-[10px] text-zinc-400 mt-0.5">{plan.approvedAt}</p>
+                              <p className="text-xs text-zinc-400 mt-0.5">
+                                {plan.approvedAt}
+                              </p>
                             )}
                           </div>
                         ) : (
                           <span className="text-zinc-300 text-[12px]">—</span>
                         )}
                       </td>
-                      <td className="px-5 py-3.5">
+                      <td data-label="Actions" className="px-5 py-3.5">
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => setDetailPlanId(plan.id)}
                             title="View full schedule"
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-zinc-200 hover:border-zinc-300 bg-white text-zinc-500 hover:text-zinc-800 text-[11px] font-semibold transition-all"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-zinc-200 hover:border-zinc-300 bg-white text-zinc-500 hover:text-zinc-800 text-xs font-semibold transition-all"
                           >
                             <Eye size={12} /> View
                           </button>
-                          
+
                           {plan.isApproved && !plan.isPublished && (
                             <button
                               onClick={() => handlePublish(plan.id)}
                               title="Make this plan active for the student"
-                              className="inline-flex items-center gap-1.5 rounded-md bg-green-600 px-3 py-1.5 text-[11px] font-bold text-white shadow-sm transition-all hover:bg-green-700"
+                              className="inline-flex items-center gap-1.5 rounded-md bg-green-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition-all hover:bg-green-700"
                             >
                               <Zap size={12} /> Publish
                             </button>
@@ -1115,8 +1430,10 @@ export default function StudyPlanManager() {
                             <>
                               <button
                                 onClick={() => setDetailPlanId(plan.id)}
-                                disabled={isApprovingThis || deletingId === plan.id}
-                                className="inline-flex items-center gap-1.5 rounded-md bg-orange-600 px-3 py-1.5 text-[11px] font-bold text-white shadow-sm transition-all hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                disabled={
+                                  isApprovingThis || deletingId === plan.id
+                                }
+                                className="inline-flex items-center gap-1.5 rounded-md bg-orange-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition-all hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
                               >
                                 <ShieldCheck size={12} /> Review &amp; Edit
                               </button>
@@ -1126,10 +1443,18 @@ export default function StudyPlanManager() {
                           <button
                             onClick={() => handleReject(plan.id)}
                             disabled={isApprovingThis || deletingId === plan.id}
-                            title={plan.isApproved ? 'Delete approved plan' : 'Reject and delete pending plan'}
+                            title={
+                              plan.isApproved
+                                ? "Delete approved plan"
+                                : "Reject and delete pending plan"
+                            }
                             className="inline-flex items-center justify-center rounded-md border border-red-200 bg-white p-1.5 text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
                           >
-                            {deletingId === plan.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                            {deletingId === plan.id ? (
+                              <Loader2 size={13} className="animate-spin" />
+                            ) : (
+                              <Trash2 size={13} />
+                            )}
                           </button>
                         </div>
                       </td>
@@ -1144,14 +1469,22 @@ export default function StudyPlanManager() {
         {/* Table footer */}
         {!loading && plans.length > 0 && (
           <div className="px-5 py-3 border-t border-zinc-100 bg-zinc-50/30 flex items-center justify-between">
-            <p className="text-[11px] text-zinc-400">
-              Showing <span className="font-semibold text-zinc-600">{filtered.length}</span> of{' '}
-              <span className="font-semibold text-zinc-600">{plans.length}</span> plans
+            <p className="text-xs text-zinc-400">
+              Showing{" "}
+              <span className="font-semibold text-zinc-600">
+                {filtered.length}
+              </span>{" "}
+              of{" "}
+              <span className="font-semibold text-zinc-600">
+                {plans.length}
+              </span>{" "}
+              plans
             </p>
             {pendingCount > 0 && (
-              <p className="text-[11px] text-orange-600 font-semibold flex items-center gap-1">
+              <p className="text-xs text-orange-600 font-semibold flex items-center gap-1">
                 <Clock size={11} />
-                {pendingCount} plan{pendingCount !== 1 ? 's' : ''} awaiting your approval
+                {pendingCount} plan{pendingCount !== 1 ? "s" : ""} awaiting your
+                approval
               </p>
             )}
           </div>

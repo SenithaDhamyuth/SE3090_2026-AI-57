@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json;
 using IntelliPrep.API.DTOs;
 using IntelliPrep.API.Controllers;
 
@@ -113,6 +114,40 @@ public class AuthDtoValidationTests
 
         // Assert
         Assert.NotEmpty(errors);
+    }
+
+    [Fact]
+    public void UserLoginDto_BindsFlutterCamelCaseJsonPayload()
+    {
+        const string json = """{"email":" Student@School.lk ","password":"SecurePass1"}""";
+
+        var dto = JsonSerializer.Deserialize<UserLoginDto>(
+            json,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.NotNull(dto);
+        Assert.Equal(" Student@School.lk ", dto.Email);
+        Assert.Equal("SecurePass1", dto.Password);
+    }
+
+    [Fact]
+    public void CreateStudentRequest_BindsReactCamelCaseJsonPayload()
+    {
+        const string json =
+            """{"fullName":"Amal Perera","email":"amal@school.lk","initialPassword":"Abcd1!","phoneNumber":"0771234567","address":"Colombo","college":"School"}""";
+
+        var dto = JsonSerializer.Deserialize<CreateStudentRequest>(
+            json,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.NotNull(dto);
+        Assert.Equal("Amal Perera", dto.FullName);
+        Assert.Equal("amal@school.lk", dto.Email);
+        Assert.Equal("Abcd1!", dto.InitialPassword);
+        Assert.Equal("0771234567", dto.PhoneNumber);
+        Assert.Equal("Colombo", dto.Address);
+        Assert.Equal("School", dto.College);
+        Assert.Empty(Validate(dto));
     }
 
     [Fact]

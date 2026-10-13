@@ -148,8 +148,8 @@ void main() {
     addTearDown(tester.view.resetViewInsets);
     await tester.pumpWidget(app(const LoginScreen(), scale: 2));
     await tester.pump();
-    await tester.ensureVisible(find.text('Login'));
-    await tester.tap(find.text('Login'));
+    await tester.ensureVisible(find.text('Sign in'));
+    await tester.tap(find.text('Sign in'));
     await tester.pump();
     expect(find.text('Please enter your email.'), findsOneWidget);
     expect(find.text('Please enter your password.'), findsOneWidget);

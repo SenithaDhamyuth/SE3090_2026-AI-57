@@ -198,7 +198,7 @@ void main() {
     testWidgets('renders login form without throwing', (tester) async {
       await tester.pumpWidget(app(const LoginScreen()));
       await tester.pump();
-      expect(find.text('Login'), findsWidgets);
+      expect(find.text('Sign in'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -224,13 +224,21 @@ void main() {
             find.byType(TextFormField).last,
             'password123',
           );
-          await tester.tap(find.text('Login'));
+          await tester.ensureVisible(find.text('Sign in'));
+          await tester.tap(find.text('Sign in'));
           await tester.pumpAndSettle();
 
           // Diagnosis dialog must appear.
           expect(find.text('Login diagnosis'), findsOneWidget);
           // Support reference must be shown.
-          expect(find.textContaining(diagnosticId), findsOneWidget);
+          expect(
+            find.byWidgetPredicate(
+              (widget) =>
+                  widget is RichText &&
+                  widget.text.toPlainText().contains(diagnosticId),
+            ),
+            findsOneWidget,
+          );
           // No "Backend update required" text must appear.
           expect(find.textContaining('Backend update required'), findsNothing);
         },
@@ -261,7 +269,8 @@ void main() {
               find.byType(TextFormField).last,
               'password123',
             );
-            await tester.tap(find.text('Login'));
+            await tester.ensureVisible(find.text('Sign in'));
+            await tester.tap(find.text('Sign in'));
             await tester.pumpAndSettle();
 
             expect(find.text('Login diagnosis'), findsOneWidget);
@@ -302,7 +311,8 @@ void main() {
               find.byType(TextFormField).last,
               'password123',
             );
-            await tester.tap(find.text('Login'));
+            await tester.ensureVisible(find.text('Sign in'));
+            await tester.tap(find.text('Sign in'));
             await tester.pumpAndSettle();
 
             expect(find.text('Login diagnosis'), findsOneWidget);

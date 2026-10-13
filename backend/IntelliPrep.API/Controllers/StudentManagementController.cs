@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Text;
+using System.Text.Json.Serialization;
 
 namespace IntelliPrep.API.Controllers;
 
@@ -219,27 +220,33 @@ public class CreateStudentRequest
     [Required]
     [MinLength(2)]
     [MaxLength(100)]
+    [JsonPropertyName("fullName")]
     public string FullName { get; set; } = string.Empty;
 
     [Required]
     [EmailAddress]
     [MaxLength(150)]
+    [JsonPropertyName("email")]
     public string Email { get; set; } = string.Empty;
 
     [Required]
     [RegularExpression(@"^(?=.*[@!#$%^&*]).{6,72}$", ErrorMessage = "Password must be at least 6 characters and contain at least one special character (@, !, #, etc.).")]
+    [JsonPropertyName("initialPassword")]
     public string InitialPassword { get; set; } = string.Empty;
 
     /// <summary>Optional. Validated only when provided.</summary>
     [RegularExpression(@"^[+]?[\d\s\-()]{7,20}$",
         ErrorMessage = "PhoneNumber must be 7-20 characters and may contain digits, spaces, +, -, (, and ).")]
     [MaxLength(20)]
+    [JsonPropertyName("phoneNumber")]
     public string? PhoneNumber { get; set; }
 
     [MaxLength(255)]
+    [JsonPropertyName("address")]
     public string? Address { get; set; }
 
     [MaxLength(150)]
+    [JsonPropertyName("college")]
     public string? College { get; set; }
 }
 

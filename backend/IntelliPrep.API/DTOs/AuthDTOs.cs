@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace IntelliPrep.API.DTOs
 {
@@ -18,9 +19,11 @@ namespace IntelliPrep.API.DTOs
     public class UserLoginDto
     {
         [Required, EmailAddress]
+        [JsonPropertyName("email")]
         public string Email { get; set; } = string.Empty;
 
         [Required]
+        [JsonPropertyName("password")]
         public string Password { get; set; } = string.Empty;
     }
 
