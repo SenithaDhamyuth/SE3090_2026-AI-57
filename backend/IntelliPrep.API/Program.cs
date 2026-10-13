@@ -2,6 +2,7 @@ using IntelliPrep.API.Data;
 using IntelliPrep.API.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
@@ -170,7 +171,16 @@ app.UseSwaggerUI();
 
 app.UseHttpsRedirection();
 
-app.UseStaticFiles(); // Added to serve wwwroot/uploads
+var uploadsDirectory = Path.Combine(
+    app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot"),
+    "uploads");
+Directory.CreateDirectory(uploadsDirectory);
+
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(uploadsDirectory),
+    RequestPath = "/uploads"
+});
 
 app.UseRouting();
 app.UseCors("AllowAll");

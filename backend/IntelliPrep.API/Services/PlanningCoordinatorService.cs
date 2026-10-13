@@ -146,7 +146,7 @@ namespace IntelliPrep.API.Services
                 var requestBody = new GroqChatRequest
                 {
                     Model       = _modelName,
-                    Temperature = 0.2f,   // Low temp for deterministic JSON output
+                    Temperature = 0.0f,   // Low temp for deterministic JSON output
                     MaxTokens   = 1024,
                     Messages    =
                     [
@@ -369,7 +369,7 @@ namespace IntelliPrep.API.Services
         public List<GroqMessage> Messages { get; set; } = [];
 
         [JsonPropertyName("temperature")]
-        public float Temperature { get; set; } = 0.2f;
+        public float Temperature { get; set; } = 0.0f;
 
         [JsonPropertyName("max_tokens")]
         public int MaxTokens { get; set; } = 1024;

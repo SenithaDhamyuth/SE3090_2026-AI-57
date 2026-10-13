@@ -1,4 +1,4 @@
-import { ModalFrame, PageHeader, Metric } from "./components/ui";
+import { ModalFrame, PageHeader } from "./components/ui";
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   BarChart2,
@@ -15,7 +15,6 @@ import {
   User as UserIcon,
   CalendarDays,
   TrendingUp,
-  Hash,
   Save,
   XCircle,
   Sparkles,
@@ -1140,18 +1139,6 @@ export default function PastPaperAnalytics() {
   const years = [
     ...new Set(records.map((r) => r.year).filter((y) => y > 0)),
   ].sort((a, b) => b - a);
-  const avgProb = records.length
-    ? (
-        records.reduce((s, r) => s + Number(r.probabilityPercentage), 0) /
-        records.length
-      ).toFixed(1)
-    : "—";
-  const topRecord = records.reduce(
-    (best, r) =>
-      !best || r.probabilityPercentage > best.probabilityPercentage ? r : best,
-    null,
-  );
-
   const filtered = records.filter((r) => {
     const matchSearch =
       !search || r.topicName.toLowerCase().includes(search.toLowerCase());
@@ -1237,38 +1224,6 @@ export default function PastPaperAnalytics() {
             onDismiss={() => setPageAlert(null)}
           />
         )}
-
-        <div className="metric-grid">
-          <Metric
-            label="Topic records"
-            value={loading ? "—" : records.length}
-            detail="Available analysis records"
-            icon={Hash}
-          />
-          <Metric
-            label="Average probability"
-            value={loading || !records.length ? "—" : `${avgProb}%`}
-            detail="Across recorded topics"
-            icon={TrendingUp}
-            accent
-          />
-          <Metric
-            label="Years represented"
-            value={loading ? "—" : years.length}
-            detail="Based on recorded paper years"
-            icon={CalendarDays}
-          />
-          <Metric
-            label="Highest probability"
-            value={
-              loading || !topRecord
-                ? "—"
-                : `${Number(topRecord.probabilityPercentage).toFixed(1)}%`
-            }
-            detail={topRecord?.topicName || "No topic data yet"}
-            icon={BarChart2}
-          />
-        </div>
 
         {/* ── AI Analysis status banner ── */}
         {analyzing && (

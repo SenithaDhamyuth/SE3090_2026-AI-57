@@ -265,7 +265,7 @@ namespace IntelliPrep.API.DTOs
     {
         [JsonPropertyName("model")]       public string         Model       { get; init; } = string.Empty;
         [JsonPropertyName("messages")]    public List<GroqMessage> Messages { get; init; } = [];
-        [JsonPropertyName("temperature")] public float          Temperature { get; init; } = 0.1f;
+        [JsonPropertyName("temperature")] public float          Temperature { get; init; } = 0.0f;
         [JsonPropertyName("max_tokens")]  public int            MaxTokens   { get; init; } = 4096;
     }
 

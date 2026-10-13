@@ -61,7 +61,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() {
       _email = prefs.getString('student_email') ?? '';
       _nameCtrl.text = prefs.getString('student_name') ?? '';
-      _profileImageUrl = prefs.getString('profileImageUrl');
+      final savedImageUrl = prefs.getString('profileImageUrl');
+      _profileImageUrl = savedImageUrl == null || savedImageUrl.isEmpty
+          ? null
+          : ApiConstants.resolveUrl(savedImageUrl).toString();
     });
 
     // Optionally fetch extra fields from the backend
@@ -96,10 +99,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           // Prefer backend profile image URL over the locally-stored one
           final backendImg = (data['profileImageUrl'] as String?);
           if (backendImg != null && backendImg.isNotEmpty) {
-            final fullImg = Uri.parse(backendImg).hasScheme
-                ? backendImg
-                : '${ApiConstants.baseUrl}$backendImg';
-            _profileImageUrl = fullImg;
+            _profileImageUrl = ApiConstants.resolveUrl(backendImg).toString();
           }
         });
       } else {
@@ -174,12 +174,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
             'Upload response did not include an image URL.',
           );
         }
-        final baseUrl = Uri.parse(url).hasScheme
-            ? url
-            : '${ApiConstants.baseUrl}$url';
+        final imageUri = ApiConstants.resolveUrl(url);
         // Append a cache-busting query parameter so Flutter's ImageCache is
         // bypassed and the freshly-uploaded image is fetched immediately.
-        final cacheBustedUrl = '$baseUrl?t=${DateTime.now().millisecondsSinceEpoch}';
+        final cacheBustedUrl = imageUri
+            .replace(
+              queryParameters: {
+                ...imageUri.queryParameters,
+                't': DateTime.now().millisecondsSinceEpoch.toString(),
+              },
+            )
+            .toString();
         await prefs.setString('profileImageUrl', cacheBustedUrl);
         if (!mounted) return;
         setState(() => _profileImageUrl = cacheBustedUrl);

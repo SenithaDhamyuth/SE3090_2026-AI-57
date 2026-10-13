@@ -10,5 +10,11 @@ class ApiConstants {
     return Uri.parse('$normalizedBase/$normalizedPath');
   }
 
+  static Uri resolveUrl(String path) {
+    final uri = Uri.parse(path);
+    if (uri.hasScheme) return uri;
+    return endpoint(path);
+  }
+
   static String normalizeEmail(String email) => email.trim().toLowerCase();
 }

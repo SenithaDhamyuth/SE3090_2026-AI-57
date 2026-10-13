@@ -17,4 +17,19 @@ void main() {
       );
     });
   });
+
+  group('ApiConstants.resolveUrl', () {
+    test('resolves a leading-slash path against the API base URL', () {
+      expect(
+        ApiConstants.resolveUrl('/uploads/profile.jpg').toString(),
+        '${ApiConstants.baseUrl}/uploads/profile.jpg',
+      );
+    });
+
+    test('preserves an already absolute image URL', () {
+      const imageUrl = 'https://cdn.example.com/profile.jpg';
+
+      expect(ApiConstants.resolveUrl(imageUrl).toString(), imageUrl);
+    });
+  });
 }
