@@ -94,7 +94,14 @@ namespace IntelliPrep.API.Controllers
             }
 
             var token = GenerateJwtToken(user);
-            return Ok(new { token, role = user.Role, userId = user.Id });
+            return Ok(new
+            {
+                token,
+                role = user.Role,
+                userId = user.Id,
+                fullName = user.FullName,
+                profileImageUrl = user.ProfileImageUrl
+            });
         }
 
         [Authorize(Roles = "Student")]

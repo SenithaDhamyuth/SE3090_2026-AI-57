@@ -573,9 +573,20 @@ public class AdminMarksController : ControllerBase
             var directUser = int.TryParse(s.studentId, out var userId)
                 ? users.GetValueOrDefault(userId)
                 : null;
+
+            // Resolution order:
+            //  1. User record linked through StudentProfile (most authoritative)
+            //  2. User record linked directly via ExamSession.StudentId
+            //  3. Profile-table fallback name (e.g. when user was deleted)
+            //  4. "Anonymous" when studentId is blank (legacy / unauthenticated submission)
+            //  5. Numeric ID tag when studentId exists but user record is missing
             var studentName = student.hasUser
                 ? student.name
-                : directUser?.FullName ?? student.name ?? $"Student #{s.studentId}";
+                : directUser?.FullName
+                  ?? student.name
+                  ?? (string.IsNullOrWhiteSpace(s.studentId)
+                      ? "Anonymous"
+                      : $"Student #{s.studentId}");
             var studentEmail = student.hasUser
                 ? student.email
                 : directUser?.Email ?? student.email ?? string.Empty;

@@ -63,20 +63,35 @@ namespace IntelliPrep.API.Controllers
 
         // ─────────────────────────────────────────────────────────────────
         // GET api/studentprofile/{userId}
-        // Returns a single student profile by userId.
+        // Returns the editable profile fields for a student (from the Users
+        // table, where fullName, phone, address, college and profileImageUrl
+        // are stored).  The legacy StudentProfile table only holds exam metadata.
         // ─────────────────────────────────────────────────────────────────
         [HttpGet("{userId}")]
+        [Authorize(Roles = "Student")]
         public async Task<IActionResult> GetProfile(string userId)
         {
-            var profile = await _context.StudentProfiles
-                .FirstOrDefaultAsync(p => p.UserId == userId);
+            // Security: ensure the authenticated student can only read their own profile
+            var callerIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (callerIdClaim == null || callerIdClaim != userId)
+                return Forbid();
 
-            if (profile == null)
+            if (!int.TryParse(userId, out int userIdInt))
+                return BadRequest(new { message = "Invalid user ID." });
+
+            var user = await _context.Users.FindAsync(userIdInt);
+            if (user == null)
+                return NotFound(new { message = "Student account not found." });
+
+            return Ok(new
             {
-                return NotFound("Student profile not found.");
-            }
-
-            return Ok(profile);
+                fullName        = user.FullName,
+                email           = user.Email,
+                phoneNumber     = user.PhoneNumber,
+                address         = user.Address,
+                college         = user.College,
+                profileImageUrl = user.ProfileImageUrl
+            });
         }
 
         // ─────────────────────────────────────────────────────────────────
@@ -135,6 +150,7 @@ namespace IntelliPrep.API.Controllers
         // Saves a profile picture to wwwroot/uploads and updates ProfileImageUrl.
         // ─────────────────────────────────────────────────────────────────
         [HttpPost("upload-picture")]
+        [Authorize(Roles = "Student")]
         public async Task<IActionResult> UploadProfilePicture(IFormFile file)
         {
             if (file == null || file.Length == 0)

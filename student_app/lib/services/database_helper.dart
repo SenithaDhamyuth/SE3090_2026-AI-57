@@ -148,6 +148,13 @@ class DatabaseHelper {
     );
   }
 
+  /// Delete ALL cached exams — call this on logout to prevent data leakage
+  /// between users who share the same physical device.
+  Future<void> deleteAllExams() async {
+    final db = await database;
+    await db.delete(_tableName);
+  }
+
   /// Close the database connection. Call on app teardown if needed.
   Future<void> close() async {
     final db = _db;

@@ -83,6 +83,25 @@ class _LoginScreenState extends State<LoginScreen> {
         await prefs.setString('auth_token', token);
         await prefs.setString('student_email', normalizedEmail);
 
+        // Persist the user ID (used by ProfileScreen to fetch extended fields)
+        final userId = data['userId'];
+        if (userId != null) {
+          await prefs.setString('student_id', userId.toString());
+        }
+
+        // Persist full name if the backend returns it (not in current login
+        // response, but guard here so it doesn't overwrite an existing value)
+        final fullName = data['fullName']?.toString();
+        if (fullName != null && fullName.isNotEmpty) {
+          await prefs.setString('student_name', fullName);
+        }
+
+        // Persist profile image URL if returned
+        final profileImageUrl = data['profileImageUrl']?.toString();
+        if (profileImageUrl != null && profileImageUrl.isNotEmpty) {
+          await prefs.setString('profileImageUrl', profileImageUrl);
+        }
+
         setState(() => _isLoading = false);
 
         if (!mounted) return;

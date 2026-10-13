@@ -5,7 +5,7 @@ import {
   Notice,
   PageHeader,
 } from "./components/ui";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Trophy,
   RefreshCw,
@@ -15,6 +15,10 @@ import {
   ChevronDown,
   Search,
   CheckCircle2,
+  BookOpen,
+  Calendar,
+  Clock,
+  TrendingUp,
 } from "lucide-react";
 
 const API_BASE =
@@ -33,36 +37,229 @@ const authFetch = (url, options = {}) => {
   });
 };
 
-// ── Score badge ────────────────────────────────────────────────────────────────
-function ScoreBadge({ score, total }) {
-  if (total === 0)
-    return <span className="text-gray-400 text-[12px] font-semibold">N/A</span>;
-  const pct = Math.round((score / total) * 100);
-  const color =
-    pct >= 75
-      ? "bg-green-50 text-green-600"
-      : pct >= 50
-        ? "bg-orange-50 text-orange-600"
-        : "bg-red-50 text-red-600";
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+/** Returns a rounded integer percentage, or null when total is 0. */
+function scorePct(score, total) {
+  if (!total || total === 0) return null;
+  return Math.round((score / total) * 100);
+}
+
+/** Strips the trailing " UTC" the backend appends and trims whitespace. */
+function formatDate(raw) {
+  if (!raw) return "—";
+  return raw.replace(" UTC", "").trim();
+}
+
+// ── ResultBadge ────────────────────────────────────────────────────────────────
+// Colour-coded Pass/Fail pill: emerald for ≥ 50 %, red for < 50 %.
+
+function ResultBadge({ score, total }) {
+  const p = scorePct(score, total);
+  if (p === null)
+    return <span className="text-slate-400 text-xs font-medium">N/A</span>;
+  const pass = p >= 50;
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[12px] font-bold ${color}`}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide ${
+        pass
+          ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+          : "bg-red-50 text-red-700 ring-1 ring-red-200"
+      }`}
     >
-      <Trophy size={12} strokeWidth={2.5} />
-      {score}/{total} ({pct}%)
+      {pass ? (
+        <CheckCircle2 size={11} strokeWidth={2.5} />
+      ) : (
+        <Trophy size={11} strokeWidth={2.5} />
+      )}
+      {score}/{total} · {p}% — {pass ? "Pass" : "Fail"}
     </span>
   );
 }
 
+// ── StudentAvatar ──────────────────────────────────────────────────────────────
+
+function StudentAvatar({ name }) {
+  const initials = (name || "?")
+    .split(" ")
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase())
+    .slice(0, 2)
+    .join("");
+  return (
+    <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-orange-100 text-orange-700 text-xs font-bold flex-shrink-0 select-none">
+      {initials || "?"}
+    </span>
+  );
+}
+
+// ── ExamGroup ─────────────────────────────────────────────────────────────────
+// One accordion card per exam title.
+// Header shows aggregated stats; expanded section shows a student result table.
+
+function ExamGroup({ group, isOpen, onToggle }) {
+  const { title, subject, sessions } = group;
+
+  // Aggregate pass rate and average score for the header pills
+  const passCount = sessions.filter((s) => {
+    const p = scorePct(s.totalScore, s.totalQuestions);
+    return p !== null && p >= 50;
+  }).length;
+  const passRate =
+    sessions.length > 0 ? Math.round((passCount / sessions.length) * 100) : 0;
+  const avgPct =
+    sessions.length > 0
+      ? Math.round(
+          sessions.reduce(
+            (acc, s) => acc + (scorePct(s.totalScore, s.totalQuestions) ?? 0),
+            0,
+          ) / sessions.length,
+        )
+      : 0;
+
+  const displayTitle = title || subject || "Untitled Exam";
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden transition-shadow duration-150 hover:shadow-md">
+      {/* ── Accordion header button ── */}
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={isOpen}
+        className="w-full flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-4 text-left hover:bg-slate-50/70 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-inset"
+      >
+        {/* Exam icon tile */}
+        <span className="flex-shrink-0 w-10 h-10 rounded-lg bg-orange-50 border border-orange-100 flex items-center justify-center">
+          <BookOpen size={17} className="text-orange-600" strokeWidth={2.1} />
+        </span>
+
+        {/* Title + subject */}
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-slate-800 text-[13.5px] leading-snug truncate">
+            {displayTitle}
+          </p>
+          {subject && displayTitle !== subject && (
+            <p className="text-xs text-slate-400 mt-0.5 truncate">{subject}</p>
+          )}
+        </div>
+
+        {/* Stats pills — visible on sm+ */}
+        <div className="hidden sm:flex items-center gap-2 flex-shrink-0">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 text-[11px] font-semibold whitespace-nowrap">
+            <Users size={10} />
+            {sessions.length} result{sessions.length !== 1 ? "s" : ""}
+          </span>
+          <span
+            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap ${
+              passRate >= 50
+                ? "bg-emerald-50 text-emerald-700"
+                : "bg-red-50 text-red-600"
+            }`}
+          >
+            <TrendingUp size={10} />
+            {passRate}% pass
+          </span>
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-orange-50 text-orange-700 text-[11px] font-semibold whitespace-nowrap">
+            <Trophy size={10} />
+            {avgPct}% avg
+          </span>
+        </div>
+
+        {/* Expand / collapse chevron */}
+        <span className="flex-shrink-0 text-slate-400 ml-1">
+          {isOpen ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
+        </span>
+      </button>
+
+      {/* ── Expanded student result table ── */}
+      {isOpen && (
+        <div className="border-t border-slate-100">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-100">
+                  <th className="px-5 py-2.5 text-left text-[10.5px] font-semibold text-slate-500 uppercase tracking-wider w-[40%]">
+                    Student
+                  </th>
+                  <th className="px-5 py-2.5 text-left text-[10.5px] font-semibold text-slate-500 uppercase tracking-wider">
+                    Score &amp; Result
+                  </th>
+                  <th className="px-5 py-2.5 text-left text-[10.5px] font-semibold text-slate-500 uppercase tracking-wider hidden sm:table-cell">
+                    Duration
+                  </th>
+                  <th className="px-5 py-2.5 text-left text-[10.5px] font-semibold text-slate-500 uppercase tracking-wider hidden md:table-cell">
+                    Submitted
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {sessions.map((s, idx) => (
+                  <tr
+                    key={s.sessionId ?? idx}
+                    className="hover:bg-slate-50/60 transition-colors"
+                  >
+                    {/* Student name + email */}
+                    <td className="px-5 py-3.5">
+                      <div className="flex items-center gap-3">
+                        <StudentAvatar name={s.studentName} />
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-800 text-[13px] leading-tight truncate">
+                            {s.studentName || "Unknown Student"}
+                          </p>
+                          {s.studentEmail && (
+                            <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                              {s.studentEmail}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Pass/Fail badge */}
+                    <td className="px-5 py-3.5">
+                      <ResultBadge
+                        score={s.totalScore}
+                        total={s.totalQuestions}
+                      />
+                    </td>
+
+                    {/* Duration */}
+                    <td className="px-5 py-3.5 hidden sm:table-cell">
+                      <span className="inline-flex items-center gap-1.5 text-slate-500 text-[12px]">
+                        <Clock size={12} className="text-slate-400" />
+                        {s.durationMinutes ? `${s.durationMinutes} min` : "—"}
+                      </span>
+                    </td>
+
+                    {/* Submitted date */}
+                    <td className="px-5 py-3.5 hidden md:table-cell">
+                      <span className="inline-flex items-center gap-1.5 text-slate-500 text-[11.5px]">
+                        <Calendar size={11} className="text-slate-400" />
+                        {formatDate(s.endTime)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
+
 export default function StudentMarks() {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState("");
-  const [sortField, setSortField] = useState("endTime");
-  const [sortDir, setSortDir] = useState("desc");
+  // Set of exam-title keys whose accordion panels are currently open
+  const [openGroups, setOpenGroups] = useState(new Set());
 
+  // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchMarks = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -80,13 +277,14 @@ export default function StudentMarks() {
           : Array.isArray(data.data)
             ? data.data
             : [];
+
       setSessions(
         rows.map((item, index) => ({
-          ...item,
           sessionId:
             item.sessionId ?? item.SessionId ?? item.id ?? item.Id ?? index,
           sessionGuid: item.sessionGuid ?? item.SessionGuid ?? "",
           studentId: item.studentId ?? item.StudentId ?? "",
+          // Backend always sends camelCase studentName — no fallback to "Student #"
           studentName:
             item.studentName ?? item.StudentName ?? "Unknown Student",
           studentEmail:
@@ -95,7 +293,12 @@ export default function StudentMarks() {
             item.email ??
             item.Email ??
             "",
-          title: item.title ?? item.Title ?? "",
+          title:
+            item.title ??
+            item.Title ??
+            item.examTitle ??
+            item.ExamTitle ??
+            "",
           subject: item.subject ?? item.Subject ?? "",
           totalScore: Number(item.totalScore ?? item.TotalScore ?? 0),
           totalQuestions: Number(
@@ -120,116 +323,92 @@ export default function StudentMarks() {
     fetchMarks();
   }, [fetchMarks]);
 
-  // ── Sorting ────────────────────────────────────────────────────────────────
-  const toggleSort = (field) => {
-    if (sortField === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSortField(field);
-      setSortDir("asc");
-    }
-  };
-
-  // ── Filtering & sorting ────────────────────────────────────────────────────
-  const filtered = sessions
-    .filter((s) => {
-      const q = search.toLowerCase();
-      return (
-        String(s.studentName ?? "")
-          .toLowerCase()
-          .includes(q) ||
-        String(s.studentEmail ?? "")
-          .toLowerCase()
-          .includes(q) ||
-        String(s.subject ?? "")
-          .toLowerCase()
-          .includes(q) ||
-        String(s.title ?? "")
-          .toLowerCase()
-          .includes(q) ||
-        String(s.studentId ?? "")
-          .toLowerCase()
-          .includes(q) ||
-        String(s.sessionGuid ?? "")
-          .toLowerCase()
-          .includes(q) ||
-        String(s.originalObjective ?? "")
-          .toLowerCase()
-          .includes(q)
-      );
-    })
-    .sort((a, b) => {
-      let valA = a[sortField] ?? "";
-      let valB = b[sortField] ?? "";
-      if (sortField === "totalScore") {
-        valA = Number(valA);
-        valB = Number(valB);
+  // ── Group by exam title ────────────────────────────────────────────────────
+  // Each unique exam title becomes one accordion card.  Within the card,
+  // sessions are sorted newest-first so the most recent attempt is at the top.
+  const groups = useMemo(() => {
+    const map = new Map();
+    for (const s of sessions) {
+      const key = s.title || s.subject || "Untitled Exam";
+      if (!map.has(key)) {
+        map.set(key, { title: s.title, subject: s.subject, sessions: [] });
       }
-      const cmp = valA < valB ? -1 : valA > valB ? 1 : 0;
-      return sortDir === "asc" ? cmp : -cmp;
-    });
+      map.get(key).sessions.push(s);
+    }
+    // Sort sessions within each group newest-first
+    for (const g of map.values()) {
+      g.sessions.sort((a, b) =>
+        (b.endTime || "").localeCompare(a.endTime || ""),
+      );
+    }
+    // Sort groups by number of results (most active exam first)
+    return Array.from(map.entries())
+      .sort(([, a], [, b]) => b.sessions.length - a.sessions.length)
+      .map(([key, g]) => ({ key, ...g }));
+  }, [sessions]);
 
-  // ── Stats ──────────────────────────────────────────────────────────────────
-  const avgScore =
-    sessions.length === 0
-      ? 0
-      : Math.round(
-          sessions.reduce((sum, s) => sum + s.totalScore, 0) / sessions.length,
+  // ── Filter groups by search query ──────────────────────────────────────────
+  // • Exam-title match → keep entire group (all students visible)
+  // • Student-name/email match → keep only matching student rows in that group
+  const filteredGroups = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    if (!q) return groups;
+
+    return groups
+      .map((group) => {
+        const titleMatch =
+          (group.title || "").toLowerCase().includes(q) ||
+          (group.subject || "").toLowerCase().includes(q);
+        if (titleMatch) return group;
+
+        const matchedSessions = group.sessions.filter(
+          (s) =>
+            (s.studentName || "").toLowerCase().includes(q) ||
+            (s.studentEmail || "").toLowerCase().includes(q),
         );
-  const passCount = sessions.filter(
-    (s) => s.totalQuestions > 0 && s.totalScore / s.totalQuestions >= 0.5,
-  ).length;
+        return matchedSessions.length > 0
+          ? { ...group, sessions: matchedSessions }
+          : null;
+      })
+      .filter(Boolean);
+  }, [groups, search]);
 
-  const stats = [
-    {
-      label: "Total Submissions",
-      value: sessions.length,
-      icon: ClipboardList,
-      color: "text-gray-700",
-      bg: "bg-gray-100",
-      border: "border-gray-200",
-    },
-    {
-      label: "Unique Students",
-      value: new Set(sessions.map((s) => s.studentId)).size,
-      icon: Users,
-      color: "text-orange-700",
-      bg: "bg-orange-50",
-      border: "border-orange-200",
-    },
-    {
-      label: "Avg Score",
-      value: avgScore,
-      icon: Trophy,
-      color: "text-green-700",
-      bg: "bg-green-50",
-      border: "border-green-200",
-    },
-    {
-      label: "Pass Rate (≥50%)",
-      value: `${sessions.length ? Math.round((passCount / sessions.length) * 100) : 0}%`,
-      icon: CheckCircle2,
-      color: "text-green-700",
-      bg: "bg-green-50",
-      border: "border-green-200",
-    },
-  ];
+  // ── Accordion toggle ───────────────────────────────────────────────────────
+  const toggleGroup = useCallback((key) => {
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }, []);
 
-  const columns = [
-    ["Session", "sessionId"],
-    ["Student", "studentName"],
-    ["Exam", "title"],
-    ["Subject", "subject"],
-    ["Score", "totalScore"],
-    ["Duration", "durationMinutes"],
-    ["Submitted", "endTime"],
-  ];
+  // ── Summary stats ──────────────────────────────────────────────────────────
+  const totalSubmissions = sessions.length;
+  const uniqueStudents = new Set(
+    sessions.map((s) => s.studentId || s.studentName),
+  ).size;
+  const uniqueExams = groups.length;
+  const passCount = sessions.filter((s) => {
+    const p = scorePct(s.totalScore, s.totalQuestions);
+    return p !== null && p >= 50;
+  }).length;
+  const overallPassRate = totalSubmissions
+    ? Math.round((passCount / totalSubmissions) * 100)
+    : 0;
 
+  // Submission count within the current filtered view (for footer)
+  const filteredSubmissions = filteredGroups.reduce(
+    (n, g) => n + g.sessions.length,
+    0,
+  );
+
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="page marks-page">
       <PageHeader
         eyebrow="EVERY RESULT TELLS A STORY"
         title="Student marks"
-        description="Find completed submissions, compare scores and follow your students' progress."
+        description="Browse completed exam sessions — expand any row to view every student's result."
       >
         <button
           className="button button-secondary"
@@ -240,25 +419,39 @@ export default function StudentMarks() {
           Refresh
         </button>
       </PageHeader>
+
       {error && <Notice type="error" text={error} />}
+
+      {/* ── Metric summary cards ── */}
       {!loading && !error && (
         <div className="metric-grid">
-          {stats.map((stat) => (
-            <Metric
-              key={stat.label}
-              label={stat.label === "Avg Score" ? "Average points" : stat.label}
-              value={stat.value}
-              icon={stat.icon}
-              accent={stat.label === "Avg Score"}
-            />
-          ))}
+          <Metric
+            label="Total submissions"
+            value={totalSubmissions}
+            icon={ClipboardList}
+          />
+          <Metric
+            label="Unique students"
+            value={uniqueStudents}
+            icon={Users}
+          />
+          <Metric label="Unique exams" value={uniqueExams} icon={BookOpen} />
+          <Metric
+            label="Pass rate (≥50%)"
+            value={`${overallPassRate}%`}
+            icon={CheckCircle2}
+            accent
+          />
         </div>
       )}
+
+      {/* ── Accordion section ── */}
       <section className="surface">
+        {/* Toolbar: title + search */}
         <div className="table-toolbar">
           <div>
-            <h2>Completed submissions</h2>
-            <p>Search by student, subject or exam title.</p>
+            <h2>Exam sessions</h2>
+            <p>Click an exam card to expand and see each student&apos;s result.</p>
           </div>
           <label className="relative block w-full sm:w-80">
             <span className="sr-only">Search student marks</span>
@@ -269,44 +462,15 @@ export default function StudentMarks() {
             <input
               aria-label="Search records"
               type="search"
-              placeholder="Find a student or exam…"
+              placeholder="Find an exam or student…"
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(e) => setSearch(e.target.value)}
               className="field-control pl-10"
             />
           </label>
         </div>
-        <div className="marks-sort-toolbar">
-          <label htmlFor="marks-sort">Sort by</label>
-          <select
-            id="marks-sort"
-            value={sortField}
-            onChange={(event) => {
-              setSortField(event.target.value);
-              setSortDir("asc");
-            }}
-            className="field-control"
-          >
-            {columns.map(([label, field]) => (
-              <option key={field} value={field}>
-                {label}
-              </option>
-            ))}
-          </select>
-          <button
-            className="button button-secondary"
-            onClick={() =>
-              setSortDir((direction) => (direction === "asc" ? "desc" : "asc"))
-            }
-          >
-            {sortDir === "asc" ? (
-              <ChevronUp size={15} />
-            ) : (
-              <ChevronDown size={15} />
-            )}
-            {sortDir === "asc" ? "Ascending" : "Descending"}
-          </button>
-        </div>
+
+        {/* Content states */}
         {loading ? (
           <LoadingState label="Loading student marks…" />
         ) : error ? (
@@ -314,110 +478,42 @@ export default function StudentMarks() {
             title="Results are unavailable"
             description="Use Refresh to try loading student marks again."
           />
-        ) : filtered.length === 0 ? (
+        ) : filteredGroups.length === 0 ? (
           <EmptyState
             icon={Trophy}
             title={
-              search ? "No matching submissions" : "Results will appear here"
+              search ? "No matching exams or students" : "No exam results yet"
             }
             description={
               search
-                ? "Try another student name, subject or exam title."
-                : "Completed exam submissions will appear here as students finish their assessments."
+                ? "Try a different exam title or student name."
+                : "Completed exam submissions will appear here once students finish their assessments."
             }
           />
         ) : (
-          <div className="table-scroll">
-            <table className="data-table responsive-table marks-table">
-              <caption className="sr-only">
-                Completed student exam submissions. Column buttons change the
-                sort order.
-              </caption>
-              <thead>
-                <tr>
-                  {columns.map(([label, field]) => (
-                    <th
-                      key={field}
-                      scope="col"
-                      aria-sort={
-                        sortField === field
-                          ? sortDir === "asc"
-                            ? "ascending"
-                            : "descending"
-                          : "none"
-                      }
-                    >
-                      <button
-                        className="sort-button"
-                        onClick={() => toggleSort(field)}
-                      >
-                        {label}
-                        {sortField === field &&
-                          (sortDir === "asc" ? (
-                            <ChevronUp size={13} />
-                          ) : (
-                            <ChevronDown size={13} />
-                          ))}
-                      </button>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((session, index) => (
-                  <tr key={session.sessionId ?? index}>
-                    <td data-label="Session">
-                      <span className="font-mono text-xs text-slate-500">
-                        #{session.sessionId}
-                      </span>
-                    </td>
-                    <td data-label="Student">
-                      <div className="flex items-center gap-3">
-                        <span className="student-initials">
-                          {(session.studentName || "?")
-                            .slice(0, 2)
-                            .toUpperCase()}
-                        </span>
-                        <strong className="font-semibold text-sm">
-                          {session.studentName || "Unknown student"}
-                        </strong>
-                      </div>
-                    </td>
-                    <td data-label="Exam">
-                      <span className="font-semibold">
-                        {session.title || session.subject || "—"}
-                      </span>
-                    </td>
-                    <td data-label="Subject">{session.subject || "—"}</td>
-                    <td data-label="Score">
-                      <ScoreBadge
-                        score={session.totalScore ?? 0}
-                        total={session.totalQuestions ?? 0}
-                      />
-                    </td>
-                    <td data-label="Duration">
-                      {session.durationMinutes
-                        ? `${session.durationMinutes} min`
-                        : "—"}
-                    </td>
-                    <td data-label="Submitted">
-                      <span className="text-xs text-slate-500">
-                        {session.endTime || "—"}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="flex flex-col gap-3 pb-1">
+            {filteredGroups.map((group) => (
+              <ExamGroup
+                key={group.key}
+                group={group}
+                isOpen={openGroups.has(group.key)}
+                onToggle={() => toggleGroup(group.key)}
+              />
+            ))}
           </div>
         )}
+
+        {/* Footer: live counts */}
         {!loading && !error && sessions.length > 0 && (
           <div className="table-footer">
             <span>
-              Showing <strong>{filtered.length}</strong> of{" "}
-              <strong>{sessions.length}</strong> submissions
+              Showing{" "}
+              <strong>{filteredGroups.length}</strong> exam
+              {filteredGroups.length !== 1 ? "s" : ""},{" "}
+              <strong>{filteredSubmissions}</strong> submission
+              {filteredSubmissions !== 1 ? "s" : ""}
             </span>
-            <span>Pass rate is based on a score of at least 50%.</span>
+            <span>Pass threshold: 50% or above.</span>
           </div>
         )}
       </section>

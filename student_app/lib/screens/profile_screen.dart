@@ -87,9 +87,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (response.statusCode >= 200 && response.statusCode < 300) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         setState(() {
+          // Prefer the backend value for name; fall back to what's already in ctrl
+          final backendName = (data['fullName'] as String?) ?? '';
+          if (backendName.isNotEmpty) _nameCtrl.text = backendName;
           _phoneCtrl.text = (data['phoneNumber'] as String?) ?? '';
           _addressCtrl.text = (data['address'] as String?) ?? '';
           _collegeCtrl.text = (data['college'] as String?) ?? '';
+          // Prefer backend profile image URL over the locally-stored one
+          final backendImg = (data['profileImageUrl'] as String?);
+          if (backendImg != null && backendImg.isNotEmpty) {
+            final fullImg = Uri.parse(backendImg).hasScheme
+                ? backendImg
+                : '${ApiConstants.baseUrl}$backendImg';
+            _profileImageUrl = fullImg;
+          }
         });
       } else {
         setState(
@@ -163,12 +174,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
             'Upload response did not include an image URL.',
           );
         }
-        final fullUrl = Uri.parse(url).hasScheme
+        final baseUrl = Uri.parse(url).hasScheme
             ? url
             : '${ApiConstants.baseUrl}$url';
-        await prefs.setString('profileImageUrl', fullUrl);
+        // Append a cache-busting query parameter so Flutter's ImageCache is
+        // bypassed and the freshly-uploaded image is fetched immediately.
+        final cacheBustedUrl = '$baseUrl?t=${DateTime.now().millisecondsSinceEpoch}';
+        await prefs.setString('profileImageUrl', cacheBustedUrl);
         if (!mounted) return;
-        setState(() => _profileImageUrl = fullUrl);
+        setState(() => _profileImageUrl = cacheBustedUrl);
         _showSnack('Profile picture updated!', isError: false);
       } else {
         _showSnack('Failed to upload picture. Please try again.');

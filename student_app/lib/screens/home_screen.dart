@@ -11,6 +11,7 @@ import '../services/database_helper.dart';
 import 'qr_scanner_screen.dart';
 import 'login_screen.dart';
 import 'exam_review_screen.dart';
+import 'how_to_use_screen.dart';
 import 'profile_screen.dart';
 import '../ui/prep_ui.dart';
 
@@ -122,8 +123,13 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     if (confirmed != true || !mounted) return;
 
+    // ── Step 1: Wipe all SharedPreferences so the next user sees a clean slate
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('auth_token');
+    await prefs.clear();
+
+    // ── Step 2: Wipe all locally-cached exams from SQLite to prevent data
+    //           leakage to a different account that logs in on the same device
+    await DatabaseHelper.instance.deleteAllExams();
 
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
@@ -309,7 +315,9 @@ class _DashboardTab extends StatelessWidget {
         _WelcomeBanner(
           firstName: name.trim().isNotEmpty ? name.trim() : email.trim(),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
+        const _HowToUseShortcutCard(),
+        const SizedBox(height: 16),
         PrepCard(
           color: PrepColors.navy,
           padding: const EdgeInsets.all(24),
@@ -969,6 +977,11 @@ class _RemoteResultTile extends StatelessWidget {
     return DateFormat('MMM dd, yyyy • hh:mm a').format(date.toLocal());
   }
 
+  IconData get _statusIcon {
+    if (!_isSubmitted) return Icons.timelapse_rounded;
+    return _pct >= 0.5 ? Icons.check_circle_rounded : Icons.cancel_rounded;
+  }
+
   @override
   Widget build(BuildContext context) => _ExamHistoryCard(
     title: result.title,
@@ -976,9 +989,11 @@ class _RemoteResultTile extends StatelessWidget {
     date: _formattedEndTime,
     score: result.totalQuestions == 0
         ? 'Score unavailable'
-        : '${result.totalScore}/${result.totalQuestions} · ${(_pct * 100).round()}%',
+        : '${result.totalScore} / ${result.totalQuestions} correct',
     status: _statusLabel,
     color: _scoreColor,
+    icon: _statusIcon,
+    percentage: _isSubmitted && result.totalQuestions > 0 ? _pct : null,
     onTap: () {
       Navigator.push(
         context,
@@ -1076,6 +1091,10 @@ class _ProgressHeader extends StatelessWidget {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// MODERN EXAM HISTORY CARD
+// ═══════════════════════════════════════════════════════════════════════════
+
 class _ExamHistoryCard extends StatelessWidget {
   const _ExamHistoryCard({
     required this.title,
@@ -1086,52 +1105,136 @@ class _ExamHistoryCard extends StatelessWidget {
     required this.color,
     this.onTap,
     this.icon = Icons.assignment_outlined,
+    this.percentage,
   });
+
   final String title;
   final String subject;
   final String date;
   final String score;
   final String status;
+
+  /// Ring / accent colour: PrepColors.primary for pass, PrepColors.error for fail.
   final Color color;
+
   final VoidCallback? onTap;
   final IconData icon;
+
+  /// Clamped 0.0–1.0; null = exam not yet submitted (no ring rendered).
+  final double? percentage;
+
+  // ── Badge colours ─────────────────────────────────────────────────────
+  Color get _badgeBg {
+    switch (status) {
+      case 'Passed':
+        return const Color(0xFFE6F4ED);
+      case 'Failed':
+        return const Color(0xFFFCE8E6);
+      default:
+        return PrepColors.mint; // In Progress
+    }
+  }
+
+  Color get _badgeColor {
+    switch (status) {
+      case 'Passed':
+        return const Color(0xFF1B7A4E);
+      case 'Failed':
+        return PrepColors.error;
+      default:
+        return PrepColors.primary; // In Progress
+    }
+  }
+
   @override
   Widget build(BuildContext context) => PrepCard(
     onTap: onTap,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Wrap(
-          spacing: 10,
-          runSpacing: 8,
+        // ── Top row: [score ring]  [badge + title + date] ────────────────
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            PrepPill(
-              status,
-              icon: icon,
-              color: color,
-              background: color.withAlpha(20),
-            ),
-            PrepPill(
-              score,
-              icon: Icons.analytics_outlined,
-              color: PrepColors.ink,
-              background: PrepColors.canvas,
+            if (percentage != null) ...[
+              _ScoreRing(percentage: percentage!, color: color),
+              const SizedBox(width: 16),
+            ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Status badge
+                  _StatusBadge(
+                    label: status,
+                    icon: icon,
+                    color: _badgeColor,
+                    background: _badgeBg,
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleMedium,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (subject != title) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      subject,
+                      style: Theme.of(context).textTheme.bodySmall,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                  const SizedBox(height: 4),
+                  Text(date, style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
             ),
           ],
         ),
-        const SizedBox(height: 14),
-        Text(title, style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 6),
-        if (subject != title) ...[Text(subject), const SizedBox(height: 6)],
-        Text(date, style: Theme.of(context).textTheme.bodySmall),
+
+        // ── Score fraction ────────────────────────────────────────────────
+        if (score.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Text(
+            score,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ],
+
+        // ── Review link ───────────────────────────────────────────────────
         if (onTap != null) ...[
           const SizedBox(height: 14),
-          const Text(
-            'Review answers →',
-            style: TextStyle(
-              color: PrepColors.primary,
-              fontWeight: FontWeight.w700,
-            ),
+          const Divider(height: 1),
+          const SizedBox(height: 12),
+          const Row(
+            children: [
+              Icon(
+                Icons.rate_review_outlined,
+                size: 15,
+                color: PrepColors.primary,
+              ),
+              SizedBox(width: 6),
+              Text(
+                'Review answers',
+                style: TextStyle(
+                  color: PrepColors.primary,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+              ),
+              Spacer(),
+              Icon(
+                Icons.arrow_forward_rounded,
+                size: 15,
+                color: PrepColors.primary,
+              ),
+            ],
           ),
         ],
       ],
@@ -1188,11 +1291,14 @@ class _SessionTile extends StatelessWidget {
     subject: exam.subject,
     date: _formattedCreatedAt,
     score: _isCompleted
-        ? '${exam.totalScore}/$_totalQuestions'
-        : 'Not submitted',
+        ? '${exam.totalScore} / $_totalQuestions correct'
+        : 'Not yet submitted',
     status: _statusLabel,
     color: _statusColor,
     icon: _statusIcon,
+    percentage: _isCompleted && _totalQuestions > 0
+        ? exam.totalScore / _totalQuestions
+        : null,
     onTap: !_isCompleted
         ? null
         : () {
@@ -1212,5 +1318,178 @@ class _SessionTile extends StatelessWidget {
               ),
             );
           },
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// _HowToUseShortcutCard — gradient shortcut on the Dashboard
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _HowToUseShortcutCard extends StatelessWidget {
+  const _HowToUseShortcutCard();
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Colors.transparent,
+    borderRadius: BorderRadius.circular(22),
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => const HowToUseScreen(),
+        ),
+      ),
+      child: Ink(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF146B61), Color(0xFF1A8878)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(22),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(11),
+                decoration: BoxDecoration(
+                  color: Colors.white.withAlpha(40),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(
+                  Icons.lightbulb_rounded,
+                  color: Color(0xFFD7F2B8),
+                  size: 26,
+                ),
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'New to IntelliPrep?',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    SizedBox(height: 3),
+                    Text(
+                      'Read the step-by-step guide and get up to speed fast.',
+                      style: TextStyle(
+                        color: Color(0xFFDBEBEF),
+                        fontSize: 13,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Icon(
+                Icons.arrow_forward_rounded,
+                color: Color(0xFFD7F2B8),
+                size: 20,
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// _ScoreRing — circular progress ring with percentage label in the centre
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _ScoreRing extends StatelessWidget {
+  const _ScoreRing({required this.percentage, required this.color});
+
+  /// Expected 0.0–1.0; clamped internally.
+  final double percentage;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final pct = percentage.clamp(0.0, 1.0);
+    return SizedBox(
+      width: 68,
+      height: 68,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Full ring track
+          CircularProgressIndicator(
+            value: 1.0,
+            strokeWidth: 6,
+            color: color.withAlpha(38),
+          ),
+          // Filled arc
+          CircularProgressIndicator(
+            value: pct,
+            strokeWidth: 6,
+            color: color,
+            strokeCap: StrokeCap.round,
+          ),
+          // Percentage label
+          Text(
+            '${(pct * 100).round()}%',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: color,
+              height: 1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// _StatusBadge — colour-coded pill: ✓ Passed | ✗ Failed | ⏱ In Progress
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _StatusBadge extends StatelessWidget {
+  const _StatusBadge({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.background,
+  });
+  final String label;
+  final IconData icon;
+  final Color color;
+  final Color background;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    decoration: BoxDecoration(
+      color: background,
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: color,
+            letterSpacing: 0.2,
+          ),
+        ),
+      ],
+    ),
   );
 }

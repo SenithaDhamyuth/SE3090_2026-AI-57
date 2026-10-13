@@ -46,6 +46,7 @@ void main() {
     SharedPreferences.setMockInitialValues({
       'student_name': 'Test Student',
       'student_email': 'student@example.invalid',
+      'student_id': '42',
       'auth_token': 'test-fixture-only',
     });
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -77,6 +78,11 @@ void main() {
                 List<Object?>.from(arguments['arguments'] as List),
               );
               return 1;
+            // Handle DELETE (used by DatabaseHelper.deleteAllExams on logout)
+            case 'delete':
+              return 0;
+            case 'execute':
+              return null;
             case 'batch':
               return [];
             default:
@@ -339,6 +345,16 @@ class _FixtureRequest implements HttpClientRequest {
             'priority': 'High',
           },
         ],
+      };
+    } else if (url.path.contains('/studentprofile/')) {
+      // Profile endpoint — return the editable user fields
+      data = {
+        'fullName': 'Test Student',
+        'email': 'student@example.invalid',
+        'phoneNumber': null,
+        'address': null,
+        'college': null,
+        'profileImageUrl': null,
       };
     } else if (url.path.contains('/join/')) {
       data = {'questionsJson': jsonEncode(_questions), 'durationMinutes': 30};
