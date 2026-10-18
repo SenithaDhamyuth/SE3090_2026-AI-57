@@ -17,6 +17,7 @@ appsettings.Local.json
 admin-frontend/build/
 admin-frontend/dist/
 admin-frontend/dist-ssr/
+admin-frontend/src/StudentMarksMassTests.test.jsx
 *.local
 logs/
 *.log

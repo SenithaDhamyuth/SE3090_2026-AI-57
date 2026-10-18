@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace IntelliPrep.API.Services
 {
+    ///
     /// <summary>
     /// Production implementation of <see cref="IAIAgentService"/>.
     ///

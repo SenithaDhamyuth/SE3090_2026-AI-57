@@ -20,6 +20,7 @@ import {
   Clock,
   TrendingUp,
 } from "lucide-react";
+import { isPassingScore, scorePct } from "./utils/studentMarks";
 
 const API_BASE =
   (import.meta.env.VITE_API_URL || "https://intelliprep-rhx3.onrender.com") +
@@ -39,12 +40,6 @@ const authFetch = (url, options = {}) => {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-/** Returns a rounded integer percentage, or null when total is 0. */
-function scorePct(score, total) {
-  if (!total || total === 0) return null;
-  return Math.round((score / total) * 100);
-}
-
 /** Strips the trailing " UTC" the backend appends and trims whitespace. */
 function formatDate(raw) {
   if (!raw) return "—";
@@ -58,7 +53,7 @@ function ResultBadge({ score, total }) {
   const p = scorePct(score, total);
   if (p === null)
     return <span className="text-slate-400 text-xs font-medium">N/A</span>;
-  const pass = p >= 50;
+  const pass = isPassingScore(score, total);
   return (
     <span
       className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide ${
